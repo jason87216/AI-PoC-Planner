@@ -2,8 +2,9 @@
 
 AI PoC Planner 是一個規格中的公開 AI 工程作品：透過單一 LangChain Agent 進行結構化需求訪談，結合本機案例檢索、固定評分框架與風險 hard gates，產生可追蹤、可測試、可匯出的 AI 導入 PoC 建議。
 
-> 專案狀態：**M1.1 foundation complete**。目前只有可安裝的 Python
-> 骨架、Pydantic contracts 與離線 fake provider；產品流程尚未實作。
+> 專案狀態：**M1.2 contracts complete**。目前具有可安裝的 Python
+> 骨架、persistence/workflow/Agent-state/tool Pydantic contracts 與離線 fake
+> provider；產品流程與評估引擎尚未實作。
 
 ## 核心價值
 
@@ -53,6 +54,11 @@ python -m ruff check .
 
 Smoke command 預期輸出以 `fake-provider: ok` 開頭；它只建立合成專案並驗證
 fake provider 的結構化輸出，不是正式 CLI，也不需要 `.env`、API key 或網路。
+
+目前已完成的 contract surface 包含 interview session/state snapshot、assessment
+input/result、proposal/report/case persistence metadata、framework-neutral Agent
+state，以及六組 tool input/output models。這些 models 只驗證資料結構；尚未執行
+評分、hard-gate rules、檢索或 Agent orchestration。
 
 本次驗證環境：Python 3.12.10、Pydantic 2.13.4、pytest 9.1.1、ruff
 0.15.22。`pyproject.toml` 使用相容版本範圍，避免把專案綁死在單一 patch

@@ -2,7 +2,7 @@
 
 ## Current Goal
 
-依核准的第一版規格基準完成、驗證並提交 `TASKS.md` 的 M1.1；本輪已停止於此任務。
+已完成 `TASKS.md` 的 M1.2：workflow、Agent state、tool 與 persistence-ready Pydantic contracts；本輪停止於 M1.3 前。
 
 ## Current Status
 
@@ -13,6 +13,31 @@
 - 專案已初始化為獨立 Git repository。
 - M1.1 已建立 `feat: add project skeleton and offline domain contracts` commit。
 - 未設定 remote、未建立 GitHub repository，也未 push。
+- M1.2 已獲使用者授權，開始前的 13 個既有測試均通過。
+- M1.2 contract tests 80 個、完整測試 93 個、ruff 與 smoke command 全部通過。
+- M1.2 使用獨立 commit message：`feat: complete workflow and persistence contracts`。
+
+## M1.2 Contract Mapping
+
+| SPEC contract | 現有 model | 本輪新增或修改 |
+|---|---|---|
+| `AnalysisProject` | 已有 | 保留；共用 UTC／ID 驗證型別 |
+| `InterviewSession` | 無 | 新增 session、stage、turn reference 與順序驗證 |
+| `InterviewTurn` | 已有 | 保持相容，改用遞迴 `JSONValue` 與共用 UTC 型別 |
+| `ConversationStateSnapshot` | 無 | 新增可 round-trip 的 append-oriented snapshot |
+| `CaseMetadata` | 無 | 新增 SQLite-ready metadata contract，不建立 repository |
+| `Assessment` | 無 | 新增六維度、gate、evidence 與 rule-version result contract |
+| `PocProposalRecord` | 無 | 新增 validated proposal persistence payload |
+| `ReportExport` | 無 | 新增 Markdown export metadata contract |
+| Agent state | 無 | 新增 framework-neutral `AgentState` 與 reference consistency 驗證 |
+| 六個 tool interfaces | 無 | 新增六組獨立 input/output contracts，不實作 tools |
+| Evidence／source reference | 字串 refs | 新增結構化 `EvidenceReference`，保留既有字串欄位相容性 |
+| `JSONValue` | 僅 scalar／`list[str]` | 收窄為嚴格、可遞迴的 JSON 值；拒絕任意 Python objects |
+| `PocProposal` invariants | 已有 | 保留結構一致性；計分、gate precedence、推薦決策留給 M1.3 |
+
+M1.2 因使用者明確要求一次完成 persistence、workflow、Agent state、十二個
+tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS.md`「原則上
+不超過五檔」的已記錄任務範圍例外，未擴張到任何執行引擎或 infrastructure。
 
 ## Important Decisions
 
@@ -34,6 +59,8 @@
 - 2026-07-19：規格審核通過，核准進入 M1.1；分支調整為 `main`。
 - 2026-07-19：以 Python 3.12.10 完成 editable install；實際主要依賴為 Pydantic 2.13.4、pytest 9.1.1、ruff 0.15.22。
 - 2026-07-19：完成 M1.1 contracts、fake provider、13 個離線測試及 smoke command，並建立 implementation commit。
+- 2026-07-19：完成 M1.2 persistence/workflow/Agent-state 與六組 tool contracts；明確把計分、gate precedence 與推薦決策保留給 M1.3。
+- 2026-07-19：規格複審後將六種 tool output 收斂為互斥的成功／`ToolError` envelope，並補齊 Agent 追問去重驗證。
 
 ## Git Notes
 
@@ -47,12 +74,13 @@
 - 真實 chat model 與 embeddings model 的預設選擇留待對應 provider task 確認；M1.1 只提供 fake provider。
 - 部分 hard gate 在真實企業環境中需要法務、資安與領域專家核准，不能只由模型決定。
 - 多語言報告與 PDF 匯出不在 MVP 範圍。
+- M1.3 deterministic scoring 與 hard-gate engine 尚未實作；M1.2 只驗證其未來輸入／輸出結構。
 
 ## Next Steps
 
-1. 等待 M1.2 的新指示，不提前建立評分或 hard-gate 引擎。
-2. M1.2 開始前確認其剩餘範圍：完整 persistence／Agent-state／tool contracts，以及是否需要遞迴 JSON value。
+1. 等待 M1.3 的明確授權，不提前建立評分或 hard-gate engine。
+2. M1.3 應直接依賴 M1.2 的 `AssessmentInput`、`Assessment` 與 tool contracts，不把規則移回 Pydantic validators。
 
 ## Handoff Summary
 
-新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。規格 baseline 與 M1.1 已完成；目前沒有 M1.2 授權，不得提前建立評分引擎、資料庫或垂直切片。
+新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.2 已完成；目前沒有 M1.3 授權，不得提前建立評分／hard-gate engine、資料庫或垂直切片。

@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from math import isfinite
 from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     StringConstraints,
-    field_validator,
     model_validator,
 )
 
@@ -23,9 +25,55 @@ from ai_poc_planner.domain.enums import (
     ScoreDimension,
 )
 
-NonEmptyStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-JSONScalar = str | int | float | bool | None
-JSONValue = JSONScalar | list[str]
+NonEmptyStr = Annotated[
+    str, StringConstraints(strict=True, strip_whitespace=True, min_length=1)
+]
+SchemaVersion = Annotated[
+    str,
+    StringConstraints(
+        strict=True,
+        strip_whitespace=True,
+        pattern=r"^[0-9]+\.[0-9]+$",
+    ),
+]
+
+type RawJSONValue = (
+    None
+    | bool
+    | int
+    | float
+    | str
+    | list[RawJSONValue]
+    | dict[str, RawJSONValue]
+)
+
+
+def _validate_json_value(value: object) -> object:
+    if value is None or type(value) in {bool, int, str}:
+        return value
+    if type(value) is float:
+        if not isfinite(value):
+            raise ValueError("JSON float must be finite")
+        return value
+    if type(value) is list:
+        return [_validate_json_value(item) for item in value]
+    if type(value) is dict:
+        if not all(type(key) is str for key in value):
+            raise ValueError("JSON object keys must be strings")
+        return {key: _validate_json_value(item) for key, item in value.items()}
+    raise ValueError("value must contain only JSON-compatible types")
+
+
+JSONValue = Annotated[RawJSONValue, BeforeValidator(_validate_json_value)]
+
+
+def _normalize_utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("timestamp must be timezone-aware")
+    return value.astimezone(UTC)
+
+
+UtcDateTime = Annotated[datetime, AfterValidator(_normalize_utc)]
 
 SCORE_WEIGHTS: dict[ScoreDimension, int] = {
     ScoreDimension.BUSINESS_VALUE: 25,
@@ -41,6 +89,11 @@ class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=False)
 
 
+def _require_unique(values: list[object], field_name: str) -> None:
+    if len(values) != len(set(values)):
+        raise ValueError(f"{field_name} must not contain duplicates")
+
+
 class AnalysisProject(ContractModel):
     id: UUID = Field(description="Stable project identifier.")
     title: NonEmptyStr = Field(description="Human-readable analysis title.")
@@ -48,15 +101,8 @@ class AnalysisProject(ContractModel):
         description="Business problem to investigate, without a preselected solution."
     )
     status: ProjectStatus = Field(description="Current project lifecycle state.")
-    created_at: datetime = Field(description="Timezone-aware UTC creation time.")
-    updated_at: datetime = Field(description="Timezone-aware UTC update time.")
-
-    @field_validator("created_at", "updated_at")
-    @classmethod
-    def normalize_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("timestamp must be timezone-aware")
-        return value.astimezone(UTC)
+    created_at: UtcDateTime = Field(description="Timezone-aware UTC creation time.")
+    updated_at: UtcDateTime = Field(description="Timezone-aware UTC update time.")
 
     @model_validator(mode="after")
     def updated_at_is_not_earlier(self) -> AnalysisProject:
@@ -75,14 +121,7 @@ class InterviewTurn(ContractModel):
         default_factory=dict,
         description="Accepted structured answers extracted from this turn.",
     )
-    created_at: datetime = Field(description="Timezone-aware UTC creation time.")
-
-    @field_validator("created_at")
-    @classmethod
-    def normalize_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("created_at must be timezone-aware")
-        return value.astimezone(UTC)
+    created_at: UtcDateTime = Field(description="Timezone-aware UTC creation time.")
 
 
 class ClarifyingQuestion(ContractModel):
@@ -100,20 +139,18 @@ class ScoreDimensionResult(ContractModel):
         ge=0, le=100, description="rating / 5 multiplied by weight."
     )
     rationale: NonEmptyStr = Field(description="Reason for this rating.")
-    evidence_refs: list[str] = Field(
+    evidence_refs: list[NonEmptyStr] = Field(
         default_factory=list, description="Local evidence identifiers."
     )
 
     @model_validator(mode="after")
-    def values_match_normative_weight(self) -> ScoreDimensionResult:
+    def weight_matches_normative_dimension(self) -> ScoreDimensionResult:
         expected_weight = SCORE_WEIGHTS[self.dimension]
         if self.weight != expected_weight:
             raise ValueError(
                 f"weight for {self.dimension.value} must be {expected_weight}"
             )
-        expected_points = self.rating / 5 * self.weight
-        if abs(self.weighted_points - expected_points) > 1e-9:
-            raise ValueError("weighted_points must equal rating / 5 * weight")
+        _require_unique(self.evidence_refs, "evidence_refs")
         return self
 
 
@@ -121,12 +158,17 @@ class HardGateResult(ContractModel):
     rule_id: NonEmptyStr = Field(description="Versioned hard-gate rule identifier.")
     disposition: GateDisposition = Field(description="Rule outcome before scoring.")
     reason: NonEmptyStr = Field(description="Evidence-based gate rationale.")
-    required_controls: list[str] = Field(
+    required_controls: list[NonEmptyStr] = Field(
         default_factory=list, description="Controls required before proceeding."
     )
     human_review_required: bool = Field(
         description="Whether a qualified human must review this outcome."
     )
+
+    @model_validator(mode="after")
+    def controls_are_unique(self) -> HardGateResult:
+        _require_unique(self.required_controls, "required_controls")
+        return self
 
 
 class SimilarCase(ContractModel):
@@ -144,13 +186,11 @@ class ArchitectureOption(ContractModel):
     components: list[NonEmptyStr] = Field(min_length=1)
     assumptions: list[NonEmptyStr] = Field(default_factory=list)
 
-
-_GATE_PRIORITY = {
-    GateDisposition.PASS: 0,
-    GateDisposition.REQUIRES_CONTROLS: 1,
-    GateDisposition.ASSISTIVE_ONLY: 2,
-    GateDisposition.BLOCKED: 3,
-}
+    @model_validator(mode="after")
+    def architecture_lists_are_unique(self) -> ArchitectureOption:
+        _require_unique(self.components, "components")
+        _require_unique(self.assumptions, "assumptions")
+        return self
 
 
 class PocProposal(ContractModel):
@@ -161,19 +201,19 @@ class PocProposal(ContractModel):
     target_users: list[NonEmptyStr] = Field(min_length=1)
     current_workflow_summary: NonEmptyStr
     known_information: dict[str, JSONValue]
-    missing_information: list[str]
+    missing_information: list[NonEmptyStr]
     clarifying_questions: list[ClarifyingQuestion]
     similar_cases: list[SimilarCase]
     scores: list[ScoreDimensionResult]
     weighted_score: int = Field(ge=0, le=100)
     hard_gates: list[HardGateResult]
     architecture_options: list[ArchitectureOption]
-    required_data: list[str]
-    integrations: list[str]
-    risks: list[str]
-    human_review_points: list[str]
-    roi_assumptions: list[str]
-    success_metrics: list[str]
+    required_data: list[NonEmptyStr]
+    integrations: list[NonEmptyStr]
+    risks: list[NonEmptyStr]
+    human_review_points: list[NonEmptyStr]
+    roi_assumptions: list[NonEmptyStr]
+    success_metrics: list[NonEmptyStr]
     estimated_weeks: int = Field(ge=1)
     estimated_team: list[NonEmptyStr] = Field(min_length=1)
     next_actions: list[NonEmptyStr] = Field(min_length=1)
@@ -187,33 +227,38 @@ class PocProposal(ContractModel):
             raise ValueError("scores must contain each dimension exactly once")
         if sum(score.weight for score in self.scores) != 100:
             raise ValueError("score weights must total 100")
-        if self.weighted_score != round(
-            sum(score.weighted_points for score in self.scores)
-        ):
-            raise ValueError("weighted_score does not match score dimensions")
-
-        strongest_gate = max(
-            (gate.disposition for gate in self.hard_gates),
-            key=lambda disposition: _GATE_PRIORITY[disposition],
-            default=GateDisposition.PASS,
-        )
-        if self.gate_disposition is not strongest_gate:
-            raise ValueError("gate_disposition must equal the strongest hard gate")
         if (
-            strongest_gate is GateDisposition.BLOCKED
-            and self.recommendation is not Recommendation.NOT_RECOMMENDED
-        ):
-            raise ValueError("blocked proposals must be 暫不建議")
-        if strongest_gate in {
-            GateDisposition.ASSISTIVE_ONLY,
-            GateDisposition.REQUIRES_CONTROLS,
-        } and self.recommendation is Recommendation.RECOMMENDED:
-            raise ValueError("unresolved gates cap recommendation at 條件式建議")
-        if (
-            strongest_gate is GateDisposition.ASSISTIVE_ONLY
+            self.gate_disposition is GateDisposition.ASSISTIVE_ONLY
             and not self.human_review_points
         ):
             raise ValueError(
                 "assistive_only proposals require at least one human review point"
             )
+        for field_name in (
+            "target_users",
+            "missing_information",
+            "required_data",
+            "integrations",
+            "risks",
+            "human_review_points",
+            "roi_assumptions",
+            "success_metrics",
+            "estimated_team",
+            "next_actions",
+        ):
+            _require_unique(getattr(self, field_name), field_name)
+        _require_unique(
+            [question.field for question in self.clarifying_questions],
+            "clarifying question fields",
+        )
+        _require_unique(
+            [case.case_id for case in self.similar_cases], "similar case IDs"
+        )
+        _require_unique(
+            [gate.rule_id for gate in self.hard_gates], "hard gate IDs"
+        )
+        _require_unique(
+            [option.name for option in self.architecture_options],
+            "architecture option names",
+        )
         return self

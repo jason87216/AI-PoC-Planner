@@ -27,14 +27,14 @@
 - **Verification:** Run the four commands under Python 3.12; fake-provider tests prevent network use through the tested socket boundary.
 - **Dependencies:** S0.1.
 - **Estimated scope:** M.
-- **Execution note:** The user explicitly expanded M1.1 to include the initial normative domain contracts and proposal-producing fake provider. M1.2 remains open for complete contract coverage; M1.4 remains open for embeddings and later Agent event seams.
+- **Execution note:** The user explicitly expanded M1.1 to include initial contracts and a proposal-producing fake provider. M1.2 later completed full contract coverage; M1.4 remains open for embeddings and later Agent event seams.
 
 ### [Must] M1.2 Implement core Pydantic contracts
 
-- [ ] **Purpose:** Turn SPEC schema names and invariants into the shared contract layer.
-- **Modification scope:** domain schema module(s), contract tests.
-- **Acceptance:** All specified models validate valid fixtures and reject missing dimensions, bad weights, invalid score ranges and gate/recommendation conflicts.
-- **Verification:** `python -m pytest tests/domain/test_schemas.py`.
+- [x] **Purpose:** Turn SPEC schema names and invariants into the shared contract layer. Completed on 2026-07-19.
+- **Modification scope:** `domain/models.py`, `domain/enums.py`, `domain/workflow.py`, `domain/tools.py`, public exports, contract tests and synchronized project documentation.
+- **Acceptance:** Persistence, workflow, Agent state and all six tool input/output contracts validate and JSON round-trip; missing dimensions, bad weights, invalid ranges, duplicate collections and invalid references are rejected. Per the approved M1.2 decision, calculation, gate precedence and recommendation decisions remain assigned to M1.3.
+- **Verification:** `python -m pytest tests/domain/test_schemas.py` (80 tests) plus the complete offline suite.
 - **Dependencies:** M1.1.
 - **Estimated scope:** S.
 

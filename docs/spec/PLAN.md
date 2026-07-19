@@ -89,7 +89,7 @@ Outputs:
 
 Checkpoint:
 
-- `uv run pytest` and `uv run ruff check .` pass offline.
+- `python -m pytest` and `python -m ruff check .` pass offline.
 - README and AGENTS commands are updated from planned to active.
 
 ### Phase 2 — First Vertical Slice
@@ -278,7 +278,7 @@ The MVP is done only when all Must tasks pass, the fake-model vertical slice wor
 
 ## 10. Open Decisions Before Implementation
 
-- Confirm Python version and `uv` as package manager.
+- Python 3.12 and standard `pip` commands are confirmed by M1.1.
 - Confirm whether report content is stored in SQLite, file, or both.
 - Confirm default real model and embeddings settings for documentation.
 - Decide whether LangSmith is Should or Could for the first public release.

@@ -116,8 +116,8 @@ Success means a reviewer can run the fake-model path locally and reproduce the v
 | `InterviewSession` | `id`, `project_id`, `status`, `current_stage`, `state_version`, timestamps | One standard flow per active session |
 | `InterviewTurn` | `id`, `session_id`, `sequence`, `role`, `content`, `normalized_answers`, timestamp | Raw content is local sensitive data |
 | `ConversationStateSnapshot` | `session_id`, `version`, `known_fields`, `missing_fields`, `contradictions`, timestamp | Reconstructable, append-oriented audit snapshot |
-| `CaseMetadata` | `id`, `title`, `industry`, `problem`, `fit_conditions`, `non_fit_conditions`, `pattern`, `risk_flags`, `kpis`, `human_review`, `source_path`, `content_hash` | Stored in SQLite; vector ID maps to FAISS |
-| `Assessment` | `id`, `project_id`, `rule_version`, `scores`, `hard_gates`, `matched_case_ids`, `rationale`, timestamp | Immutable result for a run |
+| `CaseMetadata` | `id`, `title`, `industry`, `problem`, `fit_conditions`, `non_fit_conditions`, `pattern`, `risk_flags`, `kpis`, `human_review`, `source_path`, `content_hash`, timestamps | Stored in SQLite; vector ID maps to FAISS |
+| `Assessment` | `schema_version`, `id`, `project_id`, `session_id`, `rule_version`, `scores`, declared `weighted_score`, `hard_gates`, declared `gate_disposition`, case/evidence refs, `rationale`, timestamp | Immutable result for a future M1.3 engine run; contract does not calculate outcomes |
 | `PocProposalRecord` | `id`, `project_id`, `assessment_id`, `schema_version`, `payload`, timestamp | Payload must validate before storage |
 | `ReportExport` | `id`, `project_id`, `proposal_id`, `format`, `content_hash`, `local_path`, timestamp | MVP format is Markdown only |
 
@@ -209,31 +209,47 @@ class PocProposal(BaseModel):
     next_actions: list[str]
 ```
 
-Validation rules:
+Contract and engine invariants:
 
-- `scores` contains each of the six dimensions exactly once.
-- Stored weights equal the normative weight table and total 100.
-- `weighted_score` equals the deterministic recomputation from `scores`.
-- `blocked` forces recommendation `暫不建議`.
-- `assistive_only` or unsatisfied `requires_controls` caps recommendation at `條件式建議`.
-- High-impact use cases require at least one `human_review_point`.
+- Pydantic: `scores` contains each of the six dimensions exactly once.
+- Pydantic: stored weights equal the normative weight table and total 100.
+- M1.3 engine: `weighted_score` equals the deterministic recomputation from `scores`.
+- M1.3 engine: `blocked` forces recommendation `暫不建議`.
+- M1.3 engine: `assistive_only` or unsatisfied `requires_controls` caps recommendation at `條件式建議`.
+- Pydantic: an `assistive_only` declared result requires at least one `human_review_point`.
+
+M1.2 validation responsibility is structural: required fields, types, enums,
+non-empty values, IDs, UTC timestamps, uniqueness, schema versions, six-dimension
+completeness, normative stored weights and impossible declared-field combinations.
+M1.3 owns the calculation of `weighted_points`／`weighted_score`, hard-gate rule
+evaluation and precedence, score thresholds and the recommendation decision. The
+contracts type-check M1.3 outputs; M1.3 engine tests validate business outcomes.
 
 ## 11. Agent State Schema
 
-The custom state extends LangChain `AgentState`. It is execution state, while SQLite remains the durable source of truth.
+The M1.2 `AgentState` is a framework-neutral Pydantic model. A future Agent adapter
+may map or extend it with LangChain state types, while SQLite remains the durable
+source of truth.
 
 | Field | Type | Meaning |
 |---|---|---|
+| `schema_version` | version string | Serializable state contract version |
 | `project_id` | `str` | Current aggregate |
 | `session_id` | `str` | Current interview session |
+| `session_project_id` | `str` | Standalone consistency reference; must equal `project_id` |
+| `workflow_stage` | project-status enum | Project lifecycle stage independent from interview section |
 | `interview_stage` | enum | `context`, `data`, `value`, `governance`, `review`, `complete` |
 | `known_fields` | `dict[str, JSONValue]` | Normalized accepted answers |
 | `missing_fields` | `list[str]` | Required information gaps |
 | `contradictions` | `list[str]` | Conflicts requiring clarification |
 | `questions_asked` | `list[str]` | Prevent duplicate follow-ups |
+| `clarifying_questions` | `list[ClarifyingQuestion]` | Current typed follow-ups |
 | `similar_case_ids` | `list[str]` | Retrieved evidence |
+| `evidence_refs` | `list[UUID]` | Typed references to accepted evidence records |
 | `tool_results` | `dict[str, JSONValue]` | Validated tool outputs |
 | `hard_gate_disposition` | enum or null | Strongest gate seen |
+| `assessment_id` | UUID or null | Required at assessed and later stages |
+| `proposal_id` | UUID or null | Required at proposal-generated and completed stages |
 | `proposal` | `PocProposal` or null | Final structured response |
 
 State transitions must persist the accepted user turn before model/tool processing and persist the resulting normalized snapshot after processing. A failed model call must not erase the accepted turn.
@@ -242,14 +258,20 @@ State transitions must persist the accepted user turn before model/tool processi
 
 | Tool | Input contract | Output contract | Deterministic boundary |
 |---|---|---|---|
-| `retrieve_similar_cases` | normalized problem, industry, data and risk filters, `top_k` | `list[SimilarCase]` | Embedding query may vary by provider; filtering and output schema are deterministic |
-| `assess_data_readiness` | data sources, access, digitization, quality, labels, validation sample | 1–5 rating, gaps, prerequisites, rationale | Rules first; no free-form model score |
-| `assess_technical_fit_and_architecture` | task pattern, required reasoning/tools, integrations, deployment constraints | technical-fit rating, architecture-control rating, options, rationale | Must recommend simpler non-Agent pattern when sufficient |
-| `evaluate_risk_and_hard_gates` | domain, decision impact, personal/sensitive data, data boundary, human review, authorization | `list[HardGateResult]`, aggregate disposition | Fully deterministic versioned rules |
-| `assess_business_value_roi_and_kpis` | owner, baseline, volume, cost/time, expected change, adoption evidence | business-value rating, user-adoption rating, ROI assumptions, KPI proposals | Arithmetic and rubric deterministic; unknown values remain assumptions |
-| `estimate_poc_scope` | OCR, integrations, review UI, evaluation data, privacy, departments | weeks, roles, complexity points, assumptions | Versioned point mapping |
+| `retrieve_similar_cases` | `RetrieveSimilarCasesInput` | `RetrieveSimilarCasesOutput` containing cases and evidence refs | Embedding query may vary by provider; filtering and output schema are deterministic |
+| `assess_data_readiness` | `AssessDataReadinessInput` | `AssessDataReadinessOutput` containing data-readiness result, gaps and prerequisites | Rules first; no free-form model score |
+| `assess_technical_fit_and_architecture` | `AssessTechnicalFitAndArchitectureInput` | `AssessTechnicalFitAndArchitectureOutput` containing two scores and options | Must recommend simpler non-Agent pattern when sufficient |
+| `evaluate_risk_and_hard_gates` | `EvaluateRiskAndHardGatesInput` | `EvaluateRiskAndHardGatesOutput` containing governance-readiness score, declared gates and aggregate disposition | M1.3 implements deterministic versioned rules |
+| `assess_business_value_roi_and_kpis` | `AssessBusinessValueRoiAndKpisInput` | `AssessBusinessValueRoiAndKpisOutput` containing two scores, ROI assumptions and KPI proposals | M1.3 implements arithmetic and rubric; unknown values remain assumptions |
+| `estimate_poc_scope` | `EstimatePocScopeInput` | `EstimatePocScopeOutput` containing weeks, roles, complexity points and assumptions | M1.3 implements versioned point mapping |
 
 Weighted score calculation and Markdown rendering are domain/application services, not model-selected tools.
+All twelve M1.2 tool contracts include `schema_version`, `correlation_id`,
+`project_id` and `session_id`; they are framework-neutral Pydantic models and do
+not execute tools. Each output is an exclusive success-or-error envelope: a success
+requires its complete typed payload, while a failure carries `ToolError` without
+fabricated success fields. `ToolError` contains a stable code, safe message,
+retryability flag and JSON-only details.
 
 ## 13. Case Knowledge Base Format
 
