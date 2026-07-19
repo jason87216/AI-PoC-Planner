@@ -90,3 +90,13 @@ class DataBoundary(StrEnum):
     LOCAL_ONLY = "local_only"
     PRIVATE_ENDPOINT = "private_endpoint"
     EXTERNAL_ALLOWED = "external_allowed"
+
+
+class HighImpactDomain(StrEnum):
+    NONE = "none"
+    EMPLOYMENT = "employment"
+    MEDICAL = "medical"
+    LEGAL = "legal"
+    CREDIT = "credit"
+    FINANCIAL = "financial"
+    OTHER_HIGH_IMPACT = "other_high_impact"

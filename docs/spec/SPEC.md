@@ -117,7 +117,7 @@ Success means a reviewer can run the fake-model path locally and reproduce the v
 | `InterviewTurn` | `id`, `session_id`, `sequence`, `role`, `content`, `normalized_answers`, timestamp | Raw content is local sensitive data |
 | `ConversationStateSnapshot` | `session_id`, `version`, `known_fields`, `missing_fields`, `contradictions`, timestamp | Reconstructable, append-oriented audit snapshot |
 | `CaseMetadata` | `id`, `title`, `industry`, `problem`, `fit_conditions`, `non_fit_conditions`, `pattern`, `risk_flags`, `kpis`, `human_review`, `source_path`, `content_hash`, timestamps | Stored in SQLite; vector ID maps to FAISS |
-| `Assessment` | `schema_version`, `id`, `project_id`, `session_id`, `rule_version`, `scores`, declared `weighted_score`, `hard_gates`, declared `gate_disposition`, case/evidence refs, `rationale`, timestamp | Immutable result for a future M1.3 engine run; contract does not calculate outcomes |
+| `Assessment` | `schema_version`, `id`, `project_id`, `session_id`, `rule_version`, `scores`, `weighted_score`, `hard_gates`, `gate_disposition`, `recommendation`, case/evidence refs, `rationale`, timestamp | Immutable deterministic engine result |
 | `PocProposalRecord` | `id`, `project_id`, `assessment_id`, `schema_version`, `payload`, timestamp | Payload must validate before storage |
 | `ReportExport` | `id`, `project_id`, `proposal_id`, `format`, `content_hash`, `local_path`, timestamp | MVP format is Markdown only |
 
@@ -165,6 +165,7 @@ class HardGateResult(BaseModel):
     reason: str
     required_controls: list[str]
     human_review_required: bool
+    evidence_refs: list[str]
 
 
 class SimilarCase(BaseModel):
@@ -224,6 +225,21 @@ completeness, normative stored weights and impossible declared-field combination
 M1.3 owns the calculation of `weighted_points`／`weighted_score`, hard-gate rule
 evaluation and precedence, score thresholds and the recommendation decision. The
 contracts type-check M1.3 outputs; M1.3 engine tests validate business outcomes.
+
+M1.3 adds an optional, backward-compatible formal-evaluation surface to
+`AssessmentInput`: caller-supplied `assessment_id`, `evaluated_at`, typed
+`AssessmentFacts`, and typed `AssessmentToolOutputs`. Workflow code may still use a
+partial `AssessmentInput`, but `assess_project` rejects it until these four fields
+are present. `AssessmentFacts` contains explicit Boolean, enum and bounded-count
+signals for the six approved rubrics and gates; the engine never infers decisions
+from free text. The tool bundle contains all six M1.2 output contracts, and any
+missing or error-envelope output prevents formal evaluation.
+
+Every score and gate evidence reference must resolve to the input evidence registry.
+`EvidenceReference` may carry explicit `project_id` and `session_id` ownership; when
+those optional fields are absent, ownership comes from the enclosing
+`AssessmentInput`. Duplicate facts supplied through tool outputs and
+`AssessmentFacts` must agree or formal evaluation fails with a stable error code.
 
 ## 11. Agent State Schema
 
@@ -309,9 +325,11 @@ The Markdown body explains context, workflow, fit/non-fit rationale, architectur
 
 Each dimension uses the 1–5 anchors defined in `deep-research-report.md`. Formula:
 
-`weighted_points = rating / 5 × weight`
+`weighted_points = Decimal(rating) / 5 × weight`, quantized to `0.01` with
+`ROUND_HALF_UP`
 
-`weighted_score = round(sum(weighted_points))`
+`weighted_score = sum(weighted_points)`, quantized to a whole point with
+`ROUND_HALF_UP`
 
 Score-only labels:
 
@@ -319,17 +337,23 @@ Score-only labels:
 - 55–74: 條件式建議
 - 0–54: 暫不建議
 
+The public M1.3 API is `assess_project(assessment_input: AssessmentInput) ->
+Assessment`. It performs no I/O and uses the caller-supplied stable assessment ID
+and UTC evaluation timestamp, so identical serialized input produces identical
+serialized output. Tool-declared ratings are non-authoritative compatibility
+fields; the engine recomputes all six ratings from `AssessmentFacts`.
+
 ## 15. Hard-gate Rules
 
 Hard gates run before score interpretation and cannot be offset by ROI.
 
 | Rule | Trigger | Disposition | Effect |
 |---|---|---|---|
-| HG-01 Unauthorized data/use | No permission, lawful basis or accountable owner for required data/process | `blocked` | No PoC recommendation; request authorization and professional review |
+| HG-01 Unauthorized or autonomous use | No permission, lawful basis or accountable owner for required data/process; or autonomous final decisions／enterprise actions | `blocked` | No PoC recommendation; request authorization, constrain autonomy and obtain professional review |
 | HG-02 High-impact final decision | Employment, medical, legal, credit or similar final decision without meaningful human review | `blocked` | Reject autonomous-final-decision scope |
 | HG-03 High-impact assistive workflow | Same domains with documented human final decision and contest/review path | `assistive_only` | Cap at conditional; list mandatory controls |
 | HG-04 Data cannot leave boundary | External endpoint conflicts with stated data boundary | `requires_controls` | Require approved local/private endpoint before proceeding |
-| HG-05 Sensitive data controls missing | Sensitive/personal data without minimization, retention or access controls | `requires_controls` | Cap at conditional until controls exist |
+| HG-05 Necessary controls missing | Required security, governance or audit controls are absent; sensitive/personal data additionally requires minimization, retention and access controls | `requires_controls` | Cap at conditional until controls exist |
 | HG-06 Low data maturity | Data unavailable, mostly non-digital or no validation sample | `requires_controls` | Cap at conditional and output prerequisite work |
 | HG-07 Financial final decision | Request asks the system to autonomously approve, price, lend or invest | `blocked` | MVP cannot perform or recommend autonomous financial decision |
 

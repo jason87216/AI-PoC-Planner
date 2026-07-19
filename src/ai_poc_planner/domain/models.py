@@ -18,6 +18,7 @@ from pydantic import (
 )
 
 from ai_poc_planner.domain.enums import (
+    EvidenceSourceType,
     GateDisposition,
     InterviewRole,
     ProjectStatus,
@@ -87,6 +88,26 @@ SCORE_WEIGHTS: dict[ScoreDimension, int] = {
 
 class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=False)
+
+
+class EvidenceReference(ContractModel):
+    id: UUID = Field(description="Stable evidence identifier.")
+    project_id: UUID | None = Field(
+        default=None,
+        description=(
+            "Explicit owner when evidence is used outside an enclosing project."
+        ),
+    )
+    session_id: UUID | None = Field(
+        default=None,
+        description=(
+            "Explicit owner when evidence is used outside an enclosing session."
+        ),
+    )
+    source_type: EvidenceSourceType
+    source_ref: NonEmptyStr = Field(description="Inspectable local source reference.")
+    label: NonEmptyStr
+    metadata: dict[str, JSONValue] = Field(default_factory=dict)
 
 
 def _require_unique(values: list[object], field_name: str) -> None:
@@ -164,10 +185,14 @@ class HardGateResult(ContractModel):
     human_review_required: bool = Field(
         description="Whether a qualified human must review this outcome."
     )
+    evidence_refs: list[NonEmptyStr] = Field(
+        default_factory=list, description="Evidence identifiers supporting the trigger."
+    )
 
     @model_validator(mode="after")
     def controls_are_unique(self) -> HardGateResult:
         _require_unique(self.required_controls, "required_controls")
+        _require_unique(self.evidence_refs, "evidence_refs")
         return self
 
 

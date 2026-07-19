@@ -2,7 +2,7 @@
 
 ## Current Goal
 
-已完成 `TASKS.md` 的 M1.2：workflow、Agent state、tool 與 persistence-ready Pydantic contracts；本輪停止於 M1.3 前。
+已完成 `TASKS.md` 的 M1.3：deterministic scoring rubric、hard-gate engine 與 recommendation decision；本輪停止於 M1.4 前。
 
 ## Current Status
 
@@ -12,10 +12,38 @@
 - Python 3.12 下 editable install、13 個 pytest、ruff 與 smoke command 全部通過。
 - 專案已初始化為獨立 Git repository。
 - M1.1 已建立 `feat: add project skeleton and offline domain contracts` commit。
-- 未設定 remote、未建立 GitHub repository，也未 push。
+- 公開 GitHub repository 與 `origin` 已於先前授權工作中建立；M1.3 本輪不 push。
 - M1.2 已獲使用者授權，開始前的 13 個既有測試均通過。
 - M1.2 contract tests 80 個、完整測試 93 個、ruff 與 smoke command 全部通過。
 - M1.2 使用獨立 commit message：`feat: complete workflow and persistence contracts`。
+- M1.3 新增 119 個離線 rule/engine tests；完整測試共 212 個。
+- M1.3 使用獨立 commit message：`feat: implement scoring and hard-gate engine`，不 push。
+
+## M1.3 Data Flow and Contract Mapping
+
+```text
+AssessmentInput
+  ├── stable assessment ID／UTC evaluated_at
+  ├── typed AssessmentFacts
+  ├── six typed tool outputs
+  └── project/session-owned EvidenceReference records
+        ↓
+six pure rubric functions → Decimal weighted contributions／total
+        ↓
+HG-01..HG-07 → blocked > assistive_only > requires_controls > pass
+        ↓
+75／55 thresholds with gate caps
+        ↓
+immutable Assessment with recommendation and decision trace
+```
+
+- `SCORE_WEIGHTS` remains the only weight table; engine and contracts import it.
+- Tool-declared ratings are retained for M1.2 compatibility but are never trusted as final scores.
+- `AssessmentInput` gained optional typed evaluation fields so intermediate workflow state remains valid; `assess_project` requires them all.
+- `Assessment` gained required `recommendation`; `HardGateResult` gained `evidence_refs`.
+- Missing tools, tool errors, unknown/cross-session evidence and contradictory declared gate results raise stable `AssessmentError` codes.
+- M1.3 實際涉及 18 個檔案，超過一般 3–5 檔案原則；原因是核准任務同時要求 domain facts、三個 assessment 模組、三組測試與四份治理文件同步，且未加入任何 M1.4 infrastructure。
+- 審查後補強 tool evidence registry 驗證、重複 facts 一致性、一般自主企業操作與必要 security／governance／audit controls，並以明確 owner 欄位取代 metadata 慣例。
 
 ## M1.2 Contract Mapping
 
@@ -61,12 +89,14 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 - 2026-07-19：完成 M1.1 contracts、fake provider、13 個離線測試及 smoke command，並建立 implementation commit。
 - 2026-07-19：完成 M1.2 persistence/workflow/Agent-state 與六組 tool contracts；明確把計分、gate precedence 與推薦決策保留給 M1.3。
 - 2026-07-19：規格複審後將六種 tool output 收斂為互斥的成功／`ToolError` envelope，並補齊 Agent 追問去重驗證。
+- 2026-07-19：完成 M1.3 六維 rubric、Decimal 權重、HG-01～HG-07、recommendation mapping 與離線 assessment engine。
 
 ## Git Notes
 
 - Repository root：`D:\ai_class\projects\AI PoC Planner`。
 - 本專案使用自己的 `.git`，不再依附 `D:\ai_class` 上層 repository。
-- 目前有兩個本機 commit；沒有 remote、GitHub repository 或 push。
+- GitHub remote 為 `origin`（公開 `jason87216/AI-PoC-Planner`）；M1.3 明確不 push。
+- M1.3 commit 完成後本機 history 為四個 commits，`main` 將領先 `origin/main` 一個 commit。
 
 ## Known Problems
 
@@ -74,13 +104,13 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 - 真實 chat model 與 embeddings model 的預設選擇留待對應 provider task 確認；M1.1 只提供 fake provider。
 - 部分 hard gate 在真實企業環境中需要法務、資安與領域專家核准，不能只由模型決定。
 - 多語言報告與 PDF 匯出不在 MVP 範圍。
-- M1.3 deterministic scoring 與 hard-gate engine 尚未實作；M1.2 只驗證其未來輸入／輸出結構。
+- 部分 hard-gate facts 仍需由後續訪談／tool adapters 可靠產生；M1.3 不以文字猜測填補。
 
 ## Next Steps
 
-1. 等待 M1.3 的明確授權，不提前建立評分或 hard-gate engine。
-2. M1.3 應直接依賴 M1.2 的 `AssessmentInput`、`Assessment` 與 tool contracts，不把規則移回 Pydantic validators。
+1. 等待 M1.4 的明確授權，不提前擴充 provider／embeddings interfaces。
+2. 後續 application service 直接呼叫 M1.3 `assess_project`，不得讓 provider 覆寫正式分數或 gates。
 
 ## Handoff Summary
 
-新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.2 已完成；目前沒有 M1.3 授權，不得提前建立評分／hard-gate engine、資料庫或垂直切片。
+新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.3 已完成；目前沒有 M1.4 授權，不得提前建立新 provider／embeddings、資料庫或垂直切片。

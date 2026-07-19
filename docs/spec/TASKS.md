@@ -40,10 +40,10 @@
 
 ### [Must] M1.3 Implement scoring rubric and hard-gate engine
 
-- [ ] **Purpose:** Create deterministic 1–5 scoring, 100% weighting and gate precedence independent of the Agent.
+- [x] **Purpose:** Create deterministic 1–5 scoring, 100% weighting and gate precedence independent of the Agent. Completed on 2026-07-19.
 - **Modification scope:** scoring module, hard-gate rules/module, unit tests.
 - **Acceptance:** Weights equal 100; all ratings enforce 1–5; `blocked > assistive_only > requires_controls > pass`; high ROI never overrides a gate.
-- **Verification:** `python -m pytest tests/domain/test_scoring.py tests/domain/test_hard_gates.py`.
+- **Verification:** `python -m pytest tests/domain/test_scoring.py tests/domain/test_hard_gates.py tests/domain/test_assessment_engine.py` (119 M1.3 tests) plus the complete offline suite.
 - **Dependencies:** M1.2.
 - **Estimated scope:** M.
 

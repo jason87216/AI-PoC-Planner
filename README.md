@@ -2,9 +2,9 @@
 
 AI PoC Planner 是一個規格中的公開 AI 工程作品：透過單一 LangChain Agent 進行結構化需求訪談，結合本機案例檢索、固定評分框架與風險 hard gates，產生可追蹤、可測試、可匯出的 AI 導入 PoC 建議。
 
-> 專案狀態：**M1.2 contracts complete**。目前具有可安裝的 Python
-> 骨架、persistence/workflow/Agent-state/tool Pydantic contracts 與離線 fake
-> provider；產品流程與評估引擎尚未實作。
+> 專案狀態：**M1.3 deterministic assessment engine complete**。目前具有可安裝
+> 的 Python 骨架、完整 Pydantic contracts、離線 fake provider，以及六維評分、
+> hard-gate precedence 與 recommendation engine；Agent 與產品流程尚未實作。
 
 ## 核心價值
 
@@ -57,12 +57,16 @@ fake provider 的結構化輸出，不是正式 CLI，也不需要 `.env`、API 
 
 目前已完成的 contract surface 包含 interview session/state snapshot、assessment
 input/result、proposal/report/case persistence metadata、framework-neutral Agent
-state，以及六組 tool input/output models。這些 models 只驗證資料結構；尚未執行
-評分、hard-gate rules、檢索或 Agent orchestration。
+state，以及六組 tool input/output models。`assess_project(AssessmentInput)` 會從
+typed facts 以純 Python 規則重算六維分數、`HG-01`～`HG-07` 與 recommendation；
+它不信任 tool 宣告分數，也不執行檢索或 Agent orchestration。
 
 本次驗證環境：Python 3.12.10、Pydantic 2.13.4、pytest 9.1.1、ruff
 0.15.22。`pyproject.toml` 使用相容版本範圍，避免把專案綁死在單一 patch
 版本。
+
+評估引擎由 domain tests 提供完全離線的固定 smoke scenario；既有
+`python -m ai_poc_planner` 仍只驗證 M1.1 fake provider seam，不是產品 CLI。
 
 FastAPI、Streamlit、SQLite、FAISS、LangChain Agent、Docker 與真實模型
 provider 尚未實作，因而目前沒有 API 或 UI 啟動命令。

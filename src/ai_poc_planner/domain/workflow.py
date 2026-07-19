@@ -8,18 +8,20 @@ from uuid import UUID
 from pydantic import Field, StringConstraints, model_validator
 
 from ai_poc_planner.domain.enums import (
-    EvidenceSourceType,
     GateDisposition,
     HumanReviewRequirement,
     InterviewSessionStatus,
     InterviewStage,
     ProjectStatus,
+    Recommendation,
     ReportFormat,
 )
+from ai_poc_planner.domain.facts import AssessmentFacts
 from ai_poc_planner.domain.models import (
     SCORE_WEIGHTS,
     ClarifyingQuestion,
     ContractModel,
+    EvidenceReference,
     HardGateResult,
     InterviewTurn,
     JSONValue,
@@ -29,6 +31,7 @@ from ai_poc_planner.domain.models import (
     ScoreDimensionResult,
     UtcDateTime,
 )
+from ai_poc_planner.domain.tools import AssessmentToolOutputs
 
 ContentHash = Annotated[
     str,
@@ -43,14 +46,6 @@ ContentHash = Annotated[
 def _require_unique(values: list[object], field_name: str) -> None:
     if len(values) != len(set(values)):
         raise ValueError(f"{field_name} must not contain duplicates")
-
-
-class EvidenceReference(ContractModel):
-    id: UUID = Field(description="Stable evidence identifier.")
-    source_type: EvidenceSourceType
-    source_ref: NonEmptyStr = Field(description="Inspectable local source reference.")
-    label: NonEmptyStr
-    metadata: dict[str, JSONValue] = Field(default_factory=dict)
 
 
 class InterviewSession(ContractModel):
@@ -142,6 +137,7 @@ class Assessment(ContractModel):
     weighted_score: int = Field(ge=0, le=100)
     hard_gates: list[HardGateResult]
     gate_disposition: GateDisposition
+    recommendation: Recommendation
     matched_case_ids: list[NonEmptyStr]
     evidence_refs: list[NonEmptyStr]
     rationale: NonEmptyStr
@@ -191,7 +187,11 @@ class AssessmentInput(ContractModel):
     schema_version: SchemaVersion
     project_id: UUID
     session_id: UUID
+    assessment_id: UUID | None = None
+    evaluated_at: UtcDateTime | None = None
     known_information: dict[str, JSONValue]
+    facts: AssessmentFacts | None = None
+    tool_outputs: AssessmentToolOutputs | None = None
     evidence: list[EvidenceReference] = Field(default_factory=list)
 
     @model_validator(mode="after")

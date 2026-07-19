@@ -17,6 +17,7 @@ from ai_poc_planner.domain.enums import (
 from ai_poc_planner.domain.models import (
     ArchitectureOption,
     ContractModel,
+    EvidenceReference,
     HardGateResult,
     JSONValue,
     NonEmptyStr,
@@ -24,7 +25,6 @@ from ai_poc_planner.domain.models import (
     ScoreDimensionResult,
     SimilarCase,
 )
-from ai_poc_planner.domain.workflow import EvidenceReference
 
 
 def _ensure_unique(values: list[object], field_name: str) -> None:
@@ -337,3 +337,18 @@ class EstimatePocScopeOutput(ToolOutputContract):
         _ensure_unique(self.roles, "roles")
         _ensure_unique(self.assumptions, "assumptions")
         return self
+
+
+class AssessmentToolOutputs(ContractModel):
+    """Typed output bundle; optional fields support pre-assessment workflow state."""
+
+    retrieve_similar_cases: RetrieveSimilarCasesOutput | None = None
+    assess_data_readiness: AssessDataReadinessOutput | None = None
+    assess_technical_fit_and_architecture: (
+        AssessTechnicalFitAndArchitectureOutput | None
+    ) = None
+    evaluate_risk_and_hard_gates: EvaluateRiskAndHardGatesOutput | None = None
+    assess_business_value_roi_and_kpis: (
+        AssessBusinessValueRoiAndKpisOutput | None
+    ) = None
+    estimate_poc_scope: EstimatePocScopeOutput | None = None
