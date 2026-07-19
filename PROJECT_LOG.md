@@ -25,6 +25,9 @@
 - M1.4 已將 provider boundary 收斂為 `prepare_assessment`，只回傳 typed facts／tool inputs 或追問；正式 assessment 決策仍由 M1.3 掌握。
 - 新增 deterministic fake embeddings seam；它不是 semantic embeddings，也未接入 FAISS。
 - M1.4 完整 suite 為 218 passed，Ruff 與 provider smoke 通過。
+- 離線 batch 已實作六組 typed deterministic tool services；案例查找為明確 fixture filter，不是 embeddings／FAISS／semantic search。
+- Tool services 只產生 M1.2 output envelopes；正式 weighted score 與 recommendation 仍只由 M1.3 engine 計算。
+- 六組 tools 完成後完整 suite 為 229 passed，Ruff 通過。
 
 ## M1.3 Data Flow and Contract Mapping
 

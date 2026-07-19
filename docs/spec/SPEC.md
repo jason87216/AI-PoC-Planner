@@ -303,6 +303,13 @@ requires its complete typed payload, while a failure carries `ToolError` without
 fabricated success fields. `ToolError` contains a stable code, safe message,
 retryability flag and JSON-only details.
 
+The offline vertical-slice batch supplies framework-neutral implementations for
+all six interfaces. Case retrieval is a transparent, version-controlled fixture
+filter with fixed similarity values and `fixture:` source references; it is not
+semantic search. The other services may calculate their individual typed output
+fields from `AssessmentFacts`, but only `assess_project` recomputes the authoritative
+six scores, weighted total, gate precedence and recommendation.
+
 ## 13. Case Knowledge Base Format
 
 Each case is a reviewed UTF-8 Markdown file with YAML front matter:
