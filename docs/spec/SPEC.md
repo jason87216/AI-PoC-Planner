@@ -371,35 +371,36 @@ All errors use:
 
 ## 19. Commands
 
-No command is executable yet because no scaffold exists. Planned command contracts after the first implementation task:
+M1.1 establishes these executable standard-Python commands:
 
-- Setup: `uv sync --all-groups`
-- API: `uv run uvicorn app.main:app --reload`
-- UI: `uv run streamlit run ui/app.py`
-- Test: `uv run pytest`
-- Lint: `uv run ruff check .`
-- Docker development: `docker compose -f compose.yaml -f compose.dev.yaml up --build`
+- Setup: `python -m pip install -e ".[dev]"`
+- Smoke: `python -m ai_poc_planner`
+- Test: `python -m pytest`
+- Lint: `python -m ruff check .`
 
-The implementation task must update this section if the generated files require different commands.
+The API, UI and Docker commands remain TODO until their corresponding tasks create
+the required files. Python 3.12 is the primary supported runtime.
 
 ## 20. Planned Project Structure
 
 ```text
-app/                 FastAPI and application composition
-domain/              Pydantic contracts, scoring, hard gates, report rules
-agent/               LangChain state, tools, prompts, provider adapter
-infrastructure/      SQLite repositories, FAISS index, settings
-ui/                  Streamlit application
-case_library/        Reviewed synthetic Markdown cases
-tests/               Unit, contract, integration, trajectory and vertical-slice tests
-docs/spec/           Specification, plan and tasks
+src/ai_poc_planner/            Installable Python package
+  domain/                      Pydantic contracts; later scoring and hard gates
+  providers/                   Fake and future model provider adapters
+  app/                         Planned FastAPI and application composition
+  agent/                       Planned LangChain state, tools and prompts
+  infrastructure/             Planned SQLite repositories and FAISS index
+ui/                            Planned Streamlit application
+case_library/                  Planned reviewed synthetic Markdown cases
+tests/                         Unit, contract, integration and vertical-slice tests
+docs/spec/                     Specification, plan and tasks
 ```
 
 Folders are created only when their first approved implementation task needs them.
 
 ## 21. Code Style
 
-- Python 3.12 target, pending scaffold confirmation.
+- Python 3.12 primary target, confirmed by the M1.1 scaffold.
 - Type annotations on public functions and Pydantic at boundaries.
 - Small pure functions for scoring and hard gates.
 - `snake_case` functions/fields, `PascalCase` classes, uppercase constants.

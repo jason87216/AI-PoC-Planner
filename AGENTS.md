@@ -22,14 +22,13 @@ MVP 禁止加入 PostgreSQL、pgvector、Qdrant、雲端向量資料庫、多 Ag
 ## Project Commands
 
 <!-- BEGIN MANAGED:PROJECT_COMMANDS -->
-目前尚無可執行的專案命令。下列命令只有在 `pyproject.toml` 與對應入口由 TASKS 核准建立後才生效：
-
-- Setup: `uv sync --all-groups`
-- Run API: `uv run uvicorn app.main:app --reload`
-- Run UI: `uv run streamlit run ui/app.py`
-- Build: TODO；MVP 為 Python 應用，Docker image 建置命令需在 Dockerfile 建立後確認。
-- Test: `uv run pytest`
-- Lint: `uv run ruff check .`
+- Setup: `python -m pip install -e ".[dev]"`
+- Smoke: `python -m ai_poc_planner`
+- Test: `python -m pytest`
+- Lint: `python -m ruff check .`
+- Run API: TODO；FastAPI 尚未實作。
+- Run UI: TODO；Streamlit 尚未實作。
+- Build: TODO；Dockerfile 尚未建立。
 <!-- END MANAGED:PROJECT_COMMANDS -->
 
 ## Project Structure

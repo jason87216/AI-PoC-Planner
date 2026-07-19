@@ -21,19 +21,20 @@
 
 ### [Must] M1.1 Create executable Python scaffold and offline test entry
 
-- [ ] **Purpose:** Establish the smallest real project structure, dependency manifest and commands without implementing product behavior.
-- **Modification scope:** `pyproject.toml`, package marker(s), `tests/test_smoke.py`, README／AGENTS command blocks.
-- **Acceptance:** `uv sync --all-groups`, `uv run pytest` and `uv run ruff check .` are grounded in real files and pass offline.
-- **Verification:** Run the three commands; confirm no network access during pytest.
+- [x] **Purpose:** Establish the smallest real project structure, dependency manifest and commands without implementing product behavior. Completed on 2026-07-19.
+- **Modification scope:** `pyproject.toml`, `src/ai_poc_planner/`, `tests/`, README／AGENTS／SPEC command blocks, `PROJECT_LOG.md`.
+- **Acceptance:** Standard `pip` editable install, `python -m pytest`, `python -m ruff check .` and `python -m ai_poc_planner` are grounded in real files and pass without runtime network or API keys.
+- **Verification:** Run the four commands under Python 3.12; fake-provider tests prevent network use through the tested socket boundary.
 - **Dependencies:** S0.1.
 - **Estimated scope:** M.
+- **Execution note:** The user explicitly expanded M1.1 to include the initial normative domain contracts and proposal-producing fake provider. M1.2 remains open for complete contract coverage; M1.4 remains open for embeddings and later Agent event seams.
 
 ### [Must] M1.2 Implement core Pydantic contracts
 
 - [ ] **Purpose:** Turn SPEC schema names and invariants into the shared contract layer.
 - **Modification scope:** domain schema module(s), contract tests.
 - **Acceptance:** All specified models validate valid fixtures and reject missing dimensions, bad weights, invalid score ranges and gate/recommendation conflicts.
-- **Verification:** `uv run pytest tests/domain/test_schemas.py`.
+- **Verification:** `python -m pytest tests/domain/test_schemas.py`.
 - **Dependencies:** M1.1.
 - **Estimated scope:** S.
 
@@ -42,7 +43,7 @@
 - [ ] **Purpose:** Create deterministic 1–5 scoring, 100% weighting and gate precedence independent of the Agent.
 - **Modification scope:** scoring module, hard-gate rules/module, unit tests.
 - **Acceptance:** Weights equal 100; all ratings enforce 1–5; `blocked > assistive_only > requires_controls > pass`; high ROI never overrides a gate.
-- **Verification:** `uv run pytest tests/domain/test_scoring.py tests/domain/test_hard_gates.py`.
+- **Verification:** `python -m pytest tests/domain/test_scoring.py tests/domain/test_hard_gates.py`.
 - **Dependencies:** M1.2.
 - **Estimated scope:** M.
 
@@ -51,7 +52,7 @@
 - [ ] **Purpose:** Make model and embeddings dependencies injectable before any real API integration.
 - **Modification scope:** provider protocol module, fake model/embeddings module, tests.
 - **Acceptance:** Fake responses are deterministic, support required tool/structured events and make no network call; domain code imports no provider SDK.
-- **Verification:** `uv run pytest tests/agent/test_fake_provider.py` with network disabled.
+- **Verification:** `python -m pytest tests/agent/test_fake_provider.py` with network disabled.
 - **Dependencies:** M1.2.
 - **Estimated scope:** M.
 
@@ -68,7 +69,7 @@
 - [ ] **Purpose:** Deliver the first end-to-end capability using SQLite: create and retrieve a project.
 - **Modification scope:** project application service, SQLite project repository, migration/schema setup, tests.
 - **Acceptance:** Project UUID/timestamps/status persist and reload from a temporary SQLite file; duplicate/invalid input has a stable error.
-- **Verification:** `uv run pytest tests/integration/test_project_lifecycle.py`.
+- **Verification:** `python -m pytest tests/integration/test_project_lifecycle.py`.
 - **Dependencies:** M1.2.
 - **Estimated scope:** M.
 
@@ -77,7 +78,7 @@
 - [ ] **Purpose:** Persist accepted turns, normalized answers and state snapshots across multiple turns.
 - **Modification scope:** interview state machine, SQLite interview repository, interview service, tests.
 - **Acceptance:** At most five targeted questions per turn; accepted input is persisted before model processing; reload resumes stage and known fields.
-- **Verification:** `uv run pytest tests/integration/test_interview_flow.py`.
+- **Verification:** `python -m pytest tests/integration/test_interview_flow.py`.
 - **Dependencies:** M1.4, M2.1.
 - **Estimated scope:** M.
 
@@ -86,7 +87,7 @@
 - [ ] **Purpose:** Produce all six ratings, ROI/KPI assumptions, scope and independent gate disposition from completed interview data.
 - **Modification scope:** assessment service, tool adapters, assessment repository, tests.
 - **Acceptance:** Same input gives same outputs; missing critical data prevents final proposal; high-impact test case returns the expected gate regardless of score.
-- **Verification:** `uv run pytest tests/integration/test_assessment_service.py`.
+- **Verification:** `python -m pytest tests/integration/test_assessment_service.py`.
 - **Dependencies:** M1.3, M2.2.
 - **Estimated scope:** M.
 
@@ -95,7 +96,7 @@
 - [ ] **Purpose:** Convert persisted interview and assessment results into `PocProposal` with the fake model.
 - **Modification scope:** proposal assembler, Agent workflow/state, proposal repository, tests.
 - **Acceptance:** Proposal passes schema, contains each dimension once, records gate effects and stores no invalid output after bounded failure.
-- **Verification:** `uv run pytest tests/integration/test_proposal_generation.py`.
+- **Verification:** `python -m pytest tests/integration/test_proposal_generation.py`.
 - **Dependencies:** M2.3.
 - **Estimated scope:** M.
 
@@ -104,7 +105,7 @@
 - [ ] **Purpose:** Complete the vertical slice with a readable, stable report artifact.
 - **Modification scope:** Markdown renderer, export service/repository, golden-file tests.
 - **Acceptance:** Report includes inputs, assumptions, cases, score table, hard gates, architecture, ROI/KPI, scope and next actions; section order is stable.
-- **Verification:** `uv run pytest tests/domain/test_markdown_report.py tests/integration/test_vertical_slice.py`.
+- **Verification:** `python -m pytest tests/domain/test_markdown_report.py tests/integration/test_vertical_slice.py`.
 - **Dependencies:** M2.4.
 - **Estimated scope:** M.
 
@@ -122,7 +123,7 @@
 - [ ] **Purpose:** Establish public-safe evidence cases without private or copyrighted datasets.
 - **Modification scope:** case schema/loader, 3–5 initial Markdown fixtures, tests.
 - **Acceptance:** Only approved UTF-8 cases load; required front matter and content hash validate; source fields are inspectable.
-- **Verification:** `uv run pytest tests/cases/test_case_loader.py`.
+- **Verification:** `python -m pytest tests/cases/test_case_loader.py`.
 - **Dependencies:** M1.2.
 - **Estimated scope:** M.
 
@@ -131,7 +132,7 @@
 - [ ] **Purpose:** Implement local embeddings storage and reliable metadata linkage.
 - **Modification scope:** case metadata repository, FAISS index adapter, reindex service, tests.
 - **Acceptance:** Fake embeddings produce stable top-k results; content-hash mismatch reports stale index; metadata is not treated as authoritative inside FAISS.
-- **Verification:** `uv run pytest tests/infrastructure/test_case_index.py`.
+- **Verification:** `python -m pytest tests/infrastructure/test_case_index.py`.
 - **Dependencies:** M1.4, M3.1.
 - **Estimated scope:** M.
 
@@ -140,7 +141,7 @@
 - [ ] **Purpose:** Add retrieval to the vertical slice without weakening deterministic gates.
 - **Modification scope:** retrieval tool, Agent/application orchestration, proposal tests.
 - **Acceptance:** Proposal includes case ID, source reference and fit summary; missing index fails explicitly; hard gates still run.
-- **Verification:** `uv run pytest tests/integration/test_retrieval_proposal.py`.
+- **Verification:** `python -m pytest tests/integration/test_retrieval_proposal.py`.
 - **Dependencies:** M2.4, M3.2.
 - **Estimated scope:** M.
 
@@ -157,7 +158,7 @@
 - [ ] **Purpose:** Implement the SPEC endpoints over existing application services.
 - **Modification scope:** FastAPI composition/routes, error mapping, API tests.
 - **Acceptance:** Required status codes and Pydantic response models match SPEC; errors have safe envelopes and correlation IDs.
-- **Verification:** `uv run pytest tests/api`.
+- **Verification:** `python -m pytest tests/api`.
 - **Dependencies:** M2.5, M3.3.
 - **Estimated scope:** M.
 
@@ -192,7 +193,7 @@
 - [ ] **Purpose:** Validate tool selection and hard-gate coverage across the 15 research scenarios.
 - **Modification scope:** baseline fixtures, trajectory evaluator, parametrized tests.
 - **Acceptance:** Hard-gate miss rate is 0%; proposal schema validity is 100%; expected mandatory tools are called.
-- **Verification:** `uv run pytest tests/evaluation`.
+- **Verification:** `python -m pytest tests/evaluation`.
 - **Dependencies:** M3.3.
 - **Estimated scope:** M.
 
