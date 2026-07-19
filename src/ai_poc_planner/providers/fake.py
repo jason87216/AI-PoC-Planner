@@ -35,12 +35,13 @@ from ai_poc_planner.providers.base import (
     AssessmentToolInputs,
     PreparationStatus,
     ProviderCapabilities,
+    ProviderError,
     ProviderPreparation,
     ProviderRequest,
 )
 
 
-class FakeProviderError(RuntimeError):
+class FakeProviderError(ProviderError):
     """Intentional fake failure used to exercise provider error handling."""
 
 

@@ -310,9 +310,7 @@ def test_assessment_input_and_evidence_round_trip() -> None:
         ],
     )
 
-    restored = AssessmentInput.model_validate_json(
-        assessment_input.model_dump_json()
-    )
+    restored = AssessmentInput.model_validate_json(assessment_input.model_dump_json())
 
     assert restored == assessment_input
 
@@ -511,17 +509,16 @@ def test_recursive_json_value_accepts_nested_lists_and_objects() -> None:
         schema_version="1.0",
         session_id=SESSION_ID,
         version=1,
-        known_fields={
-            "nested": [1, True, None, {"levels": ["one", {"two": 2.5}]}]
-        },
+        known_fields={"nested": [1, True, None, {"levels": ["one", {"two": 2.5}]}]},
         missing_fields=[],
         contradictions=[],
         created_at=NOW,
     )
 
-    assert ConversationStateSnapshot.model_validate_json(
-        snapshot.model_dump_json()
-    ) == snapshot
+    assert (
+        ConversationStateSnapshot.model_validate_json(snapshot.model_dump_json())
+        == snapshot
+    )
 
 
 @pytest.mark.parametrize("invalid", [object(), ("tuple",), {"set"}])

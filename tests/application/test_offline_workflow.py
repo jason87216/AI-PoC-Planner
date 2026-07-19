@@ -136,3 +136,16 @@ def test_cross_project_evidence_has_stable_assessment_error() -> None:
         run_offline_planning(request.model_copy(update={"evidence": [evidence]}))
 
     assert error.value.code == "invalid_evidence_ownership"
+
+
+def test_invalid_provider_structured_output_has_stable_error() -> None:
+    class InvalidProvider:
+        capabilities = FakeModelProvider().capabilities
+
+        def prepare_assessment(self, request: ProviderRequest) -> object:
+            return {"schema_version": "1.0", "status": "ready"}
+
+    with pytest.raises(ProviderWorkflowError) as error:
+        run_offline_planning(build_demo_request(), provider=InvalidProvider())
+
+    assert error.value.code == "provider_output_invalid"

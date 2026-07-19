@@ -212,6 +212,7 @@ class PocProposal(BaseModel):
     in_scope: list[str] = []
     out_of_scope: list[str] = []
     poc_milestones: list[str] = []
+    scope_assumptions: list[str] = []
     evidence_refs: list[str] = []
     next_actions: list[str]
 ```
@@ -315,6 +316,10 @@ filter with fixed similarity values and `fixture:` source references; it is not
 semantic search. The other services may calculate their individual typed output
 fields from `AssessmentFacts`, but only `assess_project` recomputes the authoritative
 six scores, weighted total, gate precedence and recommendation.
+Before execution, the application validates duplicated facts against their formal
+tool-input fields (data access/digitization/sample, integration count, risk domain,
+impact, data flags, boundary, human review, authorization and scope signals).
+Contradictory provider output fails explicitly rather than producing mixed results.
 
 ## 13. Case Knowledge Base Format
 
@@ -448,6 +453,7 @@ All errors use:
 - No MVP tool can mutate an enterprise system, send messages, approve decisions or perform financial actions.
 - External model use requires an explicit data-boundary check; fake model is the safe default for tests.
 - Markdown export escapes or neutralizes untrusted content where needed and never embeds secrets.
+- Offline Markdown redacts values under secret-like interview keys and neutralizes HTML and Markdown control characters from all dynamic inline content.
 - This project flags governance issues; a qualified reviewer determines applicable law and compliance.
 
 ## 19. Commands

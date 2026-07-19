@@ -30,9 +30,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 0
     try:
-        result = run_offline_planning(
-            build_demo_request(output_path=arguments.output)
-        )
+        result = run_offline_planning(build_demo_request(output_path=arguments.output))
     except (PlanningError, ReportExportError) as error:
         print(f"error [{error.code}]: {error}", file=sys.stderr)
         return 2

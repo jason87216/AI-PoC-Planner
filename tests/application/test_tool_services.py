@@ -5,6 +5,7 @@ import pytest
 
 from ai_poc_planner.application.tool_services import (
     TOOL_NAMES,
+    ToolInputConsistencyError,
     run_assessment_tools,
 )
 from ai_poc_planner.domain.enums import EvidenceSourceType, ProjectStatus
@@ -132,3 +133,26 @@ def test_runner_rejects_unknown_failure_target() -> None:
             preparation.facts,
             fail_tool="not_a_tool",
         )
+
+
+@pytest.mark.parametrize(
+    ("input_name", "field", "value"),
+    [
+        ("assess_data_readiness", "access_confirmed", False),
+        ("evaluate_risk_and_hard_gates", "authorization_confirmed", False),
+        ("estimate_poc_scope", "integration_count", 2),
+    ],
+)
+def test_runner_rejects_contradictory_tool_inputs_and_facts(
+    input_name: str,
+    field: str,
+    value: object,
+) -> None:
+    preparation = _preparation()
+    changed = getattr(preparation.tool_inputs, input_name).model_copy(
+        update={field: value}
+    )
+    inputs = preparation.tool_inputs.model_copy(update={input_name: changed})
+
+    with pytest.raises(ToolInputConsistencyError, match=input_name):
+        run_assessment_tools(inputs, preparation.facts)

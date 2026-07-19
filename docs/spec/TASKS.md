@@ -72,6 +72,7 @@
 - **Verification:** `python -m pytest tests/integration/test_project_lifecycle.py`.
 - **Dependencies:** M1.2.
 - **Estimated scope:** M.
+- **Offline batch note:** deterministic demo project construction is available in memory; SQLite create/read and duplicate handling remain open, so this task is not complete.
 
 ### [Must] M2.2 Run and resume the standard interview
 
@@ -81,6 +82,7 @@
 - **Verification:** `python -m pytest tests/integration/test_interview_flow.py`.
 - **Dependencies:** M1.4, M2.1.
 - **Estimated scope:** M.
+- **Offline batch note:** fixed interview loading, structured preparation and clarification are implemented; durable turns, snapshots and resume remain open.
 
 ### [Must] M2.3 Execute deterministic assessment and hard gates
 
@@ -90,6 +92,7 @@
 - **Verification:** `python -m pytest tests/integration/test_assessment_service.py`.
 - **Dependencies:** M1.3, M2.2.
 - **Estimated scope:** M.
+- **Offline batch note:** the in-memory six-tool → M1.3 assessment path and error mapping are implemented; the assessment repository and persisted interview dependency remain open.
 
 ### [Must] M2.4 Assemble and validate the structured PoC proposal
 
@@ -99,6 +102,7 @@
 - **Verification:** `python -m pytest tests/integration/test_proposal_generation.py`.
 - **Dependencies:** M2.3.
 - **Estimated scope:** M.
+- **Offline batch note:** deterministic proposal assembly covers pass, blocked, assistive-only and requires-controls outcomes; Agent workflow and proposal persistence remain open.
 
 ### [Must] M2.5 Export a deterministic Markdown report
 
@@ -108,6 +112,7 @@
 - **Verification:** `python -m pytest tests/domain/test_markdown_report.py tests/integration/test_vertical_slice.py`.
 - **Dependencies:** M2.4.
 - **Estimated scope:** M.
+- **Offline batch note:** the typed fixed-order renderer, local file writer and CLI demo are implemented; the formal persisted vertical-slice dependency remains open.
 
 ### Checkpoint V1 — Core Vertical Slice
 

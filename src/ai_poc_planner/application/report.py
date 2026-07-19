@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 from pathlib import Path
 
@@ -31,6 +32,15 @@ REPORT_SECTIONS = (
     "## Evidence",
     "## Next Steps",
 )
+_SENSITIVE_KEY_MARKERS = (
+    "api_key",
+    "token",
+    "password",
+    "secret",
+    "cookie",
+    "private_key",
+    "authorization",
+)
 
 
 class ReportExportError(OSError):
@@ -40,7 +50,13 @@ class ReportExportError(OSError):
 
 
 def _line(value: object) -> str:
-    return str(value).replace("\r", " ").replace("\n", " ").strip()
+    escaped = html.escape(
+        str(value).replace("\r", " ").replace("\n", " ").strip(),
+        quote=True,
+    ).replace("\\", "\\\\")
+    for marker in ("`", "*", "_", "[", "]", "(", ")", "#", "!"):
+        escaped = escaped.replace(marker, f"\\{marker}")
+    return escaped
 
 
 def _table(value: object) -> str:
@@ -51,10 +67,27 @@ def _bullets(values: list[str], *, empty: str = "None") -> list[str]:
     return [f"- {_line(value)}" for value in values] or [f"- {empty}"]
 
 
+def _redact_json(value: JSONValue) -> JSONValue:
+    if isinstance(value, dict):
+        return {
+            key: (
+                "[REDACTED]"
+                if any(marker in key.lower() for marker in _SENSITIVE_KEY_MARKERS)
+                else _redact_json(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_json(item) for item in value]
+    return value
+
+
 def _interview_lines(values: dict[str, JSONValue]) -> list[str]:
+    redacted = _redact_json(values)
+    assert isinstance(redacted, dict)
     return [
         f"- **{_line(key)}:** {_line(json.dumps(value, ensure_ascii=False))}"
-        for key, value in sorted(values.items())
+        for key, value in sorted(redacted.items())
     ]
 
 
@@ -118,13 +151,13 @@ def render_markdown_report(
             lines.extend(
                 [
                     "",
-                    f"### {gate.rule_id} — {gate.disposition.value}",
+                    f"### {_line(gate.rule_id)} — {gate.disposition.value}",
                     "",
                     _line(gate.reason),
                     "",
                     *_bullets(gate.required_controls, empty="No additional controls"),
                     "",
-                    "Evidence: " + ", ".join(gate.evidence_refs),
+                    "Evidence: " + ", ".join(_line(ref) for ref in gate.evidence_refs),
                 ]
             )
     else:
@@ -153,6 +186,11 @@ def render_markdown_report(
             "",
             *_bullets(proposal.poc_milestones),
             "",
+            f"**Estimated duration:** {proposal.estimated_weeks} weeks",
+            "",
+            "**Estimated team:** "
+            + ", ".join(_line(item) for item in proposal.estimated_team),
+            "",
             REPORT_SECTIONS[8],
             "",
         ]
@@ -175,9 +213,7 @@ def render_markdown_report(
         )
 
     controls = [
-        control
-        for gate in assessment.hard_gates
-        for control in gate.required_controls
+        control for gate in assessment.hard_gates for control in gate.required_controls
     ]
     lines.extend(
         [
@@ -201,7 +237,7 @@ def render_markdown_report(
             "",
             "### Assumptions",
             "",
-            *_bullets(proposal.roi_assumptions),
+            *_bullets([*proposal.roi_assumptions, *proposal.scope_assumptions]),
             "",
             REPORT_SECTIONS[13],
             "",
@@ -209,7 +245,7 @@ def render_markdown_report(
     )
     for case in proposal.similar_cases:
         lines.append(
-            f"- **{_line(case.title)}** (`{case.case_id}`, "
+            f"- **{_line(case.title)}** (`{_line(case.case_id)}`, "
             f"fixture score {case.similarity:.2f}) — {_line(case.fit_summary)}; "
             f"source `{_line(case.source_ref)}`"
         )
@@ -224,7 +260,10 @@ def render_markdown_report(
         [
             "",
             "Rule IDs: "
-            + (", ".join(gate.rule_id for gate in assessment.hard_gates) or "None"),
+            + (
+                ", ".join(_line(gate.rule_id) for gate in assessment.hard_gates)
+                or "None"
+            ),
             "",
             REPORT_SECTIONS[15],
             "",

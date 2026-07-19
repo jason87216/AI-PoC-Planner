@@ -6,6 +6,7 @@ from ai_poc_planner.providers.base import (
     ModelProvider,
     PreparationStatus,
     ProviderCapabilities,
+    ProviderError,
     ProviderPreparation,
     ProviderRequest,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "ModelProvider",
     "PreparationStatus",
     "ProviderCapabilities",
+    "ProviderError",
     "ProviderPreparation",
     "ProviderRequest",
 ]

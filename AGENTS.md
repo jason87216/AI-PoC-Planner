@@ -23,7 +23,8 @@ MVP 禁止加入 PostgreSQL、pgvector、Qdrant、雲端向量資料庫、多 Ag
 
 <!-- BEGIN MANAGED:PROJECT_COMMANDS -->
 - Setup: `python -m pip install -e ".[dev]"`
-- Smoke: `python -m ai_poc_planner`
+- Usage: `python -m ai_poc_planner`
+- Offline demo: `python -m ai_poc_planner demo`
 - Test: `python -m pytest`
 - Lint: `python -m ruff check .`
 - Run API: TODO；FastAPI 尚未實作。

@@ -14,7 +14,11 @@ from ai_poc_planner.assessment.scoring import (
     score_technical_fit,
     score_user_adoption,
 )
-from ai_poc_planner.domain.enums import EvidenceSourceType
+from ai_poc_planner.domain.enums import (
+    DecisionImpact,
+    EvidenceSourceType,
+    HighImpactDomain,
+)
 from ai_poc_planner.domain.facts import AssessmentFacts
 from ai_poc_planner.domain.models import (
     ArchitectureOption,
@@ -83,6 +87,10 @@ _FIXTURE_CASES = (
         ),
     ),
 )
+
+
+class ToolInputConsistencyError(ValueError):
+    """Raised when provider facts contradict their corresponding tool inputs."""
 
 
 def _context(request: ToolContract) -> dict[str, object]:
@@ -181,9 +189,7 @@ def evaluate_risk_and_hard_gates(
         rule_version="1.0",
         hard_gates=list(evaluation.triggered),
         gate_disposition=evaluation.disposition,
-        governance_readiness=score_governance_readiness(
-            facts.governance_readiness
-        ),
+        governance_readiness=score_governance_readiness(facts.governance_readiness),
     )
 
 
@@ -261,6 +267,96 @@ def _error_output(
     )
 
 
+def _validate_input_consistency(
+    inputs: AssessmentToolInputs,
+    facts: AssessmentFacts,
+) -> None:
+    expected_impact = (
+        DecisionImpact.HIGH
+        if facts.gates.high_impact_domain is not HighImpactDomain.NONE
+        else DecisionImpact.LOW
+    )
+    comparisons = (
+        (
+            "assess_data_readiness.access_confirmed",
+            inputs.assess_data_readiness.access_confirmed,
+            facts.data_readiness.lawful_access,
+        ),
+        (
+            "assess_data_readiness.digitization",
+            inputs.assess_data_readiness.digitization,
+            facts.data_readiness.digitization,
+        ),
+        (
+            "assess_data_readiness.validation_sample_available",
+            inputs.assess_data_readiness.validation_sample_available,
+            facts.data_readiness.validation_sample_available,
+        ),
+        (
+            "assess_technical_fit_and_architecture.integrations",
+            len(inputs.assess_technical_fit_and_architecture.integrations),
+            facts.architecture_controllability.integration_count,
+        ),
+        (
+            "evaluate_risk_and_hard_gates.domain",
+            inputs.evaluate_risk_and_hard_gates.domain,
+            facts.gates.high_impact_domain.value,
+        ),
+        (
+            "evaluate_risk_and_hard_gates.decision_impact",
+            inputs.evaluate_risk_and_hard_gates.decision_impact,
+            expected_impact,
+        ),
+        (
+            "evaluate_risk_and_hard_gates.personal_data",
+            inputs.evaluate_risk_and_hard_gates.personal_data,
+            facts.gates.personal_data,
+        ),
+        (
+            "evaluate_risk_and_hard_gates.sensitive_data",
+            inputs.evaluate_risk_and_hard_gates.sensitive_data,
+            facts.gates.sensitive_data,
+        ),
+        (
+            "evaluate_risk_and_hard_gates.data_boundary",
+            inputs.evaluate_risk_and_hard_gates.data_boundary,
+            facts.gates.data_boundary,
+        ),
+        (
+            "evaluate_risk_and_hard_gates.human_review_available",
+            inputs.evaluate_risk_and_hard_gates.human_review_available,
+            facts.gates.meaningful_human_review,
+        ),
+        (
+            "evaluate_risk_and_hard_gates.authorization_confirmed",
+            inputs.evaluate_risk_and_hard_gates.authorization_confirmed,
+            facts.gates.authorization_confirmed,
+        ),
+        (
+            "estimate_poc_scope.integration_count",
+            inputs.estimate_poc_scope.integration_count,
+            facts.architecture_controllability.integration_count,
+        ),
+        (
+            "estimate_poc_scope.evaluation_data_available",
+            inputs.estimate_poc_scope.evaluation_data_available,
+            facts.data_readiness.validation_sample_available,
+        ),
+        (
+            "estimate_poc_scope.handles_sensitive_data",
+            inputs.estimate_poc_scope.handles_sensitive_data,
+            facts.gates.sensitive_data,
+        ),
+    )
+    contradictory = [
+        name for name, actual, expected in comparisons if actual != expected
+    ]
+    if contradictory:
+        raise ToolInputConsistencyError(
+            "tool inputs contradict assessment facts: " + ", ".join(contradictory)
+        )
+
+
 def run_assessment_tools(
     inputs: AssessmentToolInputs,
     facts: AssessmentFacts,
@@ -270,6 +366,7 @@ def run_assessment_tools(
     """Run all six tools in a stable order without I/O or mutable state."""
     if fail_tool is not None and fail_tool not in TOOL_NAMES:
         raise ValueError(f"unknown tool: {fail_tool}")
+    _validate_input_consistency(inputs, facts)
 
     calls: dict[str, tuple[ToolContract, Callable[[], ToolOutputContract]]] = {
         "retrieve_similar_cases": (
@@ -315,9 +412,7 @@ def run_assessment_tools(
     }
     outputs = {
         name: (
-            _error_output(output_types[name], request)
-            if name == fail_tool
-            else call()
+            _error_output(output_types[name], request) if name == fail_tool else call()
         )
         for name, (request, call) in calls.items()
     }

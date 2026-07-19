@@ -73,9 +73,7 @@ def generate_proposal(
     )
     blocked = assessment.gate_disposition is GateDisposition.BLOCKED
     assistive = assessment.gate_disposition is GateDisposition.ASSISTIVE_ONLY
-    requires_controls = (
-        assessment.gate_disposition is GateDisposition.REQUIRES_CONTROLS
-    )
+    requires_controls = assessment.gate_disposition is GateDisposition.REQUIRES_CONTROLS
 
     if blocked:
         summary = (
@@ -113,11 +111,7 @@ def generate_proposal(
 
     human_review = [
         "PoC 輸出與成效由流程負責人抽樣覆核",
-        *(
-            ["保留人工最終決策與可申訴／覆核路徑"]
-            if assistive
-            else []
-        ),
+        *(["保留人工最終決策與可申訴／覆核路徑"] if assistive else []),
         *(controls if requires_controls or blocked else []),
     ]
     all_evidence = [*evidence, *retrieval.evidence]
@@ -125,9 +119,7 @@ def generate_proposal(
         [gate.reason for gate in assessment.hard_gates]
         or ["固定 fixture 結果不可直接外推至 production"]
     )
-    target_users = _string_list(
-        interview_answers.get("target_users"), ["流程使用者"]
-    )
+    target_users = _string_list(interview_answers.get("target_users"), ["流程使用者"])
     workflow_summary = str(
         interview_answers.get("current_workflow", "目前流程尚未完整描述")
     )
@@ -168,6 +160,7 @@ def generate_proposal(
             "真實 provider、semantic retrieval 與持久化",
         ],
         poc_milestones=milestones,
+        scope_assumptions=scope.assumptions,
         evidence_refs=sorted(str(item.id) for item in all_evidence),
         next_actions=_unique(next_actions),
     )

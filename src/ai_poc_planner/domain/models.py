@@ -39,13 +39,7 @@ SchemaVersion = Annotated[
 ]
 
 type RawJSONValue = (
-    None
-    | bool
-    | int
-    | float
-    | str
-    | list[RawJSONValue]
-    | dict[str, RawJSONValue]
+    None | bool | int | float | str | list[RawJSONValue] | dict[str, RawJSONValue]
 )
 
 
@@ -246,6 +240,7 @@ class PocProposal(ContractModel):
     in_scope: list[NonEmptyStr] = Field(default_factory=list)
     out_of_scope: list[NonEmptyStr] = Field(default_factory=list)
     poc_milestones: list[NonEmptyStr] = Field(default_factory=list)
+    scope_assumptions: list[NonEmptyStr] = Field(default_factory=list)
     evidence_refs: list[NonEmptyStr] = Field(default_factory=list)
     next_actions: list[NonEmptyStr] = Field(min_length=1)
 
@@ -278,6 +273,7 @@ class PocProposal(ContractModel):
             "in_scope",
             "out_of_scope",
             "poc_milestones",
+            "scope_assumptions",
             "evidence_refs",
             "next_actions",
         ):
@@ -289,9 +285,7 @@ class PocProposal(ContractModel):
         _require_unique(
             [case.case_id for case in self.similar_cases], "similar case IDs"
         )
-        _require_unique(
-            [gate.rule_id for gate in self.hard_gates], "hard gate IDs"
-        )
+        _require_unique([gate.rule_id for gate in self.hard_gates], "hard gate IDs")
         _require_unique(
             [option.name for option in self.architecture_options],
             "architecture option names",

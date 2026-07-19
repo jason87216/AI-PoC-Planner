@@ -27,6 +27,10 @@ from ai_poc_planner.domain.tools import (
 )
 
 
+class ProviderError(RuntimeError):
+    """Normalized failure raised by any model-provider adapter."""
+
+
 class PreparationStatus(StrEnum):
     READY = "ready"
     CLARIFICATION_REQUIRED = "clarification_required"

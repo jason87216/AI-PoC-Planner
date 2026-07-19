@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pydantic import ValidationError
+
 from ai_poc_planner.application.contracts import (
     OfflinePlanningRequest,
     OfflinePlanningResult,
@@ -24,10 +26,11 @@ from ai_poc_planner.domain.workflow import AssessmentInput
 from ai_poc_planner.providers.base import (
     ModelProvider,
     PreparationStatus,
+    ProviderError,
     ProviderPreparation,
     ProviderRequest,
 )
-from ai_poc_planner.providers.fake import FakeModelProvider, FakeProviderError
+from ai_poc_planner.providers.fake import FakeModelProvider
 
 
 class PlanningError(RuntimeError):
@@ -77,8 +80,13 @@ def run_offline_planning(
     try:
         raw_preparation = selected_provider.prepare_assessment(provider_request)
         preparation = ProviderPreparation.model_validate(raw_preparation)
-    except FakeProviderError as error:
+    except ProviderError as error:
         raise ProviderWorkflowError("provider_error", str(error)) from error
+    except ValidationError as error:
+        raise ProviderWorkflowError(
+            "provider_output_invalid",
+            "provider returned invalid structured output",
+        ) from error
 
     if preparation.status is PreparationStatus.CLARIFICATION_REQUIRED:
         raise ClarificationRequiredError(preparation.clarifying_questions)
