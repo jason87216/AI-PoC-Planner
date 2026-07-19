@@ -186,9 +186,11 @@ class ArchitectureOption(BaseModel):
 
 class PocProposal(BaseModel):
     schema_version: Literal["1.0"]
+    executive_summary: str | None = None
     recommendation: Recommendation
     gate_disposition: GateDisposition
     problem_statement: str
+    suggested_use_case_boundary: str | None = None
     target_users: list[str]
     current_workflow_summary: str
     known_information: dict[str, str | int | float | bool | list[str] | None]
@@ -207,6 +209,10 @@ class PocProposal(BaseModel):
     success_metrics: list[str]
     estimated_weeks: int = Field(ge=1)
     estimated_team: list[str]
+    in_scope: list[str] = []
+    out_of_scope: list[str] = []
+    poc_milestones: list[str] = []
+    evidence_refs: list[str] = []
     next_actions: list[str]
 ```
 
@@ -381,6 +387,14 @@ Hard gates run before score interpretation and cannot be offset by ROI.
 Aggregate precedence: `blocked > assistive_only > requires_controls > pass`.
 
 ## 16. API Endpoints
+
+Before the HTTP layer, the approved offline demonstration exposes one application
+entry point: `run_offline_planning(request: OfflinePlanningRequest) ->
+OfflinePlanningResult`. It receives a typed project, fixed interview answers,
+stable IDs/timestamp, evidence and an optional report path. It injects a model
+provider, runs the six framework-neutral tools, calls M1.3 `assess_project`, builds
+one validated proposal and renders deterministic Markdown. The demo implementation
+is in-memory only; it does not satisfy SQLite persistence/reload acceptance.
 
 | Method and path | Purpose | Success response |
 |---|---|---|
