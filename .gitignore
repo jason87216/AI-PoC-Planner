@@ -1,0 +1,47 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+auth.json
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Local application data
+data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+faiss_index/
+*.faiss
+*.index
+reports/
+exports/
+traces/
+logs/
+*.log
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary and generated
+tmp/
+temp/
+*.tmp
+*.bak
