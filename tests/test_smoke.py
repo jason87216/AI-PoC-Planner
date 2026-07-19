@@ -12,4 +12,4 @@ def test_module_smoke_command_runs_offline() -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "fake-provider: ok" in completed.stdout
+    assert "fake-provider: ready schema=1.0" in completed.stdout

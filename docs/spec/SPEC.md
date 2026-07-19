@@ -272,6 +272,20 @@ State transitions must persist the accepted user turn before model/tool processi
 
 ## 12. Tool Interfaces
 
+M1.4 defines a framework-neutral provider boundary. A model provider accepts a
+typed `ProviderRequest` and returns a `ProviderPreparation` whose status is either
+`ready` or `clarification_required`. A ready result contains `AssessmentFacts` and
+all six typed tool inputs; a clarification result contains one to five typed
+questions and no assessment payload. Providers never return formal scores,
+weighted totals, hard-gate disposition, recommendation or evidence records. They
+may only reference evidence supplied by the enclosing application request.
+
+The minimal capability contract exposes structured-output, tool-calling and
+streaming flags plus a model identifier. An independent `EmbeddingProvider`
+protocol accepts a sequence of strings and returns typed vectors. M1.4 provides
+deterministic offline fakes for both protocols; no SDK, registry or live endpoint
+is introduced.
+
 | Tool | Input contract | Output contract | Deterministic boundary |
 |---|---|---|---|
 | `retrieve_similar_cases` | `RetrieveSimilarCasesInput` | `RetrieveSimilarCasesOutput` containing cases and evidence refs | Embedding query may vary by provider; filtering and output schema are deterministic |

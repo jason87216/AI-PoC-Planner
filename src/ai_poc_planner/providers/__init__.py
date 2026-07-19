@@ -1,11 +1,29 @@
-"""Provider seam for fake and future model adapters."""
+"""Provider seams for fake and future model adapters."""
 
-from ai_poc_planner.providers.base import ModelProvider, ProviderRequest
-from ai_poc_planner.providers.fake import FakeModelProvider, FakeProviderError
+from ai_poc_planner.providers.base import (
+    AssessmentToolInputs,
+    EmbeddingProvider,
+    ModelProvider,
+    PreparationStatus,
+    ProviderCapabilities,
+    ProviderPreparation,
+    ProviderRequest,
+)
+from ai_poc_planner.providers.fake import (
+    FakeEmbeddingProvider,
+    FakeModelProvider,
+    FakeProviderError,
+)
 
 __all__ = [
+    "AssessmentToolInputs",
+    "EmbeddingProvider",
+    "FakeEmbeddingProvider",
     "FakeModelProvider",
     "FakeProviderError",
     "ModelProvider",
+    "PreparationStatus",
+    "ProviderCapabilities",
+    "ProviderPreparation",
     "ProviderRequest",
 ]

@@ -49,18 +49,18 @@
 
 ### [Must] M1.4 Define provider interfaces and deterministic fake model
 
-- [ ] **Purpose:** Make model and embeddings dependencies injectable before any real API integration.
+- [x] **Purpose:** Make model and embeddings dependencies injectable before any real API integration. Completed on 2026-07-19.
 - **Modification scope:** provider protocol module, fake model/embeddings module, tests.
 - **Acceptance:** Fake responses are deterministic, support required tool/structured events and make no network call; domain code imports no provider SDK.
-- **Verification:** `python -m pytest tests/agent/test_fake_provider.py` with network disabled.
+- **Verification:** `python -m pytest tests/providers/test_fake_provider.py` with network disabled, plus the complete offline suite.
 - **Dependencies:** M1.2.
 - **Estimated scope:** M.
 
 ### Checkpoint F1 — Foundation
 
-- [ ] All Phase 1 tests and lint pass.
-- [ ] Commands in README and AGENTS are executable and current.
-- [ ] Review before starting the vertical slice.
+- [x] All Phase 1 tests and lint pass.
+- [x] Commands in README and AGENTS are executable and current.
+- [x] User authorized the offline-only vertical-slice batch on 2026-07-19.
 
 ## Phase 2 — First Testable Vertical Slice
 

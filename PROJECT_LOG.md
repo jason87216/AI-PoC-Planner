@@ -2,9 +2,13 @@
 
 ## Current Goal
 
-已完成 `TASKS.md` 的 M1.3：deterministic scoring rubric、hard-gate engine 與 recommendation decision；本輪停止於 M1.4 前。
+執行 `feat/offline-vertical-slice` batch：先完成 M1.4，再建立不使用網路、API key、SQLite、FAISS、LangChain、API 或 UI 的純 application/service 離線流程。
 
 ## Current Status
+
+- Batch scope（2026-07-19）：`訪談 fixture → fake provider structured facts/tool inputs → 六組 deterministic tools → M1.3 assessment → proposal → Markdown → CLI demo`。
+- 本批次明確不實作 SQLite persistence，因此 M2.1～M2.5 的 application/service 能力可落地，但含 repository／reload 的正式 TASKS 驗收仍保持未完成，不會誤標為完成。
+- M1.3 已推送至 `origin/main`；後續工作位於 `feat/offline-vertical-slice`。
 
 - `SPEC.md`、`PLAN.md` 與 `TASKS.md` 已於 2026-07-19 獲使用者核准為第一版 implementation baseline。
 - 第一版規格已建立 baseline commit：`d5fc880 docs: establish specification baseline`。
@@ -18,6 +22,9 @@
 - M1.2 使用獨立 commit message：`feat: complete workflow and persistence contracts`。
 - M1.3 新增 119 個離線 rule/engine tests；完整測試共 212 個。
 - M1.3 使用獨立 commit message：`feat: implement scoring and hard-gate engine`，不 push。
+- M1.4 已將 provider boundary 收斂為 `prepare_assessment`，只回傳 typed facts／tool inputs 或追問；正式 assessment 決策仍由 M1.3 掌握。
+- 新增 deterministic fake embeddings seam；它不是 semantic embeddings，也未接入 FAISS。
+- M1.4 完整 suite 為 218 passed，Ruff 與 provider smoke 通過。
 
 ## M1.3 Data Flow and Contract Mapping
 

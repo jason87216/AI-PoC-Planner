@@ -25,6 +25,7 @@ from ai_poc_planner.domain.models import (
     ClarifyingQuestion,
     HardGateResult,
     InterviewTurn,
+    PocProposal,
     ScoreDimensionResult,
     SimilarCase,
 )
@@ -55,8 +56,6 @@ from ai_poc_planner.domain.workflow import (
     PocProposalRecord,
     ReportExport,
 )
-from ai_poc_planner.providers.base import ProviderRequest
-from ai_poc_planner.providers.fake import FakeModelProvider
 
 NOW = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
 PROJECT_ID = UUID("00000000-0000-0000-0000-000000000101")
@@ -117,6 +116,50 @@ def _gate() -> HardGateResult:
         reason="未觸發 hard gate。",
         required_controls=[],
         human_review_required=False,
+    )
+
+
+def _proposal() -> PocProposal:
+    return PocProposal(
+        schema_version="1.0",
+        recommendation="條件式建議",
+        gate_disposition=GateDisposition.PASS,
+        problem_statement="客服需要更快找到已核准的產品答案。",
+        target_users=["客服人員"],
+        current_workflow_summary="人工搜尋已核准文件。",
+        known_information={"baseline_minutes": 10},
+        missing_information=[],
+        clarifying_questions=[],
+        similar_cases=[
+            SimilarCase(
+                case_id="case-001",
+                title="固定案例",
+                similarity=0.8,
+                fit_summary="適合人工覆核的知識查找。",
+                source_ref="fixture:case-001",
+            )
+        ],
+        scores=_scores(),
+        weighted_score=73,
+        hard_gates=[_gate()],
+        architecture_options=[
+            ArchitectureOption(
+                name="本機規則流程",
+                summary="以 deterministic services 完成評估。",
+                deployment="local",
+                components=["Python", "Pydantic"],
+                assumptions=["使用合成資料"],
+            )
+        ],
+        required_data=["核准文件"],
+        integrations=[],
+        risks=["資料品質需持續驗證"],
+        human_review_points=[],
+        roi_assumptions=["每月一千次查找"],
+        success_metrics=["中位查找時間"],
+        estimated_weeks=4,
+        estimated_team=["AI Engineer"],
+        next_actions=["確認評估資料集"],
     )
 
 
@@ -240,7 +283,7 @@ def test_assessment_contract_does_not_calculate_weighted_score() -> None:
 
 
 def test_proposal_contract_does_not_decide_recommendation() -> None:
-    proposal = FakeModelProvider().generate(ProviderRequest(project=_project()))
+    proposal = _proposal()
     payload = proposal.model_dump(mode="json")
     payload["gate_disposition"] = "blocked"
     payload["recommendation"] = "建議進行"
@@ -275,7 +318,7 @@ def test_assessment_input_and_evidence_round_trip() -> None:
 
 
 def test_persistence_records_round_trip_through_json() -> None:
-    proposal = FakeModelProvider().generate(ProviderRequest(project=_project()))
+    proposal = _proposal()
     proposal_record = PocProposalRecord(
         id=PROPOSAL_ID,
         project_id=PROJECT_ID,
