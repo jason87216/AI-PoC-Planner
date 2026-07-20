@@ -23,6 +23,26 @@ class InvalidStoredProjectError(PersistenceError):
     code = "invalid_stored_project"
 
 
+class PlanningRunAlreadyExistsError(PersistenceError):
+    code = "planning_run_already_exists"
+
+
+class PlanningRunNotFoundError(PersistenceError):
+    code = "planning_run_not_found"
+
+
+class InvalidPlanningRunInputError(PersistenceError):
+    code = "invalid_planning_run_input"
+
+
+class InvalidStoredPlanningRunError(PersistenceError):
+    code = "invalid_stored_planning_run"
+
+
+class InvalidPlanningRunTransitionError(PersistenceError):
+    code = "invalid_planning_run_transition"
+
+
 class DatabaseOperationError(PersistenceError):
     code = "database_operation_failed"
 

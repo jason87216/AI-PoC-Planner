@@ -12,6 +12,7 @@ from ai_poc_planner.domain.enums import (
     HumanReviewRequirement,
     InterviewSessionStatus,
     InterviewStage,
+    PlanningRunStatus,
     ProjectStatus,
     Recommendation,
     ReportFormat,
@@ -155,6 +156,108 @@ class Assessment(ContractModel):
         _require_unique([gate.rule_id for gate in self.hard_gates], "hard gate IDs")
         _require_unique(self.matched_case_ids, "matched_case_ids")
         _require_unique(self.evidence_refs, "evidence_refs")
+        return self
+
+
+class PlanningRun(ContractModel):
+    """One durable clarification-to-result lifecycle for the public demo."""
+
+    id: UUID
+    project_id: UUID
+    status: PlanningRunStatus
+    original_request: NonEmptyStr
+    intent: dict[str, JSONValue]
+    known_information: dict[str, JSONValue] = Field(default_factory=dict)
+    missing_information: list[NonEmptyStr] = Field(default_factory=list)
+    clarifying_questions: list[ClarifyingQuestion] = Field(
+        default_factory=list,
+        max_length=4,
+    )
+    clarification_answers: dict[str, JSONValue] = Field(default_factory=dict)
+    assessment: Assessment | None = None
+    proposal: PocProposal | None = None
+    markdown_report: NonEmptyStr | None = None
+    error_code: NonEmptyStr | None = None
+    error_message: NonEmptyStr | None = None
+    created_at: UtcDateTime
+    updated_at: UtcDateTime
+    completed_at: UtcDateTime | None = None
+
+    @model_validator(mode="after")
+    def validate_run_state(self) -> PlanningRun:
+        if not self.intent:
+            raise ValueError("intent must contain at least one structured field")
+        if self.updated_at < self.created_at:
+            raise ValueError("updated_at must not be earlier than created_at")
+        if self.completed_at is not None and not (
+            self.created_at <= self.completed_at <= self.updated_at
+        ):
+            raise ValueError("completed_at must fall within the run timestamps")
+        _require_unique(self.missing_information, "missing_information")
+        _require_unique(
+            [question.field for question in self.clarifying_questions],
+            "clarifying question fields",
+        )
+        _require_unique(
+            [question.question for question in self.clarifying_questions],
+            "clarifying question text",
+        )
+
+        final_values = (self.assessment, self.proposal, self.markdown_report)
+        has_any_final = any(value is not None for value in final_values)
+        has_all_final = all(value is not None for value in final_values)
+        has_any_error = self.error_code is not None or self.error_message is not None
+
+        if self.status is PlanningRunStatus.COMPLETED:
+            if not has_all_final or self.completed_at is None:
+                raise ValueError(
+                    "completed run requires assessment, proposal, report "
+                    "and completed_at"
+                )
+            if has_any_error or self.missing_information:
+                raise ValueError(
+                    "completed run cannot contain errors or missing information"
+                )
+            assert self.assessment is not None
+            assert self.proposal is not None
+            if self.assessment.project_id != self.project_id:
+                raise ValueError("completed assessment must belong to the run project")
+            if (
+                self.assessment.weighted_score != self.proposal.weighted_score
+                or self.assessment.gate_disposition
+                is not self.proposal.gate_disposition
+                or self.assessment.recommendation is not self.proposal.recommendation
+            ):
+                raise ValueError(
+                    "completed assessment and proposal decisions must be consistent"
+                )
+            return self
+
+        if has_any_final or self.completed_at is not None:
+            raise ValueError(
+                "non-completed run cannot contain a formal result or completed_at"
+            )
+        if self.status is PlanningRunStatus.CLARIFICATION_REQUIRED:
+            if not self.clarifying_questions:
+                raise ValueError(
+                    "clarification_required run needs at least one question"
+                )
+            question_fields = [question.field for question in self.clarifying_questions]
+            if question_fields != self.missing_information:
+                raise ValueError(
+                    "clarification_required questions must match missing information"
+                )
+            if has_any_error:
+                raise ValueError("clarification_required run cannot contain errors")
+            return self
+
+        if self.status is PlanningRunStatus.FAILED:
+            if self.error_code is None or self.error_message is None:
+                raise ValueError("failed run requires error code and safe message")
+            return self
+
+        if has_any_error:
+            raise ValueError("created run cannot contain errors")
         return self
 
 
