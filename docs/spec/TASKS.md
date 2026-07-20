@@ -76,13 +76,14 @@
 
 ### [Must] M2.2-lite Persist and continue a planning run
 
-- [ ] **Purpose:** Persist one natural-language planning run from initial clarification through the exact saved assessment, proposal and Markdown result.
+- [x] **Purpose:** Persist one natural-language planning run from initial clarification through the exact saved assessment, proposal and Markdown result.
 - **Modification scope:** `PlanningRun` contract, SQLite v1→v2 migration, planning-run repository/service/coordinator, tests and synchronized scope documentation.
 - **Acceptance:** A vague request saves one to four questions; one persisted answer batch can rerun to `completed`; loading by run ID returns the exact saved assessment, proposal and report; duplicate, invalid transition and corrupt storage paths use stable typed errors.
 - **Verification:** `python -m pytest tests/integration/test_planning_run_lifecycle.py`.
 - **Dependencies:** M1.4, M2.1.
 - **Estimated scope:** M.
 - **Scope adjustment (2026-07-20):** 展示版优先完成自然语言需求、追问、正式评估、结果保存、FastAPI 与 Streamlit 的完整闭环，暂缓完整 conversation resume。Full interview turns, arbitrary resume, checkpoints, Agent-state history and complete replay move to Roadmap without deleting their original contracts.
+- **Completion note (2026-07-20):** `PlanningRun`, SQLite schema v2 and v1→v2 upgrade, create/get/update/list repository, lifecycle service and deterministic clarification→completed coordinator are complete. Thirty new tests cover contracts, migration, round trips, corruption, rollback and the persisted offline loop; the CLI demo remains in memory.
 
 ### [Must] M2.3-lite Add a common AI implementation pattern catalog
 

@@ -2,20 +2,21 @@
 
 ## Current Goal
 
-完成精簡 Must 任務 `M2.2-lite — Persist and continue a planning run`，保存一次自然語言需求、追問／补充與正式 assessment／proposal／Markdown 結果，同時保持 offline demo 不依賴 SQLite。
+完成精簡 Must 任務 `M2.2-lite — Persist and continue a planning run` 並準備 Draft PR；保存一次自然語言需求、追問／補充與正式 assessment／proposal／Markdown 結果，同時保持 offline demo 不依賴 SQLite。
 
 ## Current Status
 
 - PR #2 已於 2026-07-20 以 merge commit `a5b3bbb` 合併；`feat/planning-run-persistence` 從該同步基準建立。
+- M2.2-lite 已完成 `PlanningRun` 四狀態 contract、SQLite `planning_runs`、schema v1→v2、create/get/update/list repository、application service 與 persisted offline coordinator。
+- 模糊需求會保存四個追問；補充一批答案後可完成並重新讀取同一份 assessment、proposal 與 Markdown。完整 suite 為 311 passed，Ruff 與 in-memory demo 通過。
 - M2.2-lite scope adjustment 已核准：展示版先完成需求→追問→正式結果→保存／重讀閉環；完整 interview turns、arbitrary resume、conversation checkpoints、Agent-state history 與 session replay 移至 Roadmap。
 - 下一個精簡任務是 common AI implementation pattern catalog；本輪不執行。
-- M2.1 位於 `feat/sqlite-project-persistence`；新增 `PRAGMA user_version = 1` schema、`SQLiteProjectRepository`、穩定 persistence errors 與可注入 UUID／clock 的 `AnalysisProjectService`。
+- M2.1 建立的 project schema 已由 M2.2-lite 升級至 `PRAGMA user_version = 2`；v1 database 可保留 projects 並新增 planning runs。
 - `AnalysisProject` 六個正式欄位會以獨立 columns 保存並重新經 Pydantic 驗證；UUID 使用 canonical string、status 使用 enum value、timestamps 使用 ISO 8601 UTC。
 - M2.1 integration suite 為 25 passed；完整 suite 為 281 passed。沒有新增 runtime dependency，也沒有建立 tracked SQLite file。
-- 本輪明確不包含 M2.2 訪談 turns、state snapshot 或 resume persistence。
+- 本輪明確不包含完整訪談 turns、state snapshot、arbitrary resume 或 session replay。
 - Batch scope（2026-07-19）：`訪談 fixture → fake provider structured facts/tool inputs → 六組 deterministic tools → M1.3 assessment → proposal → Markdown → CLI demo`。
-- 2026-07-19 offline batch 當時未含 SQLite；其 PR #1 已 merge。M2.1 現在於獨立 branch 完成，M2.2～M2.5 的 repository／reload 驗收仍保持未完成。
-- `main` 已含 PR #1 merge commit `a5353ab`；目前工作只位於 `feat/sqlite-project-persistence`。
+- 2026-07-19 offline batch 當時未含 SQLite；其 PR #1 已 merge。M2.1 已由 PR #2 merge，M2.2-lite 位於獨立 feature branch。
 
 - `SPEC.md`、`PLAN.md` 與 `TASKS.md` 已於 2026-07-19 獲使用者核准為第一版 implementation baseline。
 - 第一版規格已建立 baseline commit：`d5fc880 docs: establish specification baseline`。
@@ -101,6 +102,7 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 ## Recent Changes
 
 - 2026-07-20：核准 M2.2-lite scope adjustment，保留原完整 conversation-resume 規劃於 Roadmap，不刪除既有 contracts。
+- 2026-07-20：完成 PlanningRun contract、SQLite v1→v2、repository/service/coordinator 與 30 個高價值測試；完整 suite 311 passed。
 - 2026-07-20：PR #2 以一般 merge commit `a5b3bbb` 合併並從同步 main 建立 `feat/planning-run-persistence`。
 - 2026-07-20：完成 M2.1 SQLite project schema、create/load repository、application service 與 temporary-file integration tests。
 - 2026-07-20：以明確 transaction commit／rollback、caller-owned connection 與 stable errors 隔離 `sqlite3` 低階例外。
@@ -126,7 +128,7 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Known Problems
 
-- SQLite 目前只保存 `AnalysisProject`；訪談、conversation state、assessment、proposal 與 report persistence 尚未實作。
+- SQLite 目前保存 `AnalysisProject` 與精簡 `PlanningRun`；完整 interview turns、conversation checkpoints、arbitrary resume 與 replay 尚未實作。
 - FastAPI、Streamlit、FAISS、LangChain Agent、Docker 與真實 provider 尚未實作。
 - 真實 chat model 與 embeddings model 的預設選擇留待對應 provider task 確認；M1.1 只提供 fake provider。
 - 部分 hard gate 在真實企業環境中需要法務、資安與領域專家核准，不能只由模型決定。
@@ -135,11 +137,11 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Next Steps
 
-1. 完成 M2.2-lite `PlanningRun` contract、SQLite v1→v2、repository/service/coordinator 與 persisted clarification→completed tests。
-2. 下一個精簡任務為 `M2.3-lite Add a common AI implementation pattern catalog`；本輪不執行。
+1. 下一個精簡任務為 `M2.3-lite Add a common AI implementation pattern catalog`；本輪不執行。
+2. M2.2-lite Draft PR 僅在 CI 成功後等待人工驗收，不在本輪 merge。
 3. 完整 turn/session/checkpoint replay 留在 Roadmap；不得在 M2.2-lite 擴張。
 4. 後續 persistence 必須包在既有 application boundaries 外，不得讓 provider 覆寫 M1.3 分數、gates 或 recommendation。
 
 ## Handoff Summary
 
-新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.4、in-memory offline tracer slice 與 M2.1 project create/load persistence 已完成；M2.2 起的 interview／assessment／proposal／report persistence 仍開放，下一步不得跳到真實 provider、Agent、FAISS、API 或 UI。
+新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.4、in-memory offline tracer slice、M2.1 project persistence 與 M2.2-lite planning-run persistence 已完成；下一個核准候選是 M2.3-lite 常見 AI 落地方案目錄，不得提前跳到真實 provider、Agent、FAISS、API 或 UI。

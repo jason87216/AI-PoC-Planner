@@ -131,6 +131,11 @@ Checkpoint:
 - Happy path and one blocked high-impact path pass without network.
 - No invalid proposal is stored.
 
+Execution note (2026-07-20): M2.2-lite now persists the clarification state and
+exact final assessment／proposal／Markdown payload on `PlanningRun`. SQLite schema
+v2 supports fresh initialization and the single v1→v2 upgrade while preserving
+projects. Full conversation replay remains Roadmap work.
+
 ### Phase 3 — Local Case Retrieval
 
 Inputs:
