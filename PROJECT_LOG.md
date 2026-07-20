@@ -2,10 +2,13 @@
 
 ## Current Goal
 
-完成 Must 任務 M2.1 `Create and load an analysis project`：以標準庫 `sqlite3` 提供 analysis project 的 create／load persistence，並保持 offline demo 不依賴資料庫。
+完成精簡 Must 任務 `M2.2-lite — Persist and continue a planning run`，保存一次自然語言需求、追問／补充與正式 assessment／proposal／Markdown 結果，同時保持 offline demo 不依賴 SQLite。
 
 ## Current Status
 
+- PR #2 已於 2026-07-20 以 merge commit `a5b3bbb` 合併；`feat/planning-run-persistence` 從該同步基準建立。
+- M2.2-lite scope adjustment 已核准：展示版先完成需求→追問→正式結果→保存／重讀閉環；完整 interview turns、arbitrary resume、conversation checkpoints、Agent-state history 與 session replay 移至 Roadmap。
+- 下一個精簡任務是 common AI implementation pattern catalog；本輪不執行。
 - M2.1 位於 `feat/sqlite-project-persistence`；新增 `PRAGMA user_version = 1` schema、`SQLiteProjectRepository`、穩定 persistence errors 與可注入 UUID／clock 的 `AnalysisProjectService`。
 - `AnalysisProject` 六個正式欄位會以獨立 columns 保存並重新經 Pydantic 驗證；UUID 使用 canonical string、status 使用 enum value、timestamps 使用 ISO 8601 UTC。
 - M2.1 integration suite 為 25 passed；完整 suite 為 281 passed。沒有新增 runtime dependency，也沒有建立 tracked SQLite file。
@@ -97,6 +100,8 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Recent Changes
 
+- 2026-07-20：核准 M2.2-lite scope adjustment，保留原完整 conversation-resume 規劃於 Roadmap，不刪除既有 contracts。
+- 2026-07-20：PR #2 以一般 merge commit `a5b3bbb` 合併並從同步 main 建立 `feat/planning-run-persistence`。
 - 2026-07-20：完成 M2.1 SQLite project schema、create/load repository、application service 與 temporary-file integration tests。
 - 2026-07-20：以明確 transaction commit／rollback、caller-owned connection 與 stable errors 隔離 `sqlite3` 低階例外。
 - 2026-07-19：完成 `deep-research-report.md` 的公開發布前查證與引用清理。
@@ -117,7 +122,7 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 - Repository root：`D:\ai_class\projects\AI PoC Planner`。
 - 本專案使用自己的 `.git`，不再依附 `D:\ai_class` 上層 repository。
 - GitHub remote 為 `origin`（公開 `jason87216/AI-PoC-Planner`）。
-- M2.1 從已同步的 merge commit `a5353ab` 建立 `feat/sqlite-project-persistence`；本輪將推送並建立 Draft PR，不直接 merge。
+- PR #2 merge commit 為 `a5b3bbb`；目前 branch 為 `feat/planning-run-persistence`，建立 Draft PR 前沒有 upstream 是正常狀態。
 
 ## Known Problems
 
@@ -130,9 +135,10 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Next Steps
 
-1. M2.1 Draft PR 通過審查後，下一個正式 Must 是 M2.2：`Run and resume the standard interview`；本輪不執行。
-2. M2.2 應沿用現有 schema version、connection ownership 與 stable error boundary，不把 interview persistence 混入 M2.1 repository。
-3. 後續 persistence 必須包在既有 application boundaries 外，不得讓 provider 覆寫 M1.3 分數、gates 或 recommendation。
+1. 完成 M2.2-lite `PlanningRun` contract、SQLite v1→v2、repository/service/coordinator 與 persisted clarification→completed tests。
+2. 下一個精簡任務為 `M2.3-lite Add a common AI implementation pattern catalog`；本輪不執行。
+3. 完整 turn/session/checkpoint replay 留在 Roadmap；不得在 M2.2-lite 擴張。
+4. 後續 persistence 必須包在既有 application boundaries 外，不得讓 provider 覆寫 M1.3 分數、gates 或 recommendation。
 
 ## Handoff Summary
 

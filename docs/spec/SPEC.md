@@ -11,6 +11,20 @@
 - Authentication, multi-tenancy and cloud deployment are outside MVP.
 - Legal and compliance results are planning warnings, not legal advice.
 
+### 1.1 Demonstration Scope Adjustment — M2.2-lite
+
+Approved on 2026-07-20: the public demonstration uses one durable `PlanningRun`
+instead of making complete conversation replay a release blocker. The reason is:
+
+> 展示版优先完成自然语言需求、追问、正式评估、结果保存、FastAPI 与 Streamlit 的完整闭环，暂缓完整 conversation resume。
+
+The demonstration persists the original request, structured intent, known and
+missing information, current clarification questions, submitted answers and the
+final assessment／proposal／Markdown result. Full `InterviewTurn` persistence,
+arbitrary resume, conversation checkpoints, Agent-state history and complete
+session replay remain documented contracts for the Roadmap; they are not deleted
+and do not block the demonstration baseline.
+
 ## 2. Objective
 
 Build a public, testable AI engineering portfolio project that converts an ambiguous business request into a structured, evidence-supported AI PoC proposal. The system must interview the user, preserve state, identify missing information, retrieve local cases, run deterministic assessments, apply hard gates, return a validated proposal and export Markdown.
@@ -25,7 +39,7 @@ Success means a reviewer can run the fake-model path locally and reproduce the v
 
 - One standard structured interview that gathers business, data, technical, governance, ROI and KPI inputs.
 - One LangChain Agent that selects among bounded, local assessment tools.
-- Durable conversation state and audit records in SQLite.
+- Durable planning-run state and final result history in SQLite.
 - Similar-case retrieval from a local FAISS index with metadata in SQLite.
 - Deterministic weighted scoring and risk hard gates.
 - Pydantic-validated PoC proposal and Markdown export.
@@ -68,22 +82,22 @@ Success means a reviewer can run the fake-model path locally and reproduce the v
 ## 6. Product Flow
 
 1. Create an AI adoption analysis project.
-2. Start a structured interview session.
-3. Persist every accepted user answer and conversation-state snapshot.
-4. Detect missing or contradictory information and ask up to five high-information questions per turn.
+2. Create a planning run and persist the original natural-language request.
+3. Persist structured intent, known information, missing information and current clarification questions.
+4. Accept one clarification-answer batch and persist it before rerunning model／tool processing.
 5. Search the local case knowledge base.
 6. Evaluate data readiness, technical feasibility, risk, ROI and KPI quality.
 7. Apply risk hard gates before interpreting weighted scores.
-8. Produce a Pydantic-validated PoC proposal.
-9. Render and export a Markdown report.
+8. Produce a Pydantic-validated PoC proposal and deterministic Markdown report.
+9. Persist and reload the exact assessment, proposal and Markdown result by run ID.
 
 ## 7. Functional Requirements
 
 | ID | Requirement | Acceptance signal |
 |---|---|---|
 | FR-01 | Create and read an analysis project | Project has stable UUID, timestamps and status |
-| FR-02 | Start one standard interview flow | Session references exactly one project |
-| FR-03 | Persist turns and normalized answers | Reloading from SQLite reconstructs state |
+| FR-02 | Create and read a planning run | Run references exactly one project and preserves the original request |
+| FR-03 | Persist clarification and final results | Reloading from SQLite returns the saved questions, answers and exact completed result |
 | FR-04 | Detect gaps and contradictions | Result lists missing fields and follow-up questions with reasons |
 | FR-05 | Limit follow-up questions | A turn returns at most five questions |
 | FR-06 | Retrieve similar local cases | Results include case ID, title, score and source reference |
@@ -113,15 +127,32 @@ Success means a reviewer can run the fake-model path locally and reproduce the v
 | Entity | Required fields | Notes |
 |---|---|---|
 | `AnalysisProject` | `id`, `title`, `problem_statement`, `status`, `created_at`, `updated_at` | Root aggregate |
-| `InterviewSession` | `id`, `project_id`, `status`, `current_stage`, `state_version`, timestamps | One standard flow per active session |
-| `InterviewTurn` | `id`, `session_id`, `sequence`, `role`, `content`, `normalized_answers`, timestamp | Raw content is local sensitive data |
-| `ConversationStateSnapshot` | `session_id`, `version`, `known_fields`, `missing_fields`, `contradictions`, timestamp | Reconstructable, append-oriented audit snapshot |
+| `PlanningRun` | `id`, `project_id`, `status`, `original_request`, `intent`, `known_information`, `missing_information`, `clarifying_questions`, `clarification_answers`, `assessment`, `proposal`, `markdown_report`, error fields and timestamps | Demonstration persistence aggregate; saves one clarification-to-result lifecycle |
+| `InterviewSession` | `id`, `project_id`, `status`, `current_stage`, `state_version`, timestamps | Roadmap contract for full conversation resume |
+| `InterviewTurn` | `id`, `session_id`, `sequence`, `role`, `content`, `normalized_answers`, timestamp | Roadmap contract; raw content is local sensitive data |
+| `ConversationStateSnapshot` | `session_id`, `version`, `known_fields`, `missing_fields`, `contradictions`, timestamp | Roadmap contract for append-oriented replay |
 | `CaseMetadata` | `id`, `title`, `industry`, `problem`, `fit_conditions`, `non_fit_conditions`, `pattern`, `risk_flags`, `kpis`, `human_review`, `source_path`, `content_hash`, timestamps | Stored in SQLite; vector ID maps to FAISS |
 | `Assessment` | `schema_version`, `id`, `project_id`, `session_id`, `rule_version`, `scores`, `weighted_score`, `hard_gates`, `gate_disposition`, `recommendation`, case/evidence refs, `rationale`, timestamp | Immutable deterministic engine result |
 | `PocProposalRecord` | `id`, `project_id`, `assessment_id`, `schema_version`, `payload`, timestamp | Payload must validate before storage |
 | `ReportExport` | `id`, `project_id`, `proposal_id`, `format`, `content_hash`, `local_path`, timestamp | MVP format is Markdown only |
 
 All IDs are UUID strings. Timestamps are timezone-aware UTC values. SQLite migrations and exact SQL schema are implementation decisions within the contracts above.
+
+`PlanningRun.status` is exactly `created`, `clarification_required`, `completed`
+or `failed`. Structural invariants are enforced by Pydantic:
+
+- `created` has no formal assessment／proposal／report or completion timestamp.
+- `clarification_required` has one to four typed questions and no formal result.
+- `completed` has an `Assessment`, `PocProposal`, non-empty Markdown report and `completed_at`.
+- `failed` has a stable non-empty error code and safe message, with no formal result.
+- Non-completed runs cannot carry a complete result; created and clarification-required runs cannot carry `completed_at`.
+- Completed assessment ownership must match the planning run project.
+
+Structured fields contain JSON-compatible values only. SQLite may store the
+structured fields as JSON `TEXT`, but every row is reconstructed through the
+normative Pydantic contracts. Pickle and live provider／callback objects are
+forbidden. Schema version 2 adds `planning_runs`; a version 1 database upgrades to
+version 2 without changing or deleting `analysis_projects`.
 
 ## 10. Pydantic Schema Contracts
 
@@ -253,6 +284,11 @@ those optional fields are absent, ownership comes from the enclosing
 The M1.2 `AgentState` is a framework-neutral Pydantic model. A future Agent adapter
 may map or extend it with LangChain state types, while SQLite remains the durable
 source of truth.
+
+For the M2.2-lite demonstration, `PlanningRun` is the durable boundary and
+`AgentState` is not persisted. Full Agent-state history, turn replay and arbitrary
+conversation resume are Roadmap work; the contracts below remain available for
+that future implementation.
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -510,7 +546,8 @@ def weighted_points(rating: int, weight: int) -> float:
 - Contract: every tool input/output and `PocProposal` validation.
 - Repository: SQLite round trips and FAISS metadata/vector mapping in temporary paths.
 - Trajectory: required tools called for each baseline case; forbidden tools absent.
-- Multi-turn: fake model completes gaps and resumes from SQLite state.
+- Planning-run continuation: fake model persists a clarification state, accepts one answer batch and reloads the exact completed result.
+- Roadmap multi-turn: complete turn replay, arbitrary resume and conversation checkpoints.
 - Vertical slice: API/application path completes create → interview → assess → report.
 - Optional: export the same cases to LangSmith for offline comparison; never required for CI.
 
@@ -550,8 +587,8 @@ Minimum gates before implementation is considered complete:
 ## 24. Acceptance Criteria
 
 - AC-01 A fake-model run completes the full vertical slice without network.
-- AC-02 Reloading the process resumes the interview from SQLite.
-- AC-03 Missing critical information results in at most five targeted questions, not a proposal.
+- AC-02 Reloading by planning-run ID returns the saved clarification or exact completed result from SQLite.
+- AC-03 Missing critical information results in one to four targeted M2.2-lite questions, not a proposal.
 - AC-04 Similar cases include inspectable source references and SQLite metadata.
 - AC-05 Six dimension ratings follow the rubric, weights total 100 and formula recomputes exactly.
 - AC-06 A high ROI cannot change a `blocked` or `assistive_only` result.

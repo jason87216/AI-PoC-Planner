@@ -74,17 +74,34 @@
 - **Estimated scope:** M.
 - **Completion note (2026-07-20):** SQLite `user_version = 1`, explicit connection lifecycle, project create/load, stable duplicate/not-found/input/corrupt-data errors and temporary-file integration tests are complete. The deterministic demo remains in memory by design.
 
-### [Must] M2.2 Run and resume the standard interview
+### [Must] M2.2-lite Persist and continue a planning run
 
-- [ ] **Purpose:** Persist accepted turns, normalized answers and state snapshots across multiple turns.
-- **Modification scope:** interview state machine, SQLite interview repository, interview service, tests.
-- **Acceptance:** At most five targeted questions per turn; accepted input is persisted before model processing; reload resumes stage and known fields.
-- **Verification:** `python -m pytest tests/integration/test_interview_flow.py`.
+- [ ] **Purpose:** Persist one natural-language planning run from initial clarification through the exact saved assessment, proposal and Markdown result.
+- **Modification scope:** `PlanningRun` contract, SQLite v1→v2 migration, planning-run repository/service/coordinator, tests and synchronized scope documentation.
+- **Acceptance:** A vague request saves one to four questions; one persisted answer batch can rerun to `completed`; loading by run ID returns the exact saved assessment, proposal and report; duplicate, invalid transition and corrupt storage paths use stable typed errors.
+- **Verification:** `python -m pytest tests/integration/test_planning_run_lifecycle.py`.
 - **Dependencies:** M1.4, M2.1.
 - **Estimated scope:** M.
-- **Offline batch note:** fixed interview loading, structured preparation and clarification are implemented; durable turns, snapshots and resume remain open.
+- **Scope adjustment (2026-07-20):** 展示版优先完成自然语言需求、追问、正式评估、结果保存、FastAPI 与 Streamlit 的完整闭环，暂缓完整 conversation resume。Full interview turns, arbitrary resume, checkpoints, Agent-state history and complete replay move to Roadmap without deleting their original contracts.
 
-### [Must] M2.3 Execute deterministic assessment and hard gates
+### [Must] M2.3-lite Add a common AI implementation pattern catalog
+
+- [ ] **Purpose:** Give the later planning surface a small, reviewed directory of common AI delivery patterns.
+- **Modification scope:** To be specified after M2.2-lite review; no implementation is authorized in the M2.2-lite batch.
+- **Acceptance:** Deferred to the next approved task.
+- **Verification:** Deferred to the next approved task.
+- **Dependencies:** M2.2-lite.
+- **Estimated scope:** M.
+
+### Roadmap History — Full Conversation and Separate Result Repositories
+
+The original M2.2 interview-turn/session replay, arbitrary resume and conversation
+checkpoint scope remains Roadmap work. The original M2.3–M2.5 separate assessment,
+proposal and report repository tasks below remain historical design detail; the
+demonstration does not wait for those additional repository boundaries because
+M2.2-lite stores the validated final result on `PlanningRun`.
+
+### [Roadmap] M2.3 Execute deterministic assessment and hard gates
 
 - [ ] **Purpose:** Produce all six ratings, ROI/KPI assumptions, scope and independent gate disposition from completed interview data.
 - **Modification scope:** assessment service, tool adapters, assessment repository, tests.
@@ -94,7 +111,7 @@
 - **Estimated scope:** M.
 - **Offline batch note:** the in-memory six-tool → M1.3 assessment path and error mapping are implemented; the assessment repository and persisted interview dependency remain open.
 
-### [Must] M2.4 Assemble and validate the structured PoC proposal
+### [Roadmap] M2.4 Assemble and validate the structured PoC proposal
 
 - [ ] **Purpose:** Convert persisted interview and assessment results into `PocProposal` with the fake model.
 - **Modification scope:** proposal assembler, Agent workflow/state, proposal repository, tests.
@@ -104,7 +121,7 @@
 - **Estimated scope:** M.
 - **Offline batch note:** deterministic proposal assembly covers pass, blocked, assistive-only and requires-controls outcomes; Agent workflow and proposal persistence remain open.
 
-### [Must] M2.5 Export a deterministic Markdown report
+### [Roadmap] M2.5 Export a deterministic Markdown report
 
 - [ ] **Purpose:** Complete the vertical slice with a readable, stable report artifact.
 - **Modification scope:** Markdown renderer, export service/repository, golden-file tests.
@@ -117,7 +134,7 @@
 ### Checkpoint V1 — Core Vertical Slice
 
 - [ ] Fake-model flow completes `建立專案 → 訪談 → 評估 → 報告` without network.
-- [ ] Process/repository reload resumes the interview.
+- [ ] Process/repository reload returns the persisted planning-run clarification or completed result.
 - [ ] One normal case and one blocked case pass end to end.
 - [ ] Human reviews the generated Markdown before retrieval work.
 
