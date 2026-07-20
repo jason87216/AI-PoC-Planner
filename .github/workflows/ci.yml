@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/offline-vertical-slice]
+    branches: [main]
   pull_request:
     branches: [main]
 
