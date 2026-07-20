@@ -4,10 +4,12 @@ from ai_poc_planner.application.contracts import (
     OfflinePlanningRequest,
     OfflinePlanningResult,
 )
+from ai_poc_planner.application.projects import AnalysisProjectService
 from ai_poc_planner.application.tool_services import run_assessment_tools
 from ai_poc_planner.application.workflow import run_offline_planning
 
 __all__ = [
+    "AnalysisProjectService",
     "OfflinePlanningRequest",
     "OfflinePlanningResult",
     "run_assessment_tools",
