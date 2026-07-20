@@ -12,4 +12,4 @@ def test_module_smoke_command_runs_offline() -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "fake-provider: ok" in completed.stdout
+    assert "usage: python -m ai_poc_planner" in completed.stdout

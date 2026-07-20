@@ -12,9 +12,7 @@ def _optional_value(environ: Mapping[str, str], name: str) -> str | None:
     return value or None
 
 
-def _boolean_value(
-    environ: Mapping[str, str], name: str, *, default: bool
-) -> bool:
+def _boolean_value(environ: Mapping[str, str], name: str, *, default: bool) -> bool:
     value = environ.get(name)
     if value is None:
         return default
@@ -65,15 +63,11 @@ class Settings:
             embedding_model=_optional_value(values, "EMBEDDING_MODEL"),
             embedding_base_url=_optional_value(values, "EMBEDDING_BASE_URL"),
             embedding_api_key=_optional_value(values, "EMBEDDING_API_KEY"),
-            database_url=values.get(
-                "DATABASE_URL", "sqlite:///./data/planner.db"
-            ),
+            database_url=values.get("DATABASE_URL", "sqlite:///./data/planner.db"),
             faiss_index_path=values.get("FAISS_INDEX_PATH", "./data/faiss"),
             langsmith_tracing=_boolean_value(
                 values, "LANGSMITH_TRACING", default=False
             ),
             langsmith_api_key=_optional_value(values, "LANGSMITH_API_KEY"),
-            langsmith_project=values.get(
-                "LANGSMITH_PROJECT", "ai-poc-planner-local"
-            ),
+            langsmith_project=values.get("LANGSMITH_PROJECT", "ai-poc-planner-local"),
         )

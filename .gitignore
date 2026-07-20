@@ -41,6 +41,7 @@ logs/
 Thumbs.db
 
 # Temporary and generated
+artifacts/
 tmp/
 temp/
 *.tmp

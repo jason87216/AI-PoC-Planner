@@ -186,9 +186,11 @@ class ArchitectureOption(BaseModel):
 
 class PocProposal(BaseModel):
     schema_version: Literal["1.0"]
+    executive_summary: str | None = None
     recommendation: Recommendation
     gate_disposition: GateDisposition
     problem_statement: str
+    suggested_use_case_boundary: str | None = None
     target_users: list[str]
     current_workflow_summary: str
     known_information: dict[str, str | int | float | bool | list[str] | None]
@@ -207,6 +209,11 @@ class PocProposal(BaseModel):
     success_metrics: list[str]
     estimated_weeks: int = Field(ge=1)
     estimated_team: list[str]
+    in_scope: list[str] = []
+    out_of_scope: list[str] = []
+    poc_milestones: list[str] = []
+    scope_assumptions: list[str] = []
+    evidence_refs: list[str] = []
     next_actions: list[str]
 ```
 
@@ -272,6 +279,20 @@ State transitions must persist the accepted user turn before model/tool processi
 
 ## 12. Tool Interfaces
 
+M1.4 defines a framework-neutral provider boundary. A model provider accepts a
+typed `ProviderRequest` and returns a `ProviderPreparation` whose status is either
+`ready` or `clarification_required`. A ready result contains `AssessmentFacts` and
+all six typed tool inputs; a clarification result contains one to five typed
+questions and no assessment payload. Providers never return formal scores,
+weighted totals, hard-gate disposition, recommendation or evidence records. They
+may only reference evidence supplied by the enclosing application request.
+
+The minimal capability contract exposes structured-output, tool-calling and
+streaming flags plus a model identifier. An independent `EmbeddingProvider`
+protocol accepts a sequence of strings and returns typed vectors. M1.4 provides
+deterministic offline fakes for both protocols; no SDK, registry or live endpoint
+is introduced.
+
 | Tool | Input contract | Output contract | Deterministic boundary |
 |---|---|---|---|
 | `retrieve_similar_cases` | `RetrieveSimilarCasesInput` | `RetrieveSimilarCasesOutput` containing cases and evidence refs | Embedding query may vary by provider; filtering and output schema are deterministic |
@@ -288,6 +309,17 @@ not execute tools. Each output is an exclusive success-or-error envelope: a succ
 requires its complete typed payload, while a failure carries `ToolError` without
 fabricated success fields. `ToolError` contains a stable code, safe message,
 retryability flag and JSON-only details.
+
+The offline vertical-slice batch supplies framework-neutral implementations for
+all six interfaces. Case retrieval is a transparent, version-controlled fixture
+filter with fixed similarity values and `fixture:` source references; it is not
+semantic search. The other services may calculate their individual typed output
+fields from `AssessmentFacts`, but only `assess_project` recomputes the authoritative
+six scores, weighted total, gate precedence and recommendation.
+Before execution, the application validates duplicated facts against their formal
+tool-input fields (data access/digitization/sample, integration count, risk domain,
+impact, data flags, boundary, human review, authorization and scope signals).
+Contradictory provider output fails explicitly rather than producing mixed results.
 
 ## 13. Case Knowledge Base Format
 
@@ -361,6 +393,14 @@ Aggregate precedence: `blocked > assistive_only > requires_controls > pass`.
 
 ## 16. API Endpoints
 
+Before the HTTP layer, the approved offline demonstration exposes one application
+entry point: `run_offline_planning(request: OfflinePlanningRequest) ->
+OfflinePlanningResult`. It receives a typed project, fixed interview answers,
+stable IDs/timestamp, evidence and an optional report path. It injects a model
+provider, runs the six framework-neutral tools, calls M1.3 `assess_project`, builds
+one validated proposal and renders deterministic Markdown. The demo implementation
+is in-memory only; it does not satisfy SQLite persistence/reload acceptance.
+
 | Method and path | Purpose | Success response |
 |---|---|---|
 | `GET /health` | Liveness and dependency mode | status, app version, fake/real model mode; no secrets |
@@ -413,6 +453,7 @@ All errors use:
 - No MVP tool can mutate an enterprise system, send messages, approve decisions or perform financial actions.
 - External model use requires an explicit data-boundary check; fake model is the safe default for tests.
 - Markdown export escapes or neutralizes untrusted content where needed and never embeds secrets.
+- Offline Markdown redacts values under secret-like interview keys and neutralizes HTML and Markdown control characters from all dynamic inline content.
 - This project flags governance issues; a qualified reviewer determines applicable law and compliance.
 
 ## 19. Commands

@@ -2,9 +2,9 @@
 
 AI PoC Planner 是一個規格中的公開 AI 工程作品：透過單一 LangChain Agent 進行結構化需求訪談，結合本機案例檢索、固定評分框架與風險 hard gates，產生可追蹤、可測試、可匯出的 AI 導入 PoC 建議。
 
-> 專案狀態：**M1.3 deterministic assessment engine complete**。目前具有可安裝
-> 的 Python 骨架、完整 Pydantic contracts、離線 fake provider，以及六維評分、
-> hard-gate precedence 與 recommendation engine；Agent 與產品流程尚未實作。
+> 專案狀態：**deterministic offline vertical slice available**。目前可在沒有
+> API key、網路、資料庫或 Agent framework 的環境完成固定訪談資料到 Markdown
+> 報告的整條 in-memory 流程。
 
 ## 核心價值
 
@@ -48,28 +48,45 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 python -m ai_poc_planner
+python -m ai_poc_planner demo
 python -m pytest
 python -m ruff check .
 ```
 
-Smoke command 預期輸出以 `fake-provider: ok` 開頭；它只建立合成專案並驗證
-fake provider 的結構化輸出，不是正式 CLI，也不需要 `.env`、API key 或網路。
+`python -m ai_poc_planner` 顯示簡短 usage。`demo` 執行固定且完全離線的流程，
+預設將報告寫入 Git ignored 的 `artifacts/demo-report.md`：
 
-目前已完成的 contract surface 包含 interview session/state snapshot、assessment
-input/result、proposal/report/case persistence metadata、framework-neutral Agent
-state，以及六組 tool input/output models。`assess_project(AssessmentInput)` 會從
-typed facts 以純 Python 規則重算六維分數、`HG-01`～`HG-07` 與 recommendation；
-它不信任 tool 宣告分數，也不執行檢索或 Agent orchestration。
+```text
+Project: 客服知識檢索 PoC
+Weighted score: 100
+Gate disposition: pass
+Recommendation: 建議進行
+Report: ...\artifacts\demo-report.md
+```
+
+可自訂輸出位置：
+
+```powershell
+python -m ai_poc_planner demo --output artifacts/my-demo.md
+```
+
+目前 offline demo 會建立固定分析專案、載入合成訪談資料、由 fake provider
+產生 typed facts／六組 tool inputs、執行 deterministic services、呼叫
+`assess_project(AssessmentInput)` 重算六維分數與 `HG-01`～`HG-07`，再產生
+validated proposal 與固定章節 Markdown。Provider 無權指定正式分數、weighted
+score、gate disposition 或 recommendation。
 
 本次驗證環境：Python 3.12.10、Pydantic 2.13.4、pytest 9.1.1、ruff
 0.15.22。`pyproject.toml` 使用相容版本範圍，避免把專案綁死在單一 patch
 版本。
 
-評估引擎由 domain tests 提供完全離線的固定 smoke scenario；既有
-`python -m ai_poc_planner` 仍只驗證 M1.1 fake provider seam，不是產品 CLI。
+案例查找目前只是三筆 Python synthetic fixtures 的 deterministic filter，固定
+similarity 僅供流程展示；它不是 embeddings、semantic search 或 FAISS。
 
-FastAPI、Streamlit、SQLite、FAISS、LangChain Agent、Docker 與真實模型
-provider 尚未實作，因而目前沒有 API 或 UI 啟動命令。
+目前限制：訪談資料與案例均為固定 fixture，流程不持久化，也不支援 resume。
+FastAPI、Streamlit、SQLite、FAISS、LangChain／LangGraph Agent、Docker、真實
+OpenAI-compatible provider、production security 與 production deployment 均尚未
+實作，因而目前沒有 API 或 UI 啟動命令。
 
 ## 安全與隱私
 

@@ -2,9 +2,13 @@
 
 ## Current Goal
 
-已完成 `TASKS.md` 的 M1.3：deterministic scoring rubric、hard-gate engine 與 recommendation decision；本輪停止於 M1.4 前。
+已完成 `feat/offline-vertical-slice` batch 的本機實作：M1.4 與純 application/service 離線流程可執行；目前進行最終品質審查與 Draft PR。
 
 ## Current Status
+
+- Batch scope（2026-07-19）：`訪談 fixture → fake provider structured facts/tool inputs → 六組 deterministic tools → M1.3 assessment → proposal → Markdown → CLI demo`。
+- 本批次明確不實作 SQLite persistence，因此 M2.1～M2.5 的 application/service 能力可落地，但含 repository／reload 的正式 TASKS 驗收仍保持未完成，不會誤標為完成。
+- M1.3 已推送至 `origin/main`；後續工作位於 `feat/offline-vertical-slice`。
 
 - `SPEC.md`、`PLAN.md` 與 `TASKS.md` 已於 2026-07-19 獲使用者核准為第一版 implementation baseline。
 - 第一版規格已建立 baseline commit：`d5fc880 docs: establish specification baseline`。
@@ -18,6 +22,17 @@
 - M1.2 使用獨立 commit message：`feat: complete workflow and persistence contracts`。
 - M1.3 新增 119 個離線 rule/engine tests；完整測試共 212 個。
 - M1.3 使用獨立 commit message：`feat: implement scoring and hard-gate engine`，不 push。
+- M1.4 已將 provider boundary 收斂為 `prepare_assessment`，只回傳 typed facts／tool inputs 或追問；正式 assessment 決策仍由 M1.3 掌握。
+- 新增 deterministic fake embeddings seam；它不是 semantic embeddings，也未接入 FAISS。
+- M1.4 完整 suite 為 218 passed，Ruff 與 provider smoke 通過。
+- 離線 batch 已實作六組 typed deterministic tool services；案例查找為明確 fixture filter，不是 embeddings／FAISS／semantic search。
+- Tool services 只產生 M1.2 output envelopes；正式 weighted score 與 recommendation 仍只由 M1.3 engine 計算。
+- 六組 tools 完成後完整 suite 為 229 passed，Ruff 通過。
+- `run_offline_planning(OfflinePlanningRequest)` 已串接 project、固定 interview、fake provider、六組 tools、M1.3 assessment、proposal、Markdown 與可選檔案輸出。
+- CLI：`python -m ai_poc_planner demo [--output PATH]`；預設輸出至 ignored `artifacts/demo-report.md`。
+- pass／blocked／assistive-only／requires-controls、provider／tool／clarification／evidence／report errors 皆有 application tests；review 修正後完整 suite 為 256 passed。
+- 兩軸 review 修正 tool-input／facts 矛盾檢查、invalid provider structured output、scope assumptions／時程／團隊報告，以及 Markdown markup neutralization／secret-like key redaction。
+- 本次使用者明確核准長批次與 2–4 commits，實際跨 32 個檔案；超過一般單任務五檔原則，原因是同一 tracer slice 同時包含 provider、六 tools、workflow、proposal、report、CLI、測試、文件與 repo-wide format gate，且未跨入明確禁止的 infrastructure。
 
 ## M1.3 Data Flow and Contract Mapping
 
@@ -108,9 +123,9 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Next Steps
 
-1. 等待 M1.4 的明確授權，不提前擴充 provider／embeddings interfaces。
-2. 後續 application service 直接呼叫 M1.3 `assess_project`，不得讓 provider 覆寫正式分數或 gates。
+1. 下一個正式 Must 是 M2.1：加入 SQLite project repository 與 create/read lifecycle；本批次未授權，尚未執行。
+2. 後續 persistence 必須包在既有 application boundaries 外，不得讓 provider 覆寫 M1.3 分數、gates 或 recommendation。
 
 ## Handoff Summary
 
-新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.3 已完成；目前沒有 M1.4 授權，不得提前建立新 provider／embeddings、資料庫或垂直切片。
+新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.4 與 in-memory offline tracer slice 已完成；M2.1～M2.5 的 SQLite／repository acceptance 仍開放，下一步不得跳到真實 provider、Agent、FAISS、API 或 UI。

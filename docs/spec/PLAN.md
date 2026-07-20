@@ -98,6 +98,12 @@ Inputs:
 
 - Foundation contracts and fake model.
 
+Execution note (2026-07-19): before SQLite work, an explicitly authorized
+in-memory tracer slice now exercises fixed interview data, all six deterministic
+tools, M1.3 assessment, proposal assembly, Markdown export and CLI output. This
+does not replace the SQLite persistence/reload acceptance below; it proves the
+application boundaries while database, API, UI, FAISS and Agent work remain deferred.
+
 Work in dependency order:
 
 1. Create/read project.

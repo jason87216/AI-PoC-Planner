@@ -39,13 +39,7 @@ SchemaVersion = Annotated[
 ]
 
 type RawJSONValue = (
-    None
-    | bool
-    | int
-    | float
-    | str
-    | list[RawJSONValue]
-    | dict[str, RawJSONValue]
+    None | bool | int | float | str | list[RawJSONValue] | dict[str, RawJSONValue]
 )
 
 
@@ -220,9 +214,11 @@ class ArchitectureOption(ContractModel):
 
 class PocProposal(ContractModel):
     schema_version: Literal["1.0"]
+    executive_summary: NonEmptyStr | None = None
     recommendation: Recommendation
     gate_disposition: GateDisposition
     problem_statement: NonEmptyStr
+    suggested_use_case_boundary: NonEmptyStr | None = None
     target_users: list[NonEmptyStr] = Field(min_length=1)
     current_workflow_summary: NonEmptyStr
     known_information: dict[str, JSONValue]
@@ -241,6 +237,11 @@ class PocProposal(ContractModel):
     success_metrics: list[NonEmptyStr]
     estimated_weeks: int = Field(ge=1)
     estimated_team: list[NonEmptyStr] = Field(min_length=1)
+    in_scope: list[NonEmptyStr] = Field(default_factory=list)
+    out_of_scope: list[NonEmptyStr] = Field(default_factory=list)
+    poc_milestones: list[NonEmptyStr] = Field(default_factory=list)
+    scope_assumptions: list[NonEmptyStr] = Field(default_factory=list)
+    evidence_refs: list[NonEmptyStr] = Field(default_factory=list)
     next_actions: list[NonEmptyStr] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -269,6 +270,11 @@ class PocProposal(ContractModel):
             "roi_assumptions",
             "success_metrics",
             "estimated_team",
+            "in_scope",
+            "out_of_scope",
+            "poc_milestones",
+            "scope_assumptions",
+            "evidence_refs",
             "next_actions",
         ):
             _require_unique(getattr(self, field_name), field_name)
@@ -279,9 +285,7 @@ class PocProposal(ContractModel):
         _require_unique(
             [case.case_id for case in self.similar_cases], "similar case IDs"
         )
-        _require_unique(
-            [gate.rule_id for gate in self.hard_gates], "hard gate IDs"
-        )
+        _require_unique([gate.rule_id for gate in self.hard_gates], "hard gate IDs")
         _require_unique(
             [option.name for option in self.architecture_options],
             "architecture option names",

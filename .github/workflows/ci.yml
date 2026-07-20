@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  offline-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install project and development dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest
+
+      - name: Run Ruff lint
+        run: python -m ruff check .
+
+      - name: Check Ruff formatting
+        run: python -m ruff format --check .
+
+      - name: Run deterministic offline demo
+        run: python -m ai_poc_planner demo --output artifacts/ci-demo-report.md
+
+      - name: Verify demo report exists
+        run: test -f artifacts/ci-demo-report.md

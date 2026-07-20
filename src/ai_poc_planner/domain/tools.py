@@ -348,7 +348,7 @@ class AssessmentToolOutputs(ContractModel):
         AssessTechnicalFitAndArchitectureOutput | None
     ) = None
     evaluate_risk_and_hard_gates: EvaluateRiskAndHardGatesOutput | None = None
-    assess_business_value_roi_and_kpis: (
-        AssessBusinessValueRoiAndKpisOutput | None
-    ) = None
+    assess_business_value_roi_and_kpis: AssessBusinessValueRoiAndKpisOutput | None = (
+        None
+    )
     estimate_poc_scope: EstimatePocScopeOutput | None = None

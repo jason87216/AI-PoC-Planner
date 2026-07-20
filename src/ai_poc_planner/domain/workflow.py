@@ -261,16 +261,24 @@ class AgentState(ContractModel):
             [question.question for question in self.clarifying_questions],
             "clarifying question text",
         )
-        if self.workflow_stage in {
-            ProjectStatus.ASSESSED,
-            ProjectStatus.PROPOSAL_GENERATED,
-            ProjectStatus.COMPLETE,
-        } and self.assessment_id is None:
+        if (
+            self.workflow_stage
+            in {
+                ProjectStatus.ASSESSED,
+                ProjectStatus.PROPOSAL_GENERATED,
+                ProjectStatus.COMPLETE,
+            }
+            and self.assessment_id is None
+        ):
             raise ValueError("assessed workflow state requires assessment_id")
-        if self.workflow_stage in {
-            ProjectStatus.PROPOSAL_GENERATED,
-            ProjectStatus.COMPLETE,
-        } and self.proposal_id is None:
+        if (
+            self.workflow_stage
+            in {
+                ProjectStatus.PROPOSAL_GENERATED,
+                ProjectStatus.COMPLETE,
+            }
+            and self.proposal_id is None
+        ):
             raise ValueError("proposal workflow state requires proposal_id")
         if self.proposal is not None and self.proposal_id is None:
             raise ValueError("proposal payload requires proposal_id")

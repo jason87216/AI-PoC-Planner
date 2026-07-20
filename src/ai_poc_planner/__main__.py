@@ -1,30 +1,47 @@
-"""Minimal offline smoke command; this is intentionally not a product CLI."""
+"""Small argparse CLI for the deterministic offline demonstration."""
 
-from datetime import UTC, datetime
-from uuid import UUID
+from __future__ import annotations
 
-from ai_poc_planner.domain.enums import ProjectStatus
-from ai_poc_planner.domain.models import AnalysisProject
-from ai_poc_planner.providers.base import ProviderRequest
-from ai_poc_planner.providers.fake import FakeModelProvider
+import argparse
+import sys
+from collections.abc import Sequence
+
+from ai_poc_planner.application.demo import build_demo_request
+from ai_poc_planner.application.report import ReportExportError
+from ai_poc_planner.application.workflow import PlanningError, run_offline_planning
 
 
-def main() -> None:
-    timestamp = datetime(2026, 7, 19, tzinfo=UTC)
-    project = AnalysisProject(
-        id=UUID("00000000-0000-0000-0000-000000000001"),
-        title="Offline smoke project",
-        problem_statement="Verify package import and structured fake output.",
-        status=ProjectStatus.DRAFT,
-        created_at=timestamp,
-        updated_at=timestamp,
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="python -m ai_poc_planner")
+    subcommands = parser.add_subparsers(dest="command")
+    demo = subcommands.add_parser("demo", help="run the deterministic offline demo")
+    demo.add_argument(
+        "--output",
+        default="artifacts/demo-report.md",
+        help="Markdown report path (default: artifacts/demo-report.md)",
     )
-    proposal = FakeModelProvider().generate(ProviderRequest(project=project))
-    print(
-        "fake-provider: ok "
-        f"schema={proposal.schema_version} score={proposal.weighted_score}"
-    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = _parser()
+    arguments = parser.parse_args(argv)
+    if arguments.command is None:
+        parser.print_help()
+        return 0
+    try:
+        result = run_offline_planning(build_demo_request(output_path=arguments.output))
+    except (PlanningError, ReportExportError) as error:
+        print(f"error [{error.code}]: {error}", file=sys.stderr)
+        return 2
+
+    print(f"Project: {result.project.title}")
+    print(f"Weighted score: {result.assessment.weighted_score}")
+    print(f"Gate disposition: {result.assessment.gate_disposition.value}")
+    print(f"Recommendation: {result.assessment.recommendation.value}")
+    print(f"Report: {result.report_path}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
