@@ -2,13 +2,17 @@
 
 ## Current Goal
 
-已完成 `feat/offline-vertical-slice` batch 的本機實作：M1.4 與純 application/service 離線流程可執行；目前進行最終品質審查與 Draft PR。
+完成 Must 任務 M2.1 `Create and load an analysis project`：以標準庫 `sqlite3` 提供 analysis project 的 create／load persistence，並保持 offline demo 不依賴資料庫。
 
 ## Current Status
 
+- M2.1 位於 `feat/sqlite-project-persistence`；新增 `PRAGMA user_version = 1` schema、`SQLiteProjectRepository`、穩定 persistence errors 與可注入 UUID／clock 的 `AnalysisProjectService`。
+- `AnalysisProject` 六個正式欄位會以獨立 columns 保存並重新經 Pydantic 驗證；UUID 使用 canonical string、status 使用 enum value、timestamps 使用 ISO 8601 UTC。
+- M2.1 integration suite 為 25 passed；完整 suite 為 281 passed。沒有新增 runtime dependency，也沒有建立 tracked SQLite file。
+- 本輪明確不包含 M2.2 訪談 turns、state snapshot 或 resume persistence。
 - Batch scope（2026-07-19）：`訪談 fixture → fake provider structured facts/tool inputs → 六組 deterministic tools → M1.3 assessment → proposal → Markdown → CLI demo`。
-- 本批次明確不實作 SQLite persistence，因此 M2.1～M2.5 的 application/service 能力可落地，但含 repository／reload 的正式 TASKS 驗收仍保持未完成，不會誤標為完成。
-- M1.3 已推送至 `origin/main`；後續工作位於 `feat/offline-vertical-slice`。
+- 2026-07-19 offline batch 當時未含 SQLite；其 PR #1 已 merge。M2.1 現在於獨立 branch 完成，M2.2～M2.5 的 repository／reload 驗收仍保持未完成。
+- `main` 已含 PR #1 merge commit `a5353ab`；目前工作只位於 `feat/sqlite-project-persistence`。
 
 - `SPEC.md`、`PLAN.md` 與 `TASKS.md` 已於 2026-07-19 獲使用者核准為第一版 implementation baseline。
 - 第一版規格已建立 baseline commit：`d5fc880 docs: establish specification baseline`。
@@ -93,6 +97,8 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Recent Changes
 
+- 2026-07-20：完成 M2.1 SQLite project schema、create/load repository、application service 與 temporary-file integration tests。
+- 2026-07-20：以明確 transaction commit／rollback、caller-owned connection 與 stable errors 隔離 `sqlite3` 低階例外。
 - 2026-07-19：完成 `deep-research-report.md` 的公開發布前查證與引用清理。
 - 2026-07-19：移除內部引用標記，改為可公開存取的標準 Markdown links。
 - 2026-07-19：移除無法由第一手來源可靠確認的競品敘述。
@@ -110,12 +116,13 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 - Repository root：`D:\ai_class\projects\AI PoC Planner`。
 - 本專案使用自己的 `.git`，不再依附 `D:\ai_class` 上層 repository。
-- GitHub remote 為 `origin`（公開 `jason87216/AI-PoC-Planner`）；M1.3 明確不 push。
-- M1.3 commit 完成後本機 history 為四個 commits，`main` 將領先 `origin/main` 一個 commit。
+- GitHub remote 為 `origin`（公開 `jason87216/AI-PoC-Planner`）。
+- M2.1 從已同步的 merge commit `a5353ab` 建立 `feat/sqlite-project-persistence`；本輪將推送並建立 Draft PR，不直接 merge。
 
 ## Known Problems
 
-- FastAPI、Streamlit、SQLite、FAISS、LangChain Agent、Docker 與真實 provider 尚未實作。
+- SQLite 目前只保存 `AnalysisProject`；訪談、conversation state、assessment、proposal 與 report persistence 尚未實作。
+- FastAPI、Streamlit、FAISS、LangChain Agent、Docker 與真實 provider 尚未實作。
 - 真實 chat model 與 embeddings model 的預設選擇留待對應 provider task 確認；M1.1 只提供 fake provider。
 - 部分 hard gate 在真實企業環境中需要法務、資安與領域專家核准，不能只由模型決定。
 - 多語言報告與 PDF 匯出不在 MVP 範圍。
@@ -123,9 +130,10 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Next Steps
 
-1. 下一個正式 Must 是 M2.1：加入 SQLite project repository 與 create/read lifecycle；本批次未授權，尚未執行。
-2. 後續 persistence 必須包在既有 application boundaries 外，不得讓 provider 覆寫 M1.3 分數、gates 或 recommendation。
+1. M2.1 Draft PR 通過審查後，下一個正式 Must 是 M2.2：`Run and resume the standard interview`；本輪不執行。
+2. M2.2 應沿用現有 schema version、connection ownership 與 stable error boundary，不把 interview persistence 混入 M2.1 repository。
+3. 後續 persistence 必須包在既有 application boundaries 外，不得讓 provider 覆寫 M1.3 分數、gates 或 recommendation。
 
 ## Handoff Summary
 
-新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.4 與 in-memory offline tracer slice 已完成；M2.1～M2.5 的 SQLite／repository acceptance 仍開放，下一步不得跳到真實 provider、Agent、FAISS、API 或 UI。
+新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.4、in-memory offline tracer slice 與 M2.1 project create/load persistence 已完成；M2.2 起的 interview／assessment／proposal／report persistence 仍開放，下一步不得跳到真實 provider、Agent、FAISS、API 或 UI。

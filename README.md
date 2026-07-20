@@ -2,9 +2,10 @@
 
 AI PoC Planner 是一個規格中的公開 AI 工程作品：透過單一 LangChain Agent 進行結構化需求訪談，結合本機案例檢索、固定評分框架與風險 hard gates，產生可追蹤、可測試、可匯出的 AI 導入 PoC 建議。
 
-> 專案狀態：**deterministic offline vertical slice available**。目前可在沒有
-> API key、網路、資料庫或 Agent framework 的環境完成固定訪談資料到 Markdown
-> 報告的整條 in-memory 流程。
+> 專案狀態：**deterministic offline vertical slice + M2.1 SQLite project
+> persistence available**。固定訪談資料到 Markdown 報告的 demo 仍是完全
+> in-memory；另提供 analysis project 的 SQLite create／load 邊界，兩者皆不需要
+> API key 或網路。
 
 ## 核心價值
 
@@ -76,6 +77,38 @@ python -m ai_poc_planner demo --output artifacts/my-demo.md
 validated proposal 與固定章節 Markdown。Provider 無權指定正式分數、weighted
 score、gate disposition 或 recommendation。
 
+### SQLite analysis project persistence（M2.1）
+
+目前 persistence layer 只保存 `AnalysisProject`。呼叫端明確開啟、初始化及關閉
+connection；import module 不會自動建立資料庫：
+
+```python
+from pathlib import Path
+
+from ai_poc_planner.application import AnalysisProjectService
+from ai_poc_planner.persistence import (
+    SQLiteProjectRepository,
+    database_connection,
+    initialize_database,
+)
+
+connection = database_connection(Path("local-planner.sqlite3"))
+try:
+    initialize_database(connection)
+    projects = AnalysisProjectService(SQLiteProjectRepository(connection))
+    project = projects.create(
+        title="客服知識檢索 PoC",
+        problem_statement="客服需要更快找到已核准的產品答案。",
+    )
+    assert projects.load(project.id) == project
+finally:
+    connection.close()
+```
+
+資料庫 schema 以 SQLite `PRAGMA user_version = 1` 驗證；本里程碑沒有 ORM、
+migration upgrade chain 或其他 entity 資料表。測試使用 temporary SQLite files，
+repository 不會被 offline demo 自動啟用。
+
 本次驗證環境：Python 3.12.10、Pydantic 2.13.4、pytest 9.1.1、ruff
 0.15.22。`pyproject.toml` 使用相容版本範圍，避免把專案綁死在單一 patch
 版本。
@@ -83,8 +116,9 @@ score、gate disposition 或 recommendation。
 案例查找目前只是三筆 Python synthetic fixtures 的 deterministic filter，固定
 similarity 僅供流程展示；它不是 embeddings、semantic search 或 FAISS。
 
-目前限制：訪談資料與案例均為固定 fixture，流程不持久化，也不支援 resume。
-FastAPI、Streamlit、SQLite、FAISS、LangChain／LangGraph Agent、Docker、真實
+目前限制：訪談資料與案例均為固定 fixture；只有 analysis project 可持久化，
+訪談、conversation state、assessment、proposal 與 report 尚未持久化，也不支援
+resume。FastAPI、Streamlit、FAISS、LangChain／LangGraph Agent、Docker、真實
 OpenAI-compatible provider、production security 與 production deployment 均尚未
 實作，因而目前沒有 API 或 UI 啟動命令。
 

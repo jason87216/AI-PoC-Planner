@@ -66,13 +66,13 @@
 
 ### [Must] M2.1 Create and load an analysis project
 
-- [ ] **Purpose:** Deliver the first end-to-end capability using SQLite: create and retrieve a project.
+- [x] **Purpose:** Deliver the first end-to-end capability using SQLite: create and retrieve a project.
 - **Modification scope:** project application service, SQLite project repository, migration/schema setup, tests.
 - **Acceptance:** Project UUID/timestamps/status persist and reload from a temporary SQLite file; duplicate/invalid input has a stable error.
 - **Verification:** `python -m pytest tests/integration/test_project_lifecycle.py`.
 - **Dependencies:** M1.2.
 - **Estimated scope:** M.
-- **Offline batch note:** deterministic demo project construction is available in memory; SQLite create/read and duplicate handling remain open, so this task is not complete.
+- **Completion note (2026-07-20):** SQLite `user_version = 1`, explicit connection lifecycle, project create/load, stable duplicate/not-found/input/corrupt-data errors and temporary-file integration tests are complete. The deterministic demo remains in memory by design.
 
 ### [Must] M2.2 Run and resume the standard interview
 
