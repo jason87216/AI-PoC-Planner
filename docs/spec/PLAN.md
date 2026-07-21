@@ -117,7 +117,7 @@ Work in dependency order:
 3. Persist structured intent, gaps and one clarification-answer batch.
 4. Run the existing deterministic offline workflow after required facts are present.
 5. Persist and reload the exact assessment, proposal and Markdown result.
-6. Add the reviewed common AI implementation-pattern catalog in the next lite task.
+6. Add the reviewed common AI implementation-pattern catalog in the next lite task: contracts and fixed fixture first, then deterministic matching and deployment posture rules in separate slices.
 7. Expose the persisted slice through minimal FastAPI endpoints.
 8. Present the same saved result through Streamlit.
 

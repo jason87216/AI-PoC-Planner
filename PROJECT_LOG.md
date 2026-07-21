@@ -2,10 +2,11 @@
 
 ## Current Goal
 
-完成精簡 Must 任務 `M2.2-lite — Persist and continue a planning run` 並準備 Draft PR；保存一次自然語言需求、追問／補充與正式 assessment／proposal／Markdown 結果，同時保持 offline demo 不依賴 SQLite。
+完成 M2.3-lite 第一個最小切片：核准 AI opportunity catalog 的 contracts 與固定離線 fixture；不實作 matching 或 deployment posture rules。
 
 ## Current Status
 
+- M2.3-lite contracts／fixture slice 已從 PR #3、PR #4 合併後的 main 建立；正式 catalog 僅九類，非 AI alternatives 與 deployment contract 骨架均保持不決定正式評分、recommendation 或 hard gates。
 - PR #2 已於 2026-07-20 以 merge commit `a5b3bbb` 合併；`feat/planning-run-persistence` 從該同步基準建立。
 - M2.2-lite 已完成 `PlanningRun` 四狀態 contract、SQLite `planning_runs`、schema v1→v2、create/get/update/list repository、application service 與 persisted offline coordinator。
 - 模糊需求會保存四個追問；補充一批答案後可完成並重新讀取同一份 assessment、proposal 與 Markdown。完整 suite 為 311 passed，Ruff 與 in-memory demo 通過。

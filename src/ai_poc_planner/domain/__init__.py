@@ -1,5 +1,24 @@
 """Public domain contracts for AI PoC Planner."""
 
+from ai_poc_planner.domain.catalog import (
+    CaseReference,
+    ConditionalGuidance,
+    DataClassification,
+    DeploymentAssessmentStatus,
+    DeploymentCandidateStatus,
+    DeploymentPosture,
+    DeploymentPostureAssessment,
+    DeploymentPostureCandidate,
+    DeploymentPostureInput,
+    EvidenceGrade,
+    EvidenceType,
+    NonAiAlternativeDirection,
+    OpportunityCandidate,
+    OpportunityCatalogEntry,
+    OpportunityMatchInput,
+    OpportunityMatchResult,
+    OpportunityType,
+)
 from ai_poc_planner.domain.enums import (
     DataBoundary,
     DecisionImpact,
@@ -70,6 +89,17 @@ from ai_poc_planner.domain.workflow import (
 )
 
 __all__ = [
+    "CaseReference",
+    "ConditionalGuidance",
+    "DataClassification",
+    "DeploymentAssessmentStatus",
+    "DeploymentCandidateStatus",
+    "DeploymentPosture",
+    "DeploymentPostureAssessment",
+    "DeploymentPostureCandidate",
+    "DeploymentPostureInput",
+    "EvidenceGrade",
+    "EvidenceType",
     "AnalysisProject",
     "AgentState",
     "ArchitectureOption",
@@ -109,6 +139,12 @@ __all__ = [
     "InterviewTurn",
     "JSONValue",
     "KpiProposal",
+    "NonAiAlternativeDirection",
+    "OpportunityCandidate",
+    "OpportunityCatalogEntry",
+    "OpportunityMatchInput",
+    "OpportunityMatchResult",
+    "OpportunityType",
     "BusinessValueFacts",
     "PocProposal",
     "PlanningRun",
