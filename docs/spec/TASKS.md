@@ -87,10 +87,10 @@
 
 ### [Must] M2.3-lite Add a common AI implementation pattern catalog
 
-- [ ] **Purpose:** Give the later planning surface a small, reviewed directory of common AI delivery patterns.
-- **Modification scope:** To be specified after M2.2-lite review; no implementation is authorized in the M2.2-lite batch.
-- **Acceptance:** Deferred to the next approved task.
-- **Verification:** Deferred to the next approved task.
+- [x] **Purpose:** Give the later planning surface a small, reviewed directory of common AI delivery patterns.
+- **Modification scope:** Catalog domain contracts, fixed Python fixture, public catalog API, direct deterministic matching and a limited deployment posture assessment. No catalog persistence, generic rule framework or proposal integration.
+- **Acceptance:** `get_opportunity_catalog()` returns exactly the nine approved AI opportunities; non-AI alternatives remain separate; Grade E references are supplemental only; matching returns at most three candidates and deployment returns a posture or clarification needs without a final recommendation or hard-gate disposition.
+- **Verification:** `python -m pytest tests/domain/test_opportunity_catalog.py tests/application/test_catalog_matching.py tests/application/test_deployment_posture.py`, then full offline suite and Ruff checks.
 - **Dependencies:** M2.2-lite.
 - **Estimated scope:** M.
 
