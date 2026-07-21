@@ -2,9 +2,9 @@
 
 AI PoC Planner 是一個規格中的公開 AI 工程作品：透過單一 LangChain Agent 進行結構化需求訪談，結合本機案例檢索、固定評分框架與風險 hard gates，產生可追蹤、可測試、可匯出的 AI 導入 PoC 建議。
 
-> 專案狀態：**deterministic offline vertical slice + M2.2-lite SQLite planning-run
-> persistence available**。CLI demo 仍是完全 in-memory；另提供 analysis project
-> 與單次 planning run 的 SQLite 保存／續跑邊界，兩者皆不需要 API key 或網路。
+> 專案狀態：**deterministic offline vertical slice、M2.2-lite SQLite planning-run
+> persistence，以及最小 LangChain + FastAPI planning slice available**。所有既有
+> demo 與測試皆不需要 API key 或網路。
 
 ## 核心價值
 
@@ -49,6 +49,7 @@ py -3.12 -m venv .venv
 python -m pip install -e ".[dev]"
 python -m ai_poc_planner
 python -m ai_poc_planner demo
+python -m ai_poc_planner planning-demo
 python -m pytest
 python -m ruff check .
 ```
@@ -75,6 +76,24 @@ python -m ai_poc_planner demo --output artifacts/my-demo.md
 `assess_project(AssessmentInput)` 重算六維分數與 `HG-01`～`HG-07`，再產生
 validated proposal 與固定章節 Markdown。Provider 無權指定正式分數、weighted
 score、gate disposition 或 recommendation。
+
+### LangChain + FastAPI planning slice
+
+最小 API 提供 `GET /health` 與 `POST /v1/planning/interpret`。後者接受
+`natural_language_request` 與可選的 `clarification_answers`，由一個
+`langchain.agents.create_agent` Agent 抽取 `PlanningIntent`，再呼叫唯一的 typed
+planning tool。該 tool 實際組合既有的 `match_opportunities()` 與
+`assess_deployment_posture()`；HTTP response 只採用這個工具的 validated input／output。
+
+API composition 必須由呼叫端注入 LangChain `BaseChatModel`；本專案尚未提供 live
+provider runtime 或供直接啟動的 production server。`python -m ai_poc_planner
+planning-demo` 與自動測試使用 LangChain 官方 `GenericFakeChatModel` 的 scripted tool
+call trajectory。它展示 Agent orchestration 與 typed tool integration，**不代表實際模型
+理解品質**。
+
+此 slice 不建立或更新 `PlanningRun`，也不產生六維分數、recommendation、hard gate、
+proposal 或 Markdown report。若資料不足，API 依既有 matching／deployment outputs 以
+固定繁中模板回傳最多四題澄清問題；呼叫端需連同原始需求重新提交補答。
 
 ### SQLite project and planning-run persistence（M2.1／M2.2-lite）
 
@@ -120,9 +139,9 @@ similarity 僅供流程展示；它不是 embeddings、semantic search 或 FAISS
 
 目前限制：訪談資料與案例均為固定 fixture；PlanningRun 只支援一批追問答案後
 繼續執行，不提供完整 interview turns、conversation checkpoints、arbitrary resume
-或 session replay。FastAPI、Streamlit、FAISS、LangChain／LangGraph Agent、Docker、真實
-OpenAI-compatible provider、production security 與 production deployment 均尚未
-實作，因而目前沒有 API 或 UI 啟動命令。
+或 session replay。FastAPI planning endpoint 與 LangChain 單一 Agent 已實作，但沒有
+live chat-model provider runtime；Streamlit、FAISS、Docker、production security 與
+production deployment 仍未實作，因此目前沒有 production API 或 UI 啟動命令。
 
 ## 安全與隱私
 

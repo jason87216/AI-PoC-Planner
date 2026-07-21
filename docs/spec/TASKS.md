@@ -94,6 +94,16 @@
 - **Dependencies:** M2.2-lite.
 - **Estimated scope:** M.
 
+### [Must] M2.4-lite Add the minimal LangChain + FastAPI planning slice
+
+- [x] **Purpose:** Demonstrate one Agent turning a natural-language request into a typed local planning-tool call and returning inspected deterministic planning outputs.
+- **Modification scope:** LangChain planning contracts／Agent, FastAPI composition, scripted offline demo, contract tests and synchronized documentation.
+- **Acceptance:** `POST /v1/planning/interpret` returns a validated intent, matching result, deployment posture and at most four deterministic clarification questions; `GET /health` is live; the Agent has one typed planning tool that actually invokes the existing matching and deployment services.
+- **Verification:** `python -m pytest tests/agent/test_planning_agent.py tests/api/test_planning_api.py`, then the complete offline suite and Ruff checks.
+- **Dependencies:** M2.3-lite.
+- **Estimated scope:** M.
+- **Completion note (2026-07-21):** Completed without PlanningRun integration, a live provider, scoring, hard gates, proposal generation or Markdown export. The API receives an externally injected LangChain chat model; tests and `planning-demo` use a scripted official fake chat model.
+
 ### Roadmap History — Full Conversation and Separate Result Repositories
 
 The original M2.2 interview-turn/session replay, arbitrary resume and conversation

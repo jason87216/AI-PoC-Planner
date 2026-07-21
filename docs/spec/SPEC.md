@@ -616,3 +616,38 @@ Minimum gates before implementation is considered complete:
 - `match_opportunities()` uses only explicit structured request signals, counts direct matches, preserves catalog order on ties, returns at most three AI candidates, and may attach at most two non-AI alternative directions. It never returns a formal recommendation, a six-dimension score, or a hard-gate disposition.
 - `assess_deployment_posture()` uses data classification, external-processing permission, offline need and existing environment to return one posture or clarification needs. `disallowed` applies to a posture, not the whole PoC; hard-gate integration remains later work.
 - The deployment output describes only initial investment, variable operating cost, capacity-utilization risk and operations burden. It contains no provider, model, hardware or precise price recommendation.
+
+## 27. M2.4-lite LangChain and FastAPI Planning Slice
+
+The first LangChain／FastAPI surface is deliberately narrower than the persisted
+assessment workflow. It exposes only `GET /health` and
+`POST /v1/planning/interpret`; the request contains a non-empty
+`natural_language_request` and optional JSON-only `clarification_answers`.
+
+The HTTP composition receives an externally injected LangChain `BaseChatModel`.
+It creates one `langchain.agents.create_agent` Agent and gives that Agent one typed
+local tool, `evaluate_planning_intent(intent: PlanningIntent)`. `PlanningIntent`
+contains only `OpportunityMatchInput`, `DeploymentPostureInput`, and an optional
+short summary. The tool actually calls `match_opportunities()` and
+`assess_deployment_posture()` and returns a validated `PlanningEvaluation`.
+Responses use that captured tool result, never a model-written candidate or
+deployment conclusion.
+
+`PlanningEvaluation` contains only the validated intent, opportunity match result
+and deployment posture assessment. It must not contain a six-dimension score,
+recommendation, hard-gate disposition, proposal or Markdown report. This slice
+does not create, update or complete `PlanningRun`; callers resend the original
+request with clarification answers.
+
+Status is `clarification_required` when matching has no candidate or deployment
+requires clarification; otherwise it is `ready`. The application converts only
+those deterministic gaps into deduplicated, fixed-order Traditional-Chinese
+questions, capped at four. HTTP input validation is a safe 422 response; model
+execution failure, absent successful tool call and invalid tool arguments are safe
+502 responses; unexpected failures are safe 500 responses. Error responses never
+include raw request content, prompts or provider responses.
+
+LangChain may depend on LangGraph internally, but project source must not import
+`langgraph` or create graphs, nodes, edges, checkpoints, memory persistence or
+multi-agent orchestration. Tests and the offline demo use a scripted official
+LangChain fake chat model; no live provider adapter is part of this slice.
