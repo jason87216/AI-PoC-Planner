@@ -2,10 +2,9 @@
 
 AI PoC Planner 是一個規格中的公開 AI 工程作品：透過單一 LangChain Agent 進行結構化需求訪談，結合本機案例檢索、固定評分框架與風險 hard gates，產生可追蹤、可測試、可匯出的 AI 導入 PoC 建議。
 
-> 專案狀態：**deterministic offline vertical slice + M2.1 SQLite project
-> persistence available**。固定訪談資料到 Markdown 報告的 demo 仍是完全
-> in-memory；另提供 analysis project 的 SQLite create／load 邊界，兩者皆不需要
-> API key 或網路。
+> 專案狀態：**deterministic offline vertical slice + M2.2-lite SQLite planning-run
+> persistence available**。CLI demo 仍是完全 in-memory；另提供 analysis project
+> 與單次 planning run 的 SQLite 保存／續跑邊界，兩者皆不需要 API key 或網路。
 
 ## 核心價值
 
@@ -77,10 +76,11 @@ python -m ai_poc_planner demo --output artifacts/my-demo.md
 validated proposal 與固定章節 Markdown。Provider 無權指定正式分數、weighted
 score、gate disposition 或 recommendation。
 
-### SQLite analysis project persistence（M2.1）
+### SQLite project and planning-run persistence（M2.1／M2.2-lite）
 
-目前 persistence layer 只保存 `AnalysisProject`。呼叫端明確開啟、初始化及關閉
-connection；import module 不會自動建立資料庫：
+目前 persistence layer 可保存 `AnalysisProject`，以及一次需求→追問→補充答案→
+正式結果的 `PlanningRun`。呼叫端明確開啟、初始化及關閉 connection；import
+module 不會自動建立資料庫：
 
 ```python
 from pathlib import Path
@@ -105,9 +105,11 @@ finally:
     connection.close()
 ```
 
-資料庫 schema 以 SQLite `PRAGMA user_version = 1` 驗證；本里程碑沒有 ORM、
-migration upgrade chain 或其他 entity 資料表。測試使用 temporary SQLite files，
-repository 不會被 offline demo 自動啟用。
+資料庫目前為 SQLite `PRAGMA user_version = 2`；fresh database 直接建立 v2，既有
+v1 database 可在保留 `analysis_projects` 的情況下新增 `planning_runs`。結構化
+intent、追問、答案、assessment 與 proposal 使用 JSON `TEXT`，載入時一律重新經
+Pydantic 驗證；Markdown 保存為 `TEXT`。本里程碑沒有 ORM 或通用 migration
+framework。測試使用 temporary SQLite files，repository 不會被 offline demo 自動啟用。
 
 本次驗證環境：Python 3.12.10、Pydantic 2.13.4、pytest 9.1.1、ruff
 0.15.22。`pyproject.toml` 使用相容版本範圍，避免把專案綁死在單一 patch
@@ -116,9 +118,9 @@ repository 不會被 offline demo 自動啟用。
 案例查找目前只是三筆 Python synthetic fixtures 的 deterministic filter，固定
 similarity 僅供流程展示；它不是 embeddings、semantic search 或 FAISS。
 
-目前限制：訪談資料與案例均為固定 fixture；只有 analysis project 可持久化，
-訪談、conversation state、assessment、proposal 與 report 尚未持久化，也不支援
-resume。FastAPI、Streamlit、FAISS、LangChain／LangGraph Agent、Docker、真實
+目前限制：訪談資料與案例均為固定 fixture；PlanningRun 只支援一批追問答案後
+繼續執行，不提供完整 interview turns、conversation checkpoints、arbitrary resume
+或 session replay。FastAPI、Streamlit、FAISS、LangChain／LangGraph Agent、Docker、真實
 OpenAI-compatible provider、production security 與 production deployment 均尚未
 實作，因而目前沒有 API 或 UI 啟動命令。
 

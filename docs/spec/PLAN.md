@@ -8,7 +8,7 @@ Version 1 was approved by the user on 2026-07-19 as the implementation baseline.
 
 Implementation follows a contract-first, vertical-slice strategy. The first usable path is not “all database, then all API, then all UI”; it is one thin end-to-end workflow:
 
-`建立專案 → 完成標準訪談 → 執行 deterministic 評估與 hard gates → 產生 Pydantic proposal → 匯出 Markdown`
+`建立專案 → 建立 planning run → 保存追問／补充 → 執行 deterministic 評估與 hard gates → 保存 Pydantic proposal／Markdown`
 
 The fake model and local temporary storage are established before any real provider integration so tests remain reproducible.
 
@@ -104,26 +104,37 @@ tools, M1.3 assessment, proposal assembly, Markdown export and CLI output. This
 does not replace the SQLite persistence/reload acceptance below; it proves the
 application boundaries while database, API, UI, FAISS and Agent work remain deferred.
 
+Scope adjustment (2026-07-20): the demonstration prioritizes a complete
+natural-language request → clarification → formal result → persisted history
+loop. Full interview-turn persistence, arbitrary resume, conversation checkpoints,
+Agent-state history and complete replay move to the Roadmap. Existing contracts
+remain documented and are not deleted.
+
 Work in dependency order:
 
 1. Create/read project.
-2. Start and advance the standard interview; persist state.
-3. Detect gaps and complete interview with fake model.
-4. Run deterministic value, data, technical, governance and scope tools.
-5. Apply hard gates, then calculate weighted score.
-6. Assemble and validate `PocProposal`.
-7. Render Markdown report.
-8. Expose the slice through minimal FastAPI endpoints.
+2. Create a durable `PlanningRun` for one natural-language request.
+3. Persist structured intent, gaps and one clarification-answer batch.
+4. Run the existing deterministic offline workflow after required facts are present.
+5. Persist and reload the exact assessment, proposal and Markdown result.
+6. Add the reviewed common AI implementation-pattern catalog in the next lite task.
+7. Expose the persisted slice through minimal FastAPI endpoints.
+8. Present the same saved result through Streamlit.
 
 Outputs:
 
 - Automated vertical-slice test from project creation to report.
-- Durable state recovery after process/repository reload.
+- Durable planning-run history after process/repository reload.
 
 Checkpoint:
 
 - Happy path and one blocked high-impact path pass without network.
 - No invalid proposal is stored.
+
+Execution note (2026-07-20): M2.2-lite now persists the clarification state and
+exact final assessment／proposal／Markdown payload on `PlanningRun`. SQLite schema
+v2 supports fresh initialization and the single v1→v2 upgrade while preserving
+projects. Full conversation replay remains Roadmap work.
 
 ### Phase 3 — Local Case Retrieval
 
@@ -168,7 +179,7 @@ Outputs:
 Checkpoint:
 
 - Browser flow completes vertical slice using fake mode.
-- Reload resumes from SQLite.
+- Reload displays the saved planning-run clarification or completed result from SQLite.
 
 ### Phase 5 — Real Provider Adapter and Evaluation
 
@@ -224,7 +235,8 @@ Checkpoint:
 | Repository | SQLite transactions, state snapshots, FAISS mapping | Phase 3 |
 | Application integration | Use cases with fake model and temporary storage | Phase 2 |
 | Trajectory | Required tool sequence, prohibited action absence | Phase 2 and 5 |
-| Multi-turn | Gaps, follow-ups, resume and contradictions | Phase 2 |
+| Planning-run lifecycle | Gaps, one answer batch, completion and saved-result reload | Phase 2 |
+| Roadmap multi-turn | Turns, arbitrary resume, checkpoints and replay | Roadmap |
 | API | Status codes, response schemas and safe errors | Phase 4 |
 | UI manual/smoke | Standard interview, validation, reload and export | Phase 4 |
 | Docker smoke | Services, environment and persisted local volume | Phase 6 |
@@ -244,7 +256,7 @@ Testing rules:
 |---|---|---|---|
 | Model skips required tool | High | Deterministic application prechecks plus trajectory tests | Orchestrate mandatory tools outside model choice |
 | Provider cannot combine tools and structured output | High | Capability check and `ToolStrategy`; bounded validation retry | Split tool phase and proposal assembly |
-| Interview loops or repeats questions | Medium | Stage machine, asked-question set and max five questions | Fall back to deterministic form completion |
+| Clarification loop repeats questions | Medium | One bounded question set and explicit run transitions | Return a stable failed／clarification result |
 | High score masks unacceptable risk | High | Separate hard-gate engine with precedence tests | No score shown until gate completes |
 | FAISS and SQLite metadata drift | High | Content hash, vector IDs and atomic reindex workflow | Disable retrieval until rebuild |
 | Sensitive answers appear in logs | High | Structured safe logging and redaction tests | Log IDs and event types only |

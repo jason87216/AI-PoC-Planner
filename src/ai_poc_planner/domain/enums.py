@@ -14,6 +14,13 @@ class ProjectStatus(StrEnum):
     FAILED = "failed"
 
 
+class PlanningRunStatus(StrEnum):
+    CREATED = "created"
+    CLARIFICATION_REQUIRED = "clarification_required"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class InterviewSessionStatus(StrEnum):
     ACTIVE = "active"
     COMPLETED = "completed"
