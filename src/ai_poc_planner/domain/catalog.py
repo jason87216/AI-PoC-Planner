@@ -112,6 +112,9 @@ class OpportunityCandidate(ContractModel):
     match_strength: int = Field(ge=0, le=100)
     reasons: list[NonEmptyStr] = Field(min_length=1)
     missing_information: list[NonEmptyStr] = Field(default_factory=list)
+    clarification_questions: list[NonEmptyStr] = Field(default_factory=list)
+    conditional_guidance: list[ConditionalGuidance] = Field(default_factory=list)
+    case_references: list[CaseReference] = Field(default_factory=list, max_length=2)
 
 
 class OpportunityMatchResult(ContractModel):
@@ -177,13 +180,15 @@ class DeploymentPostureCandidate(ContractModel):
     posture: DeploymentPosture
     status: DeploymentCandidateStatus
     reasons: list[NonEmptyStr] = Field(min_length=1)
+    cost_shape: NonEmptyStr | None = None
+    operations_requirements: list[NonEmptyStr] = Field(default_factory=list)
     critical_assumptions: list[NonEmptyStr] = Field(default_factory=list)
 
 
 class DeploymentPostureAssessment(ContractModel):
     status: DeploymentAssessmentStatus
     recommended_posture: DeploymentPosture | None
-    candidates: list[DeploymentPostureCandidate] = Field(min_length=1)
+    candidates: list[DeploymentPostureCandidate] = Field(default_factory=list)
     missing_deployment_information: list[NonEmptyStr] = Field(default_factory=list)
 
     @model_validator(mode="after")

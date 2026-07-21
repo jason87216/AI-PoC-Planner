@@ -102,6 +102,8 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Recent Changes
 
+- 2026-07-21: Completed M2.3-lite catalog matching and deployment-posture assessment. The fixed nine-entry catalog now has direct deterministic matching, separate non-AI directions, and limited posture guidance; scoring, hard-gate and proposal integration remain deferred.
+
 - 2026-07-20：核准 M2.2-lite scope adjustment，保留原完整 conversation-resume 規劃於 Roadmap，不刪除既有 contracts。
 - 2026-07-20：完成 PlanningRun contract、SQLite v1→v2、repository/service/coordinator 與 30 個高價值測試；完整 suite 311 passed。
 - 2026-07-20：PR #2 以一般 merge commit `a5b3bbb` 合併並從同步 main 建立 `feat/planning-run-persistence`。

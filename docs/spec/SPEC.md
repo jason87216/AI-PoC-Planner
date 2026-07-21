@@ -606,10 +606,13 @@ Minimum gates before implementation is considered complete:
 - Should exported Markdown be stored as a file, SQLite content, or both? The current proposal stores metadata plus a local file.
 - Is LangSmith a Should item or entirely optional for the first public release?
 
-## 26. M2.3-lite Opportunity Catalog Contracts
+## 26. M2.3-lite Opportunity Catalog, Matching and Deployment
 
 - The reviewed catalog contains exactly nine `OpportunityType` values from `AI_ADOPTION_CASE_REVIEW.md`; `software_development_assist` is excluded.
 - `NonAiAlternativeDirection` contains rule-based automation, conventional software and data analytics, but these are not catalog entries and are not returned by `get_opportunity_catalog()`.
 - Each catalog entry is a validated, offline Python fixture with primary `CaseReference` records of Grade A–D only. Grade E evidence is allowed only in supplemental references.
 - Catalog contracts may provide human-oversight guidance and conditional guidance, but never recommendation, score, `assistive_only`, `blocked`, or hard-gate disposition.
-- Deployment posture contracts describe candidate postures and missing information only. `disallowed` applies to a posture, not the whole PoC; deployment rules and hard-gate integration remain later work.
+- `get_opportunity_catalog()` returns immutable copies of the nine fixed, version-controlled entries.
+- `match_opportunities()` uses only explicit structured request signals, counts direct matches, preserves catalog order on ties, returns at most three AI candidates, and may attach at most two non-AI alternative directions. It never returns a formal recommendation, a six-dimension score, or a hard-gate disposition.
+- `assess_deployment_posture()` uses data classification, external-processing permission, offline need and existing environment to return one posture or clarification needs. `disallowed` applies to a posture, not the whole PoC; hard-gate integration remains later work.
+- The deployment output describes only initial investment, variable operating cost, capacity-utilization risk and operations burden. It contains no provider, model, hardware or precise price recommendation.
