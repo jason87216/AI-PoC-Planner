@@ -2,10 +2,13 @@
 
 ## Current Goal
 
-完成 M2.3-lite 第一個最小切片：核准 AI opportunity catalog 的 contracts 與固定離線 fixture；不實作 matching 或 deployment posture rules。
+等待審核 M2.4-lite 最小 LangChain + FastAPI planning slice；不擴張至 live provider、Streamlit 或 proposal integration。
 
 ## Current Status
 
+- M2.4-lite 已完成：單一 LangChain `create_agent` 從自然語言與補答產生 `PlanningIntent`，呼叫唯一 typed planning tool；工具實際組合既有 catalog matching 與 deployment posture service。FastAPI 提供 `GET /health` 與 `POST /v1/planning/interpret`，回傳工具實際結果與最多四題固定繁中追問。
+- 本 slice 不建立或更新 `PlanningRun`，不產生六維 score、recommendation、hard gate、proposal 或 Markdown；FastAPI composition 一律由外部注入 LangChain chat model，沒有 live provider runtime。
+- 自動測試與 `python -m ai_poc_planner planning-demo` 使用 scripted LangChain official fake chat model，僅證明 Agent orchestration 與 typed tool integration，不宣稱自然語言理解品質。
 - M2.3-lite contracts／fixture slice 已從 PR #3、PR #4 合併後的 main 建立；正式 catalog 僅九類，非 AI alternatives 與 deployment contract 骨架均保持不決定正式評分、recommendation 或 hard gates。
 - PR #2 已於 2026-07-20 以 merge commit `a5b3bbb` 合併；`feat/planning-run-persistence` 從該同步基準建立。
 - M2.2-lite 已完成 `PlanningRun` 四狀態 contract、SQLite `planning_runs`、schema v1→v2、create/get/update/list repository、application service 與 persisted offline coordinator。
@@ -102,6 +105,7 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Recent Changes
 
+- 2026-07-21: Completed the minimal LangChain + FastAPI offline planning slice. One typed tool combines deterministic opportunity matching and deployment posture evaluation; the API has safe 422／502／500 envelopes and fixed bounded clarification questions.
 - 2026-07-21: Completed M2.3-lite catalog matching and deployment-posture assessment. The fixed nine-entry catalog now has direct deterministic matching, separate non-AI directions, and limited posture guidance; scoring, hard-gate and proposal integration remain deferred.
 
 - 2026-07-20：核准 M2.2-lite scope adjustment，保留原完整 conversation-resume 規劃於 Roadmap，不刪除既有 contracts。
@@ -132,7 +136,7 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 ## Known Problems
 
 - SQLite 目前保存 `AnalysisProject` 與精簡 `PlanningRun`；完整 interview turns、conversation checkpoints、arbitrary resume 與 replay 尚未實作。
-- FastAPI、Streamlit、FAISS、LangChain Agent、Docker 與真實 provider 尚未實作。
+- FastAPI planning endpoint 與 LangChain single Agent 已實作；Streamlit、FAISS、Docker 與真實 provider 仍未實作。API 沒有 production startup composition，因為 chat model 必須由呼叫端明確注入。
 - 真實 chat model 與 embeddings model 的預設選擇留待對應 provider task 確認；M1.1 只提供 fake provider。
 - 部分 hard gate 在真實企業環境中需要法務、資安與領域專家核准，不能只由模型決定。
 - 多語言報告與 PDF 匯出不在 MVP 範圍。
@@ -140,11 +144,10 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Next Steps
 
-1. 下一個精簡任務為 `M2.3-lite Add a common AI implementation pattern catalog`；本輪不執行。
-2. M2.2-lite Draft PR 僅在 CI 成功後等待人工驗收，不在本輪 merge。
-3. 完整 turn/session/checkpoint replay 留在 Roadmap；不得在 M2.2-lite 擴張。
-4. 後續 persistence 必須包在既有 application boundaries 外，不得讓 provider 覆寫 M1.3 分數、gates 或 recommendation。
+1. 等待 M2.4-lite 人工審核；本輪不擴張至 provider、Streamlit 或 proposal integration。
+2. 完整 turn/session/checkpoint replay 留在 Roadmap；不得以此 API slice 擴張。
+3. 後續 persistence 必須包在既有 application boundaries 外，不得讓 provider 覆寫 M1.3 分數、gates 或 recommendation。
 
 ## Handoff Summary
 
-新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M1.4、in-memory offline tracer slice、M2.1 project persistence 與 M2.2-lite planning-run persistence 已完成；下一個核准候選是 M2.3-lite 常見 AI 落地方案目錄，不得提前跳到真實 provider、Agent、FAISS、API 或 UI。
+新工作階段應先閱讀 `AGENTS.md`、本檔與 `docs/spec/`。M2.4-lite 已提供最小、無狀態的 LangChain + FastAPI planning slice；不可把它誤接至 PlanningRun completed、正式評分、hard gates、proposal 或 report。下一步需先等待人工審核，不得提前跳到真實 provider、Streamlit、FAISS 或 UI。

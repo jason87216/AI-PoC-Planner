@@ -36,6 +36,24 @@ def test_cli_without_command_prints_usage(capsys: pytest.CaptureFixture[str]) ->
     assert "usage:" in capsys.readouterr().out
 
 
+def test_planning_demo_runs_offline_with_the_scripted_langchain_model(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+
+    def fail_network(*args: object, **kwargs: object) -> None:
+        raise AssertionError("scripted planning demo must not access the network")
+
+    monkeypatch.setattr("socket.create_connection", fail_network)
+
+    assert main(["planning-demo"]) == 0
+    captured = capsys.readouterr()
+
+    assert "Planning status: ready" in captured.out
+    assert "Opportunity candidates: customer_service_assist" in captured.out
+
+
 def test_module_demo_process_exits_zero(tmp_path: Path) -> None:
     output = tmp_path / "subprocess-demo.md"
 
