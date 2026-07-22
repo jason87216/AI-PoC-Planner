@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import streamlit as st
 
@@ -21,6 +21,7 @@ _DATA_CLASSIFICATIONS = [
     "confidential",
     "highly_confidential",
 ]
+InteractionMode = Literal["new_run", "continue", "loaded"]
 
 
 def answers_from_form_values(
@@ -122,7 +123,7 @@ def _render_sidebar(main_content: Any) -> None:
             else:
                 try:
                     main_content.empty()
-                    _store_response(client.get_run(run_id), loaded=True)
+                    _store_response(client.get_run(run_id), interaction_mode="loaded")
                     st.rerun()
                 except UiApiError as error:
                     _show_api_error(error)
@@ -144,7 +145,7 @@ def _render_create_form(client: StreamlitApiClient, main_content: Any) -> None:
         return
     try:
         main_content.empty()
-        _store_response(client.create_run(request.strip()), loaded=False)
+        _store_response(client.create_run(request.strip()), interaction_mode="new_run")
         st.rerun()
     except UiApiError as error:
         _show_api_error(error)
@@ -216,12 +217,15 @@ def _render_clarification_form(
         st.warning("請完成目前批次的所有問題後再提交。")
         return
     try:
-        main_content.empty()
-        _append_clarification_timeline(questions, answers)
-        _store_response(
-            client.submit_clarifications(str(response["run_id"]), answers),
-            loaded=False,
+        submitted_response = submit_clarifications_and_append_timeline(
+            client,
+            str(response["run_id"]),
+            questions,
+            answers,
+            st.session_state.interaction_timeline,
         )
+        main_content.empty()
+        _store_response(submitted_response, interaction_mode="continue")
         st.session_state.clarification_draft_values = {}
         st.rerun()
     except UiApiError as error:
@@ -347,25 +351,57 @@ def _render_completed_result(response: Mapping[str, Any]) -> None:
         )
 
 
-def _store_response(response: dict[str, Any], *, loaded: bool) -> None:
+def interaction_timeline_for_response(
+    timeline: Sequence[Mapping[str, str]],
+    response: Mapping[str, Any],
+    *,
+    interaction_mode: InteractionMode,
+) -> list[dict[str, str]]:
+    """Return the small session-only interaction summary for a run transition."""
+
+    if interaction_mode == "loaded":
+        return []
+    if interaction_mode == "continue":
+        return [dict(item) for item in timeline]
+
+    original_request = response.get("original_request")
+    if isinstance(original_request, str):
+        return [{"title": "需求", "content": original_request}]
+    return []
+
+
+def _store_response(
+    response: dict[str, Any],
+    *,
+    interaction_mode: InteractionMode,
+) -> None:
     st.session_state.last_api_response = response
     st.session_state.current_run_id = str(response.get("run_id", ""))
-    if loaded:
-        st.session_state.interaction_timeline = []
-    else:
-        original_request = response.get("original_request")
-        if not st.session_state.interaction_timeline and isinstance(
-            original_request, str
-        ):
-            st.session_state.interaction_timeline = [
-                {"title": "需求", "content": original_request}
-            ]
+    st.session_state.interaction_timeline = interaction_timeline_for_response(
+        st.session_state.interaction_timeline,
+        response,
+        interaction_mode=interaction_mode,
+    )
 
 
-def _append_clarification_timeline(
+def submit_clarifications_and_append_timeline(
+    client: Any,
+    run_id: str,
     questions: Sequence[Mapping[str, Any]],
     answers: Mapping[str, Any],
-) -> None:
+    timeline: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Persist answers first, then record their session-only display summary."""
+
+    response = client.submit_clarifications(run_id, answers)
+    timeline.append(_clarification_timeline_entry(questions, answers))
+    return response
+
+
+def _clarification_timeline_entry(
+    questions: Sequence[Mapping[str, Any]],
+    answers: Mapping[str, Any],
+) -> dict[str, str]:
     prompts = {
         question["field"]: question.get("question", question["field"])
         for question in questions
@@ -375,9 +411,7 @@ def _append_clarification_timeline(
         f"{prompts.get(field, field)} → {_summary_value(value)}"
         for field, value in answers.items()
     ]
-    st.session_state.interaction_timeline.append(
-        {"title": "本批補充回答", "content": "\n".join(lines)}
-    )
+    return {"title": "本批補充回答", "content": "\n".join(lines)}
 
 
 def _render_text_items(title: str, values: Any) -> None:
