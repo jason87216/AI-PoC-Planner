@@ -154,6 +154,7 @@ def _render_stage(response: Mapping[str, Any]) -> None:
     label, state = labels.get(status, ("正在建立規劃", "running"))
     with st.status(label, state=state, expanded=False):
         st.write(f"目前 run ID：{response.get('run_id', 'unknown')}")
+    st.caption(f"Run ID：{response.get('run_id', 'unknown')}")
 
 
 def _render_interaction_summary(response: Mapping[str, Any]) -> None:
