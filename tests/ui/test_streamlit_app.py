@@ -44,6 +44,8 @@ def test_streamlit_module_has_a_minimal_render_entry_and_respects_boundaries() -
     assert callable(streamlit_app.main)
     assert not app.exception
     assert app.title[0].value == "AI PoC Planner"
+    assert 'key="run_id_input"' in source
+    assert 'key="current_run_id"' not in source
     assert "ai_poc_planner.persistence" not in source
     assert "ai_poc_planner.application" not in source
     assert "ai_poc_planner.agent" not in source

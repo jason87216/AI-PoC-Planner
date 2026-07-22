@@ -85,6 +85,7 @@ def _initialize_state() -> None:
     defaults: dict[str, Any] = {
         "api_base_url": "http://127.0.0.1:8000",
         "current_run_id": "",
+        "run_id_input": "",
         "planning_request_draft": "",
         "clarification_draft_values": {},
         "last_api_response": None,
@@ -110,10 +111,10 @@ def _render_sidebar() -> None:
             st.success(f"API 狀態：{health_status.get('status', 'unknown')}")
 
         with st.form("load-existing-run"):
-            st.text_input("Run ID", key="current_run_id")
+            st.text_input("Run ID", key="run_id_input")
             load_requested = st.form_submit_button("載入既有 run")
         if load_requested:
-            run_id = st.session_state.current_run_id.strip()
+            run_id = st.session_state.run_id_input.strip()
             if not run_id:
                 st.warning("請先輸入 run ID。")
             else:
