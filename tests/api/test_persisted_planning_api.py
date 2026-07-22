@@ -157,8 +157,9 @@ def test_persisted_flow_handles_two_clarification_batches_and_reloads_result(
         "offline_operation_required": False,
         **_formal_assessment_answers(),
     }
-    assert completed_payload["clarification_answers"] == (
-        completed_payload["known_information"]
+    assert (
+        completed_payload["clarification_answers"]
+        == (completed_payload["known_information"])
     )
 
     connection = sqlite3.connect(tmp_path / "planner.sqlite3")

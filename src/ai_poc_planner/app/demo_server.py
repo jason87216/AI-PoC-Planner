@@ -62,7 +62,9 @@ class ScriptedDemoChatModel(GenericFakeChatModel):
         del stop, run_manager, kwargs
         if isinstance(messages[-1], ToolMessage):
             return ChatResult(
-                generations=[ChatGeneration(message=AIMessage(content="展示工具結果已完成。"))]
+                generations=[
+                    ChatGeneration(message=AIMessage(content="展示工具結果已完成。"))
+                ]
             )
         answers = _clarification_answers(messages)
         intent = (
