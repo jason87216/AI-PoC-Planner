@@ -120,6 +120,7 @@ def _render_sidebar() -> None:
             else:
                 try:
                     _store_response(client.get_run(run_id), loaded=True)
+                    st.rerun()
                 except UiApiError as error:
                     _show_api_error(error)
 
@@ -140,6 +141,7 @@ def _render_create_form(client: StreamlitApiClient) -> None:
         return
     try:
         _store_response(client.create_run(request.strip()), loaded=False)
+        st.rerun()
     except UiApiError as error:
         _show_api_error(error)
 
@@ -215,6 +217,7 @@ def _render_clarification_form(
             loaded=False,
         )
         st.session_state.clarification_draft_values = {}
+        st.rerun()
     except UiApiError as error:
         _show_api_error(error)
 
