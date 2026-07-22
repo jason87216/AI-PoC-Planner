@@ -140,7 +140,6 @@ def _render_create_form(client: StreamlitApiClient) -> None:
         return
     try:
         _store_response(client.create_run(request.strip()), loaded=False)
-        st.session_state.planning_request_draft = ""
     except UiApiError as error:
         _show_api_error(error)
 
