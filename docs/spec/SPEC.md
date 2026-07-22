@@ -651,3 +651,47 @@ LangChain may depend on LangGraph internally, but project source must not import
 `langgraph` or create graphs, nodes, edges, checkpoints, memory persistence or
 multi-agent orchestration. Tests and the offline demo use a scripted official
 LangChain fake chat model; no live provider adapter is part of this slice.
+
+## 28. M2.5 Persisted Planning Flow
+
+The stateless `POST /v1/planning/interpret` endpoint remains available for the
+bounded planning-only demonstration. The persisted flow adds only these
+synchronous endpoints:
+
+- `POST /v1/planning/runs` creates the internal `AnalysisProject` and one
+  `PlanningRun` from a natural-language request plus optional initial JSON
+  business facts.
+- `POST /v1/planning/runs/{run_id}/clarifications` accepts one non-empty batch
+  of JSON clarification answers.
+- `GET /v1/planning/runs/{run_id}` reloads the saved state and final result.
+
+Each create or clarification submission invokes the existing single LangChain
+Agent and accepts only the successful typed planning-tool evaluation. The run
+stores `PlanningIntent.model_dump(mode="json")` in `intent`; a successful
+clarification submission replaces it with the refreshed intent. `known_information`
+and `clarification_answers` contain only user-provided or normalized business
+facts that are safe to pass to the existing offline assessment workflow. They
+must not store an Agent message, prompt, tool trajectory, provider response,
+complete `PlanningEvaluation`, opportunity match or deployment assessment.
+
+When matching or deployment needs clarification, the application persists at
+most four fixed deterministic questions. After answers make planning ready, it
+hands the run to `run_and_persist_offline_planning()`. That existing workflow may
+persist a second bounded clarification batch for formal assessment facts; it
+must not invent missing data, add a round counter, or create another state
+machine. Once sufficient facts exist, the existing assessment, hard-gate,
+proposal and Markdown pipeline completes the run using the current `PlanningRun`
+completed semantics. No SQLite schema change is required.
+
+`GET /v1/planning/runs/{run_id}` reconstructs and validates `PlanningIntent`
+from the saved `intent`, then directly calls `match_opportunities()` and
+`assess_deployment_posture()`. It does not invoke LangChain or a chat model and
+does not write the recomputed matching/deployment outputs back to SQLite. Its
+assessment, proposal and Markdown fields come unchanged from the persisted
+`PlanningRun` record.
+
+The app factory receives the chat model, SQLite database path and deterministic
+assessment provider from its caller. It does not silently configure a fake chat
+model or a live provider runtime. Persistence configuration is unavailable as a
+safe 503; missing runs are 404; invalid run transitions are 409; model/tool
+failures remain safe 502 responses.

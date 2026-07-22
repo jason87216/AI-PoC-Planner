@@ -108,6 +108,8 @@ class PlanningRunService:
         self,
         run_id: UUID,
         answers: dict[str, JSONValue],
+        *,
+        intent: dict[str, JSONValue] | None = None,
     ) -> PlanningRun:
         run = self.load(run_id)
         self._require_status(run, PlanningRunStatus.CLARIFICATION_REQUIRED)
@@ -118,6 +120,7 @@ class PlanningRunService:
         return self._replace(
             run,
             status=PlanningRunStatus.CREATED,
+            intent=intent if intent is not None else run.intent,
             known_information={**run.known_information, **answers},
             missing_information=[],
             clarification_answers={**run.clarification_answers, **answers},

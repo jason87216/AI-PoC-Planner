@@ -136,7 +136,12 @@ exact final assessment／proposal／Markdown payload on `PlanningRun`. SQLite sc
 v2 supports fresh initialization and the single v1→v2 upgrade while preserving
 projects. Full conversation replay remains Roadmap work.
 
-### Phase 3 — Local Case Retrieval
+### Deferred Retrieval Roadmap — Local Case Retrieval
+
+This work no longer blocks the persisted planning-flow demonstration. The fixed
+catalog case references and existing deterministic fixture output remain
+sufficient for the public offline slice; no new case processing is introduced.
+Return here only after the persisted API flow is accepted.
 
 Inputs:
 
