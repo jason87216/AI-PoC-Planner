@@ -65,20 +65,22 @@ def main() -> None:
     )
 
     _render_create_form(client)
-    response = st.session_state.last_api_response
-    if not isinstance(response, dict):
-        st.info("輸入需求後建立規劃，或在側邊欄輸入 run ID 載入既有結果。")
-        return
+    run_content = st.empty()
+    with run_content.container():
+        response = st.session_state.last_api_response
+        if not isinstance(response, dict):
+            st.info("輸入需求後建立規劃，或在側邊欄輸入 run ID 載入既有結果。")
+            return
 
-    _render_stage(response)
-    _render_interaction_summary(response)
-    _render_clarification_form(client, response)
-    _render_planning_information(response)
-    if response.get("status") == "completed":
-        _render_completed_result(response)
+        _render_stage(response)
+        _render_interaction_summary(response)
+        _render_clarification_form(client, response)
+        _render_planning_information(response)
+        if response.get("status") == "completed":
+            _render_completed_result(response)
 
-    with st.expander("結構化 API 結果（技術展示）", expanded=False):
-        st.json(response)
+        with st.expander("結構化 API 結果（技術展示）", expanded=False):
+            st.json(response)
 
 
 def _initialize_state() -> None:
