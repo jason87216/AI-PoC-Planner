@@ -104,6 +104,9 @@ def test_persisted_flow_handles_two_clarification_batches_and_reloads_result(
     assert created.status_code == 201
     first = created.json()
     assert first["status"] == "clarification_required"
+    assert first["original_request"] == "We want to improve work."
+    assert first["known_information"] == {}
+    assert first["clarification_answers"] == {}
     assert first["intent"] == _incomplete_intent().model_dump(mode="json")
     assert len(first["clarifying_questions"]) == 4
 
@@ -147,6 +150,16 @@ def test_persisted_flow_handles_two_clarification_batches_and_reloads_result(
     assert completed_payload["assessment"] is not None
     assert completed_payload["proposal"] is not None
     assert completed_payload["markdown_report"]
+    assert completed_payload["original_request"] == "We want to improve work."
+    assert completed_payload["known_information"] == {
+        "data_classification": "internal",
+        "external_processing_allowed": True,
+        "offline_operation_required": False,
+        **_formal_assessment_answers(),
+    }
+    assert completed_payload["clarification_answers"] == (
+        completed_payload["known_information"]
+    )
 
     connection = sqlite3.connect(tmp_path / "planner.sqlite3")
     try:

@@ -74,6 +74,9 @@ class PlanningRunClarificationRequest(ContractModel):
 class PersistedPlanningRunResponse(ContractModel):
     run_id: UUID
     status: PlanningRunStatus
+    original_request: NonEmptyStr
+    known_information: dict[str, JSONValue]
+    clarification_answers: dict[str, JSONValue]
     intent: PlanningIntent
     opportunity_match: OpportunityMatchResult
     deployment_posture: DeploymentPostureAssessment
@@ -244,6 +247,9 @@ def _persisted_response(
     return PersistedPlanningRunResponse(
         run_id=run.id,
         status=run.status,
+        original_request=run.original_request,
+        known_information=run.known_information,
+        clarification_answers=run.clarification_answers,
         intent=outcome.evaluation.intent,
         opportunity_match=outcome.evaluation.opportunity_match,
         deployment_posture=outcome.evaluation.deployment_posture,
