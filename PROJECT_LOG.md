@@ -2,12 +2,13 @@
 
 ## Current Goal
 
-等待審核 M2.4-lite 最小 LangChain + FastAPI planning slice；不擴張至 live provider、Streamlit 或 proposal integration。
+等待審核 M2.5 persisted planning flow；不擴張至 live provider、Streamlit、FAISS 或新的 proposal integration。
 
 ## Current Status
 
 - M2.4-lite 已完成：單一 LangChain `create_agent` 從自然語言與補答產生 `PlanningIntent`，呼叫唯一 typed planning tool；工具實際組合既有 catalog matching 與 deployment posture service。FastAPI 提供 `GET /health` 與 `POST /v1/planning/interpret`，回傳工具實際結果與最多四題固定繁中追問。
-- 本 slice 不建立或更新 `PlanningRun`，不產生六維 score、recommendation、hard gate、proposal 或 Markdown；FastAPI composition 一律由外部注入 LangChain chat model，沒有 live provider runtime。
+- M2.5 persisted planning flow 已完成：最小 FastAPI run create／clarification／read endpoints 組合 LangChain intent、既有 PlanningRun service/coordinator 與正式 deterministic assessment pipeline。每批最多四題，允許第二批 formal-assessment 追問；schema v2 不變。
+- M2.4 stateless endpoint 不建立或更新 `PlanningRun`，不產生六維 score、recommendation、hard gate、proposal 或 Markdown；M2.5 另以既有 persisted workflow 保存正式結果。FastAPI composition 一律由外部注入 LangChain chat model，沒有 live provider runtime。
 - 自動測試與 `python -m ai_poc_planner planning-demo` 使用 scripted LangChain official fake chat model，僅證明 Agent orchestration 與 typed tool integration，不宣稱自然語言理解品質。
 - M2.3-lite contracts／fixture slice 已從 PR #3、PR #4 合併後的 main 建立；正式 catalog 僅九類，非 AI alternatives 與 deployment contract 骨架均保持不決定正式評分、recommendation 或 hard gates。
 - PR #2 已於 2026-07-20 以 merge commit `a5b3bbb` 合併；`feat/planning-run-persistence` 從該同步基準建立。
@@ -106,6 +107,7 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 ## Recent Changes
 
 - 2026-07-21: Completed the minimal LangChain + FastAPI offline planning slice. One typed tool combines deterministic opportunity matching and deployment posture evaluation; the API has safe 422／502／500 envelopes and fixed bounded clarification questions.
+- 2026-07-21: Completed the persisted FastAPI planning flow. Saved runs retain only validated intent and business facts; matching/deployment reload from intent without LangChain, while completed assessment/proposal/Markdown remain exact persisted values.
 - 2026-07-21: Completed M2.3-lite catalog matching and deployment-posture assessment. The fixed nine-entry catalog now has direct deterministic matching, separate non-AI directions, and limited posture guidance; scoring, hard-gate and proposal integration remain deferred.
 
 - 2026-07-20：核准 M2.2-lite scope adjustment，保留原完整 conversation-resume 規劃於 Roadmap，不刪除既有 contracts。
@@ -144,7 +146,7 @@ tool contracts、測試與文件同步，共涉及 11 個檔案；這是 `AGENTS
 
 ## Next Steps
 
-1. 等待 M2.4-lite 人工審核；本輪不擴張至 provider、Streamlit 或 proposal integration。
+1. 等待 M2.5 persisted planning flow 人工審核；本輪不擴張至 provider、Streamlit、FAISS 或新的 proposal integration。
 2. 完整 turn/session/checkpoint replay 留在 Roadmap；不得以此 API slice 擴張。
 3. 後續 persistence 必須包在既有 application boundaries 外，不得讓 provider 覆寫 M1.3 分數、gates 或 recommendation。
 

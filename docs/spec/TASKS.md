@@ -104,6 +104,16 @@
 - **Estimated scope:** M.
 - **Completion note (2026-07-21):** Completed without PlanningRun integration, a live provider, scoring, hard gates, proposal generation or Markdown export. The API receives an externally injected LangChain chat model; tests and `planning-demo` use a scripted official fake chat model.
 
+### [Must] M2.5 Persist the FastAPI planning flow
+
+- [x] **Purpose:** Connect the existing single-Agent interpretation, deterministic planning tool, durable PlanningRun lifecycle and formal offline assessment pipeline without adding a new workflow engine.
+- **Modification scope:** A small persisted planning application bridge, minimal FastAPI run endpoints, lifecycle service refresh support, API/integration tests and synchronized documentation.
+- **Acceptance:** A run saves the validated PlanningIntent; matching/deployment gaps persist up to four questions; a later answer batch can persist the existing formal-assessment clarification; sufficient facts complete and reload the exact assessment, proposal and Markdown report.
+- **Verification:** `python -m pytest tests/api/test_persisted_planning_api.py tests/api/test_planning_api.py tests/integration/test_planning_run_lifecycle.py`, then the complete offline suite and Ruff checks.
+- **Dependencies:** M2.2-lite, M2.4-lite.
+- **Estimated scope:** M.
+- **Completion note (2026-07-21):** No SQLite schema, scoring, hard-gate, catalog, deployment-rule, proposal or renderer changes. GET reloads matching and deployment directly from the persisted intent without a LangChain invocation.
+
 ### Roadmap History — Full Conversation and Separate Result Repositories
 
 The original M2.2 interview-turn/session replay, arbitrary resume and conversation
@@ -149,9 +159,13 @@ M2.2-lite stores the validated final result on `PlanningRun`.
 - [ ] One normal case and one blocked case pass end to end.
 - [ ] Human reviews the generated Markdown before retrieval work.
 
-## Phase 3 — Local Case Knowledge Base
+## Deferred Retrieval Roadmap — Local Case Knowledge Base
 
-### [Must] M3.1 Add reviewed synthetic case format and fixtures
+These tasks are intentionally deferred until after the persisted planning-flow
+demonstration is accepted. Fixed catalog case references and the existing
+deterministic fixture output are sufficient for the current offline demo.
+
+### [Roadmap] M3.1 Add reviewed synthetic case format and fixtures
 
 - [ ] **Purpose:** Establish public-safe evidence cases without private or copyrighted datasets.
 - **Modification scope:** case schema/loader, 3–5 initial Markdown fixtures, tests.
@@ -160,7 +174,7 @@ M2.2-lite stores the validated final result on `PlanningRun`.
 - **Dependencies:** M1.2.
 - **Estimated scope:** M.
 
-### [Must] M3.2 Build FAISS index with SQLite metadata mapping
+### [Roadmap] M3.2 Build FAISS index with SQLite metadata mapping
 
 - [ ] **Purpose:** Implement local embeddings storage and reliable metadata linkage.
 - **Modification scope:** case metadata repository, FAISS index adapter, reindex service, tests.
@@ -169,7 +183,7 @@ M2.2-lite stores the validated final result on `PlanningRun`.
 - **Dependencies:** M1.4, M3.1.
 - **Estimated scope:** M.
 
-### [Must] M3.3 Integrate similar-case evidence into proposal
+### [Roadmap] M3.3 Integrate similar-case evidence into proposal
 
 - [ ] **Purpose:** Add retrieval to the vertical slice without weakening deterministic gates.
 - **Modification scope:** retrieval tool, Agent/application orchestration, proposal tests.
@@ -192,7 +206,7 @@ M2.2-lite stores the validated final result on `PlanningRun`.
 - **Modification scope:** FastAPI composition/routes, error mapping, API tests.
 - **Acceptance:** Required status codes and Pydantic response models match SPEC; errors have safe envelopes and correlation IDs.
 - **Verification:** `python -m pytest tests/api`.
-- **Dependencies:** M2.5, M3.3.
+- **Dependencies:** M2.5. Retrieval enrichment is optional deferred Roadmap work.
 - **Estimated scope:** M.
 
 ### [Must] M4.2 Build basic Streamlit interview and report UI

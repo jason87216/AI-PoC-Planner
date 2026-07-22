@@ -38,11 +38,11 @@ def run_and_persist_offline_planning(
         )
     project = project_reader.get(run.project_id)
     session_id = uuid5(run.id, "planning-session")
-    answers = {
-        "scenario": "high_value_low_risk",
+    persisted_answers = {
         **run.known_information,
         **run.clarification_answers,
     }
+    answers = {"scenario": "high_value_low_risk", **persisted_answers}
     evidence = EvidenceReference(
         id=uuid5(run.id, "interview-evidence"),
         project_id=run.project_id,
@@ -66,7 +66,7 @@ def run_and_persist_offline_planning(
         return service.require_clarification(
             run.id,
             intent=run.intent,
-            known_information=answers,
+            known_information=persisted_answers,
             questions=list(error.questions[:4]),
         )
     except PlanningError as error:
