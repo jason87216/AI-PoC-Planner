@@ -55,8 +55,6 @@ def markdown_download_payload(markdown_report: str) -> bytes:
 def main() -> None:
     st.set_page_config(page_title="AI PoC Planner 展示", page_icon="🧭", layout="wide")
     _initialize_state()
-    _render_sidebar()
-    client = StreamlitApiClient(st.session_state.api_base_url)
     st.title("AI PoC Planner")
     st.caption("單一 persisted planning run 的本機展示介面")
     st.warning(
@@ -64,9 +62,11 @@ def main() -> None:
         "它不會理解或分析你輸入的自然語言需求。"
     )
 
-    _render_create_form(client)
-    run_content = st.empty()
-    with run_content.container():
+    main_content = st.empty()
+    _render_sidebar(main_content)
+    client = StreamlitApiClient(st.session_state.api_base_url)
+    with main_content.container():
+        _render_create_form(client, main_content)
         response = st.session_state.last_api_response
         if not isinstance(response, dict):
             st.info("輸入需求後建立規劃，或在側邊欄輸入 run ID 載入既有結果。")
@@ -74,7 +74,7 @@ def main() -> None:
 
         _render_stage(response)
         _render_interaction_summary(response)
-        _render_clarification_form(client, response)
+        _render_clarification_form(client, response, main_content)
         _render_planning_information(response)
         if response.get("status") == "completed":
             _render_completed_result(response)
@@ -98,7 +98,7 @@ def _initialize_state() -> None:
         st.session_state.setdefault(key, value)
 
 
-def _render_sidebar() -> None:
+def _render_sidebar(main_content: Any) -> None:
     with st.sidebar:
         st.header("連線與既有 run")
         st.text_input("API base URL", key="api_base_url")
@@ -121,13 +121,14 @@ def _render_sidebar() -> None:
                 st.warning("請先輸入 run ID。")
             else:
                 try:
+                    main_content.empty()
                     _store_response(client.get_run(run_id), loaded=True)
                     st.rerun()
                 except UiApiError as error:
                     _show_api_error(error)
 
 
-def _render_create_form(client: StreamlitApiClient) -> None:
+def _render_create_form(client: StreamlitApiClient, main_content: Any) -> None:
     st.subheader("建立規劃")
     with st.form("create-planning-run"):
         request = st.text_area(
@@ -142,6 +143,7 @@ def _render_create_form(client: StreamlitApiClient) -> None:
         st.warning("請輸入自然語言需求。")
         return
     try:
+        main_content.empty()
         _store_response(client.create_run(request.strip()), loaded=False)
         st.rerun()
     except UiApiError as error:
@@ -184,6 +186,7 @@ def _render_interaction_summary(response: Mapping[str, Any]) -> None:
 def _render_clarification_form(
     client: StreamlitApiClient,
     response: Mapping[str, Any],
+    main_content: Any,
 ) -> None:
     if response.get("status") != "clarification_required":
         return
@@ -213,6 +216,7 @@ def _render_clarification_form(
         st.warning("請完成目前批次的所有問題後再提交。")
         return
     try:
+        main_content.empty()
         _append_clarification_timeline(questions, answers)
         _store_response(
             client.submit_clarifications(str(response["run_id"]), answers),
