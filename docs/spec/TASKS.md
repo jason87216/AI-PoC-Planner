@@ -202,19 +202,19 @@ deterministic fixture output are sufficient for the current offline demo.
 
 ### [Must] M4.1 Expose the vertical slice through FastAPI
 
-- [ ] **Purpose:** Implement the SPEC endpoints over existing application services.
+- [x] **Purpose:** Expose the persisted planning run vertical slice through FastAPI. Completed on 2026-07-22.
 - **Modification scope:** FastAPI composition/routes, error mapping, API tests.
-- **Acceptance:** Required status codes and Pydantic response models match SPEC; errors have safe envelopes and correlation IDs.
+- **Acceptance:** `GET /health`, persisted run create／clarification／read endpoints, safe envelopes and correlation IDs are available. Read responses directly include original request, known information and submitted clarification answers for the UI without a schema or workflow change.
 - **Verification:** `python -m pytest tests/api`.
 - **Dependencies:** M2.5. Retrieval enrichment is optional deferred Roadmap work.
 - **Estimated scope:** M.
 
 ### [Must] M4.2 Build basic Streamlit interview and report UI
 
-- [ ] **Purpose:** Provide the public demo surface for project creation, interview, assessment and report display/export.
-- **Modification scope:** Streamlit entry/client/views, smoke/manual checklist.
-- **Acceptance:** User completes the standard flow; validation errors are visible; reload uses API/SQLite state rather than browser-only state.
-- **Verification:** Streamlit smoke test plus documented manual flow in fake mode.
+- [x] **Purpose:** Provide the public single-page persisted-run demo surface. Completed on 2026-07-22.
+- **Modification scope:** Streamlit entry/client, explicit fake API factory, UI/API tests and documented manual smoke flow.
+- **Acceptance:** User creates a run, submits one or more API-returned clarification batches, sees planning intermediate output and completed assessment/proposal/report, downloads Markdown, and reloads by run ID through FastAPI. UI state is temporary only; no direct SQLite, application or LangChain import exists.
+- **Verification:** `python -m pytest tests/ui tests/api/test_demo_server.py`; manual browser flow in documented fake mode.
 - **Dependencies:** M4.1.
 - **Estimated scope:** M.
 

@@ -2,10 +2,14 @@
 
 ## Current Goal
 
-等待審核 M2.5 persisted planning flow；不擴張至 live provider、Streamlit、FAISS 或新的 proposal integration。
+完成並等待審核 M4.2 單頁 Streamlit fake-mode 展示；不擴張至 live provider、FAISS、Docker 或新的 proposal integration。
 
 ## Current Status
 
+- M4.1／M4.2 已完成：persisted response 直接映射 `original_request`、`known_information` 與 `clarification_answers`；單頁繁中 Streamlit 只透過薄型 HTTP client 呼叫 persisted endpoints，支援建立、分批澄清、planning 摘要、正式結果、Markdown 下載與 run ID 重載。
+- fake API server 使用明確 `uvicorn` factory、existing fake assessment provider 與 Git ignored SQLite database；其 chat model 為無狀態 scripted demo，只根據固定部署欄位是否齊備選擇 incomplete／ready intent，不分析自然語言或宣稱 AI 理解能力。
+- 同一 browser session 的 UI 可顯示只讀需求／問題／回答時間軸；run ID 重載只顯示原始需求與累積資訊摘要，不新增 conversation model、checkpoint 或批次歷史重建。
+- UI 測試限定 HTTP client、答案轉換、Markdown bytes 與 import/render smoke；demo server 以 FastAPI TestClient 驗證完整重複流程，另完成一次人工瀏覽器 E2E smoke。
 - M2.4-lite 已完成：單一 LangChain `create_agent` 從自然語言與補答產生 `PlanningIntent`，呼叫唯一 typed planning tool；工具實際組合既有 catalog matching 與 deployment posture service。FastAPI 提供 `GET /health` 與 `POST /v1/planning/interpret`，回傳工具實際結果與最多四題固定繁中追問。
 - M2.5 persisted planning flow 已完成：最小 FastAPI run create／clarification／read endpoints 組合 LangChain intent、既有 PlanningRun service/coordinator 與正式 deterministic assessment pipeline。每批最多四題，允許第二批 formal-assessment 追問；schema v2 不變。
 - M2.4 stateless endpoint 不建立或更新 `PlanningRun`，不產生六維 score、recommendation、hard gate、proposal 或 Markdown；M2.5 另以既有 persisted workflow 保存正式結果。FastAPI composition 一律由外部注入 LangChain chat model，沒有 live provider runtime。
@@ -13,7 +17,7 @@
 - M2.3-lite contracts／fixture slice 已從 PR #3、PR #4 合併後的 main 建立；正式 catalog 僅九類，非 AI alternatives 與 deployment contract 骨架均保持不決定正式評分、recommendation 或 hard gates。
 - PR #2 已於 2026-07-20 以 merge commit `a5b3bbb` 合併；`feat/planning-run-persistence` 從該同步基準建立。
 - M2.2-lite 已完成 `PlanningRun` 四狀態 contract、SQLite `planning_runs`、schema v1→v2、create/get/update/list repository、application service 與 persisted offline coordinator。
-- 模糊需求會保存四個追問；補充一批答案後可完成並重新讀取同一份 assessment、proposal 與 Markdown。完整 suite 為 311 passed，Ruff 與 in-memory demo 通過。
+- 模糊需求會保存每批最多四個追問；補答後可持續依 API 的目前批次前進，並重新讀取同一份 assessment、proposal 與 Markdown。M2.5 完成時完整 suite 為 311 passed，Ruff 與 in-memory demo 通過。
 - M2.2-lite scope adjustment 已核准：展示版先完成需求→追問→正式結果→保存／重讀閉環；完整 interview turns、arbitrary resume、conversation checkpoints、Agent-state history 與 session replay 移至 Roadmap。
 - 下一個精簡任務是 common AI implementation pattern catalog；本輪不執行。
 - M2.1 建立的 project schema 已由 M2.2-lite 升級至 `PRAGMA user_version = 2`；v1 database 可保留 projects 並新增 planning runs。

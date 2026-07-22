@@ -111,6 +111,31 @@ Agent messages、prompt、tool trajectory、provider response 或完整 planning
 目前仍沒有 live provider runtime；測試使用明確注入的 scripted chat model 與既有 fake
 assessment provider，僅展示 orchestration，不代表實際模型理解品質。
 
+### Streamlit fake-mode 展示
+
+先在一個 PowerShell 視窗啟動明確的本機 fake API；它只使用 Git ignored 的
+`artifacts/streamlit-demo.sqlite3`：
+
+```powershell
+python -m uvicorn ai_poc_planner.app.demo_server:create_demo_app --factory --host 127.0.0.1 --port 8000
+```
+
+再在另一個視窗啟動單頁 Streamlit UI：
+
+```powershell
+python -m streamlit run src/ai_poc_planner/ui/streamlit_app.py
+```
+
+UI 只透過 HTTP 呼叫 `GET /health`、`POST /v1/planning/runs`、
+`POST /v1/planning/runs/{run_id}/clarifications` 與 `GET /v1/planning/runs/{run_id}`；
+它不讀寫 SQLite、不 import application service 或 LangChain，也不重算 matching、
+deployment、assessment 或 hard gates。側邊欄可用 run ID 重載正式狀態；同一次瀏覽器
+session 會以只讀時間軸顯示需求與提交過的回答，重載後則只顯示原始需求與累積業務資訊摘要。
+
+這個 fake server 的 chat model 是無狀態 scripted demo：它只檢查補答是否已包含三個
+固定展示部署欄位，並回傳固定 incomplete／ready intent；它**不分析自然語言，也不代表
+真實 AI 理解品質**。不要將展示輸出視為實際需求分析結果。
+
 ### SQLite project and planning-run persistence（M2.1／M2.2-lite）
 
 目前 persistence layer 可保存 `AnalysisProject`，以及一次需求→追問→補充答案→
@@ -153,11 +178,11 @@ framework。測試使用 temporary SQLite files，repository 不會被 offline d
 案例查找目前只是三筆 Python synthetic fixtures 的 deterministic filter，固定
 similarity 僅供流程展示；它不是 embeddings、semantic search 或 FAISS。
 
-目前限制：訪談資料與案例均為固定 fixture；PlanningRun 只支援一批追問答案後
-繼續執行，不提供完整 interview turns、conversation checkpoints、arbitrary resume
-或 session replay。FastAPI planning endpoint 與 LangChain 單一 Agent 已實作，但沒有
-live chat-model provider runtime；Streamlit、FAISS、Docker、production security 與
-production deployment 仍未實作，因此目前沒有 production API 或 UI 啟動命令。
+目前限制：訪談資料與案例均為固定 fixture；PlanningRun 只支援依目前問題批次逐步補答，
+不提供完整 interview turns、conversation checkpoints、arbitrary resume
+或 session replay。FastAPI persisted endpoints 與單頁 Streamlit fake-mode UI 已實作，
+但仍沒有 live chat-model provider runtime、FAISS、Docker、production security 或
+production deployment。
 
 ## 安全與隱私
 

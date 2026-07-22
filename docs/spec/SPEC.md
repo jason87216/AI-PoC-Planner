@@ -695,3 +695,34 @@ assessment provider from its caller. It does not silently configure a fake chat
 model or a live provider runtime. Persistence configuration is unavailable as a
 safe 503; missing runs are 404; invalid run transitions are 409; model/tool
 failures remain safe 502 responses.
+
+For the public UI, `PersistedPlanningRunResponse` also returns the existing
+`PlanningRun.original_request`, `known_information` and `clarification_answers`
+fields. They are direct response mappings only: no SQLite schema, repository or
+workflow change is allowed. A same-browser-session UI may show its submitted
+questions and answer batches as temporary read-only presentation data. Reload by
+run ID may show only the original request plus accumulated business information;
+it must not claim to reconstruct complete batch order or conversation history.
+
+## 29. M4.2 Single-page Streamlit Demo UI
+
+The Streamlit UI is one Traditional-Chinese page and calls FastAPI exclusively
+through a small HTTP client with explicit timeout and no automatic retry. It may
+store only API base URL, current run ID, temporary form/timeline display data and
+the most recent API response in session state; SQLite is the durable source of
+truth. It must not import persistence, application workflows or LangChain, and
+must not re-evaluate matching, deployment, scores or hard gates.
+
+The page provides a natural-language request form, a current-batch clarification
+form based on the API-returned fields, planning intermediate summaries, completed
+assessment/proposal/report display, a Markdown download and a sidebar health and
+run-ID reload control. Raw JSON appears only in a collapsed
+`結構化 API 結果（技術展示）` expander. No multi-page navigation, project/run list,
+free-chat, JavaScript component, history management, edit or delete capability is
+part of this milestone.
+
+Fake mode is an explicit local `uvicorn` factory. Its chat model is stateless and
+scripted: it selects fixed incomplete or ready intents only from the presence of
+the three fixed demo deployment-answer fields. It does not analyse natural
+language, does not use a finite message iterator and does not add another
+workflow state machine. It is labelled as a demo rather than AI understanding.

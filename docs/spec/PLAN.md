@@ -172,10 +172,12 @@ Inputs:
 
 Work:
 
-- Complete API endpoints and safe error envelopes.
-- Build basic Streamlit project/interview/proposal/report screens.
-- Ensure Streamlit session is not the durable source of truth.
-- Add manual accessibility and error-flow checks.
+- Complete persisted API endpoints and safe error envelopes.
+- Build one Streamlit persisted-run page with HTTP-only client, clarification,
+  intermediate planning output, completed proposal/report and run-ID reload.
+- Provide an explicit, stateless scripted fake API factory for local browser demo.
+- Ensure Streamlit session is not the durable source of truth; manually check
+  keyboard flow, safe errors and browser rendering.
 
 Outputs:
 
