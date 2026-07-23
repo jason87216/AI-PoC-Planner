@@ -6,6 +6,8 @@ from ai_poc_planner.providers.base import (
     ModelProvider,
     PreparationStatus,
     ProviderCapabilities,
+    ProviderConnectionMessage,
+    ProviderConnectionState,
     ProviderError,
     ProviderPreparation,
     ProviderRequest,
@@ -15,6 +17,17 @@ from ai_poc_planner.providers.fake import (
     FakeModelProvider,
     FakeProviderError,
 )
+from ai_poc_planner.providers.openai_compatible import (
+    OpenAIChatCompletionRequest,
+    OpenAIChatMessage,
+    OpenAICompatibleChatAdapter,
+    OpenAICompatibleProviderError,
+)
+from ai_poc_planner.providers.profiles import (
+    ModelProfile,
+    ModelProfilePublic,
+    ProviderConnectionStatus,
+)
 
 __all__ = [
     "AssessmentToolInputs",
@@ -22,7 +35,16 @@ __all__ = [
     "FakeEmbeddingProvider",
     "FakeModelProvider",
     "FakeProviderError",
+    "ModelProfile",
+    "ModelProfilePublic",
     "ModelProvider",
+    "OpenAIChatCompletionRequest",
+    "OpenAIChatMessage",
+    "OpenAICompatibleChatAdapter",
+    "OpenAICompatibleProviderError",
+    "ProviderConnectionMessage",
+    "ProviderConnectionState",
+    "ProviderConnectionStatus",
     "PreparationStatus",
     "ProviderCapabilities",
     "ProviderError",

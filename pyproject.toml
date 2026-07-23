@@ -12,6 +12,7 @@ license = "MIT"
 authors = [{ name = "AI PoC Planner contributors" }]
 dependencies = [
     "fastapi>=0.115,<1",
+    "httpx>=0.28,<1",
     "langchain>=1.2,<2",
     "pydantic>=2.10,<3",
     "uvicorn>=0.30,<1",
@@ -19,7 +20,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "httpx>=0.28,<1",
     "pytest>=8,<10",
     "ruff>=0.9,<1",
 ]
@@ -30,6 +30,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "llama_cpp: opt-in validation against a user-started llama.cpp server",
+]
 
 [tool.ruff]
 target-version = "py312"

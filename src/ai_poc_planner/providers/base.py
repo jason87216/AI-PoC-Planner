@@ -36,6 +36,22 @@ class PreparationStatus(StrEnum):
     CLARIFICATION_REQUIRED = "clarification_required"
 
 
+class ProviderConnectionState(StrEnum):
+    UNTESTED = "untested"
+    TESTING = "testing"
+    CONNECTED = "connected"
+    FAILED = "failed"
+    DISABLED = "disabled"
+
+
+class ProviderConnectionMessage(StrEnum):
+    UNTESTED = "Connection has not been tested."
+    TESTING = "Connection test is in progress."
+    CONNECTED = "Connection succeeded."
+    FAILED = "Connection test failed. Check the profile settings and try again."
+    DISABLED = "This model profile is disabled."
+
+
 class ProviderCapabilities(ContractModel):
     structured_output: bool
     tool_calling: bool

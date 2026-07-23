@@ -2,8 +2,7 @@
 
 ## Current goal
 
-Complete a documentation-only viable-MVP specification reset. No code
-implementation is authorised until this package passes human review.
+Complete Phase 1 PR review after successful real-provider UAT; do not begin Phase 2.
 
 ## Current status
 
@@ -14,8 +13,16 @@ implementation is authorised until this package passes human review.
   success.
 - The replacement direction is a local-first tool using a real
   OpenAI-compatible provider, first targeting a user-started llama.cpp server.
-- This branch changes only documentation. Real model, UI, persistence, report,
-  launcher, and database implementation remain unauthorised.
+- `feat/model-profile-contracts` now contains Phase 1 only: P1.1 contracts,
+  local JSON profiles, OpenAI-compatible adapter, status/readiness API, and an
+  opt-in llama.cpp test. It does not start Phase 2 conversation/version/fact
+  work, rebuild Streamlit UI, or connect the old planning prototype to a fake
+  runtime fallback.
+- Real llama.cpp UAT passed using `D:\ai_class\tools\llama-cpp\bin\llama-server.exe`
+  with `Qwen3-8B-Q4_K_M.gguf`, bound only to `127.0.0.1` with an empty API key.
+  The integration test plus profile CRUD, selection, connection test, readiness,
+  invalidation, and fresh-process status reset all passed; there was no fake
+  runtime fallback and no Phase 1 code bug.
 
 ## UAT findings recorded from PR #8
 
@@ -63,9 +70,8 @@ implementation is authorised until this package passes human review.
 
 - PR #8 is retained as a technical prototype/experiment record and is not a
   release candidate.
-- The user has authorised only this documentation review, commit, push, and a
-  Draft PR against `main`; no code work begins until the Draft PR passes human
-  review.
+- Phase 1 real UAT has passed on `feat/model-profile-contracts`; keep PR #11 at
+  the review gate and do not begin Phase 2 or later work.
 
 ## Known open questions for later code design
 
