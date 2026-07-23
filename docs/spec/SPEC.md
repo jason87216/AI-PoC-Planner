@@ -1,697 +1,218 @@
-# Spec: AI PoC Planner
-
-## 1. Status and Assumptions
-
-- Status: version 1 implementation baseline, approved by the user on 2026-07-19.
-- Product form: local web application with FastAPI API and Streamlit UI.
-- Primary language: Traditional Chinese; schema field names and code identifiers use English.
-- Runtime/package manager: Python 3.12 with standard `pip` commands; `pyproject.toml` is the sole package configuration source.
-- Model access: an internal provider adapter, with OpenAI-compatible API as the default integration shape.
-- Persistence: SQLite for business data and FAISS for case embeddings.
-- Authentication, multi-tenancy and cloud deployment are outside MVP.
-- Legal and compliance results are planning warnings, not legal advice.
-
-### 1.1 Demonstration Scope Adjustment — M2.2-lite
-
-Approved on 2026-07-20: the public demonstration uses one durable `PlanningRun`
-instead of making complete conversation replay a release blocker. The reason is:
-
-> 展示版优先完成自然语言需求、追问、正式评估、结果保存、FastAPI 与 Streamlit 的完整闭环，暂缓完整 conversation resume。
-
-The demonstration persists the original request, structured intent, known and
-missing information, current clarification questions, submitted answers and the
-final assessment／proposal／Markdown result. Full `InterviewTurn` persistence,
-arbitrary resume, conversation checkpoints, Agent-state history and complete
-session replay remain documented contracts for the Roadmap; they are not deleted
-and do not block the demonstration baseline.
-
-## 2. Objective
-
-Build a public, testable AI engineering portfolio project that converts an ambiguous business request into a structured, evidence-supported AI PoC proposal. The system must interview the user, preserve state, identify missing information, retrieve local cases, run deterministic assessments, apply hard gates, return a validated proposal and export Markdown.
-
-Success means a reviewer can run the fake-model path locally and reproduce the vertical slice:
-
-`建立專案 → 完成訪談 → 執行評估 → 產生並匯出報告`
-
-## 3. Goals and Non-goals
-
-### Goals
-
-- One standard structured interview that gathers business, data, technical, governance, ROI and KPI inputs.
-- One LangChain Agent that selects among bounded, local assessment tools.
-- Durable planning-run state and final result history in SQLite.
-- Similar-case retrieval from a local FAISS index with metadata in SQLite.
-- Deterministic weighted scoring and risk hard gates.
-- Pydantic-validated PoC proposal and Markdown export.
-- FastAPI and Streamlit interfaces over the same application services.
-- Fully offline, deterministic tests through a fake model.
-
-### Non-goals
-
-- Multiple agents or autonomous agent teams.
-- Executing actions in real enterprise systems.
-- Generic chatbot behavior outside the interview flow.
-- Complex authentication or authorization.
-- Multi-tenant SaaS.
-- PostgreSQL, pgvector, Qdrant or cloud vector databases.
-- Cloud deployment.
-- Automated financial, employment, medical, legal or credit decisions.
-- Claiming legal compliance or replacing professional review.
-
-## 4. User Roles
-
-| Role | Need | MVP capability |
-|---|---|---|
-| AI／Solution Engineer | Convert business context into a bounded technical PoC | Interview, case retrieval, architecture and scope proposal |
-| AI consultant | Produce a consistent, explainable first-pass assessment | Scoring rationale, hard gates, Markdown report |
-| Digital transformation／technical PM | Clarify owner, KPI, ROI, data and delivery constraints | Structured interview and missing-information follow-up |
-| Reviewer／portfolio evaluator | Verify engineering quality without a paid model account | Fake-model vertical slice, pytest and documented contracts |
-
-## 5. User Stories
-
-- As a planner, I can create an analysis project with a title and initial problem statement.
-- As a planner, I can answer a standard interview over multiple turns without losing prior answers.
-- As a planner, I am asked only for information that is still missing or contradictory.
-- As a planner, I can see which similar cases support the recommendation.
-- As a planner, I receive separate results for data readiness, technical fit, architecture control, governance, ROI/KPI and adoption.
-- As a reviewer, I can see hard-gate results independently from the weighted score.
-- As a reviewer, I can reproduce why each score and recommendation was produced.
-- As a planner, I can export the final proposal as Markdown.
-- As a developer, I can test the complete flow with a deterministic fake model and no network.
-
-## 6. Product Flow
-
-1. Create an AI adoption analysis project.
-2. Create a planning run and persist the original natural-language request.
-3. Persist structured intent, known information, missing information and current clarification questions.
-4. Accept one clarification-answer batch and persist it before rerunning model／tool processing.
-5. Search the local case knowledge base.
-6. Evaluate data readiness, technical feasibility, risk, ROI and KPI quality.
-7. Apply risk hard gates before interpreting weighted scores.
-8. Produce a Pydantic-validated PoC proposal and deterministic Markdown report.
-9. Persist and reload the exact assessment, proposal and Markdown result by run ID.
-
-## 7. Functional Requirements
-
-| ID | Requirement | Acceptance signal |
-|---|---|---|
-| FR-01 | Create and read an analysis project | Project has stable UUID, timestamps and status |
-| FR-02 | Create and read a planning run | Run references exactly one project and preserves the original request |
-| FR-03 | Persist clarification and final results | Reloading from SQLite returns the saved questions, answers and exact completed result |
-| FR-04 | Detect gaps and contradictions | Result lists missing fields and follow-up questions with reasons |
-| FR-05 | Limit follow-up questions | A turn returns at most five questions |
-| FR-06 | Retrieve similar local cases | Results include case ID, title, score and source reference |
-| FR-07 | Run six deterministic assessment tools/services | Same input produces the same non-model scores and gates |
-| FR-08 | Apply hard gates first | Gate result cannot be overridden by weighted score |
-| FR-09 | Calculate six-dimension weighted score | Weights total 100 and inputs are integers 1–5 |
-| FR-10 | Produce structured proposal | Output passes `PocProposal` validation |
-| FR-11 | Export Markdown | Export includes input summary, evidence, scores, gates, proposal and next actions |
-| FR-12 | Provide fake-model mode | Complete vertical slice runs without network or API key |
-| FR-13 | Keep an audit trail | Assessment records include rule version, case IDs and rationale |
-
-## 8. Non-functional Requirements
-
-- NFR-01 Reproducibility: fake-model tests must not access the network.
-- NFR-02 Determinism: scoring, hard gates, ROI math and report section ordering are deterministic.
-- NFR-03 Validation: every external boundary uses Pydantic validation.
-- NFR-04 Explainability: every score, gate and recommendation stores machine-readable rationale.
-- NFR-05 Privacy: raw interview data, databases, FAISS indexes and traces are ignored by Git.
-- NFR-06 Provider portability: domain, repository and scoring modules import no provider-specific SDK.
-- NFR-07 Local-first: MVP runs with SQLite and FAISS without an external database service.
-- NFR-08 Testability: tool and application services are injectable and replaceable with fakes.
-- NFR-09 Accessibility: Streamlit forms use clear labels, error summaries and keyboard-operable controls.
-- NFR-10 Observability: logs contain correlation IDs but exclude secrets and raw sensitive answers by default.
-
-## 9. Core Data Model
-
-| Entity | Required fields | Notes |
-|---|---|---|
-| `AnalysisProject` | `id`, `title`, `problem_statement`, `status`, `created_at`, `updated_at` | Root aggregate |
-| `PlanningRun` | `id`, `project_id`, `status`, `original_request`, `intent`, `known_information`, `missing_information`, `clarifying_questions`, `clarification_answers`, `assessment`, `proposal`, `markdown_report`, error fields and timestamps | Demonstration persistence aggregate; saves one clarification-to-result lifecycle |
-| `InterviewSession` | `id`, `project_id`, `status`, `current_stage`, `state_version`, timestamps | Roadmap contract for full conversation resume |
-| `InterviewTurn` | `id`, `session_id`, `sequence`, `role`, `content`, `normalized_answers`, timestamp | Roadmap contract; raw content is local sensitive data |
-| `ConversationStateSnapshot` | `session_id`, `version`, `known_fields`, `missing_fields`, `contradictions`, timestamp | Roadmap contract for append-oriented replay |
-| `CaseMetadata` | `id`, `title`, `industry`, `problem`, `fit_conditions`, `non_fit_conditions`, `pattern`, `risk_flags`, `kpis`, `human_review`, `source_path`, `content_hash`, timestamps | Stored in SQLite; vector ID maps to FAISS |
-| `Assessment` | `schema_version`, `id`, `project_id`, `session_id`, `rule_version`, `scores`, `weighted_score`, `hard_gates`, `gate_disposition`, `recommendation`, case/evidence refs, `rationale`, timestamp | Immutable deterministic engine result |
-| `PocProposalRecord` | `id`, `project_id`, `assessment_id`, `schema_version`, `payload`, timestamp | Payload must validate before storage |
-| `ReportExport` | `id`, `project_id`, `proposal_id`, `format`, `content_hash`, `local_path`, timestamp | MVP format is Markdown only |
-
-All IDs are UUID strings. Timestamps are timezone-aware UTC values. SQLite migrations and exact SQL schema are implementation decisions within the contracts above.
-
-`PlanningRun.status` is exactly `created`, `clarification_required`, `completed`
-or `failed`. Structural invariants are enforced by Pydantic:
-
-- `created` has no formal assessment／proposal／report or completion timestamp.
-- `clarification_required` has one to four typed questions and no formal result.
-- `completed` has an `Assessment`, `PocProposal`, non-empty Markdown report and `completed_at`.
-- `failed` has a stable non-empty error code and safe message, with no formal result.
-- Non-completed runs cannot carry a complete result; created and clarification-required runs cannot carry `completed_at`.
-- Completed assessment ownership must match the planning run project.
-
-Structured fields contain JSON-compatible values only. SQLite may store the
-structured fields as JSON `TEXT`, but every row is reconstructed through the
-normative Pydantic contracts. Pickle and live provider／callback objects are
-forbidden. Schema version 2 adds `planning_runs`; a version 1 database upgrades to
-version 2 without changing or deleting `analysis_projects`.
-
-## 10. Pydantic Schema Contracts
-
-These names and fields are normative. The snippet is documentation, not application code.
-
-```python
-from typing import Literal
-from pydantic import BaseModel, Field
-
-
-Recommendation = Literal["建議進行", "條件式建議", "暫不建議"]
-GateDisposition = Literal["pass", "requires_controls", "assistive_only", "blocked"]
-
-
-class ClarifyingQuestion(BaseModel):
-    field: str
-    question: str
-    reason: str
-    priority: int = Field(ge=1, le=5)
-
-
-class ScoreDimensionResult(BaseModel):
-    dimension: Literal[
-        "business_value",
-        "data_readiness",
-        "technical_fit",
-        "architecture_controllability",
-        "governance_readiness",
-        "user_adoption",
-    ]
-    rating: int = Field(ge=1, le=5)
-    weight: int
-    weighted_points: float = Field(ge=0, le=100)
-    rationale: str
-    evidence_refs: list[str]
-
-
-class HardGateResult(BaseModel):
-    rule_id: str
-    disposition: GateDisposition
-    reason: str
-    required_controls: list[str]
-    human_review_required: bool
-    evidence_refs: list[str]
-
-
-class SimilarCase(BaseModel):
-    case_id: str
-    title: str
-    similarity: float = Field(ge=0, le=1)
-    fit_summary: str
-    source_ref: str
-
-
-class ArchitectureOption(BaseModel):
-    name: str
-    summary: str
-    deployment: Literal["local", "private-cloud", "on-prem"]
-    components: list[str]
-    assumptions: list[str]
-
-
-class PocProposal(BaseModel):
-    schema_version: Literal["1.0"]
-    executive_summary: str | None = None
-    recommendation: Recommendation
-    gate_disposition: GateDisposition
-    problem_statement: str
-    suggested_use_case_boundary: str | None = None
-    target_users: list[str]
-    current_workflow_summary: str
-    known_information: dict[str, str | int | float | bool | list[str] | None]
-    missing_information: list[str]
-    clarifying_questions: list[ClarifyingQuestion]
-    similar_cases: list[SimilarCase]
-    scores: list[ScoreDimensionResult]
-    weighted_score: int = Field(ge=0, le=100)
-    hard_gates: list[HardGateResult]
-    architecture_options: list[ArchitectureOption]
-    required_data: list[str]
-    integrations: list[str]
-    risks: list[str]
-    human_review_points: list[str]
-    roi_assumptions: list[str]
-    success_metrics: list[str]
-    estimated_weeks: int = Field(ge=1)
-    estimated_team: list[str]
-    in_scope: list[str] = []
-    out_of_scope: list[str] = []
-    poc_milestones: list[str] = []
-    scope_assumptions: list[str] = []
-    evidence_refs: list[str] = []
-    next_actions: list[str]
-```
-
-Contract and engine invariants:
-
-- Pydantic: `scores` contains each of the six dimensions exactly once.
-- Pydantic: stored weights equal the normative weight table and total 100.
-- M1.3 engine: `weighted_score` equals the deterministic recomputation from `scores`.
-- M1.3 engine: `blocked` forces recommendation `暫不建議`.
-- M1.3 engine: `assistive_only` or unsatisfied `requires_controls` caps recommendation at `條件式建議`.
-- Pydantic: an `assistive_only` declared result requires at least one `human_review_point`.
-
-M1.2 validation responsibility is structural: required fields, types, enums,
-non-empty values, IDs, UTC timestamps, uniqueness, schema versions, six-dimension
-completeness, normative stored weights and impossible declared-field combinations.
-M1.3 owns the calculation of `weighted_points`／`weighted_score`, hard-gate rule
-evaluation and precedence, score thresholds and the recommendation decision. The
-contracts type-check M1.3 outputs; M1.3 engine tests validate business outcomes.
-
-M1.3 adds an optional, backward-compatible formal-evaluation surface to
-`AssessmentInput`: caller-supplied `assessment_id`, `evaluated_at`, typed
-`AssessmentFacts`, and typed `AssessmentToolOutputs`. Workflow code may still use a
-partial `AssessmentInput`, but `assess_project` rejects it until these four fields
-are present. `AssessmentFacts` contains explicit Boolean, enum and bounded-count
-signals for the six approved rubrics and gates; the engine never infers decisions
-from free text. The tool bundle contains all six M1.2 output contracts, and any
-missing or error-envelope output prevents formal evaluation.
-
-Every score and gate evidence reference must resolve to the input evidence registry.
-`EvidenceReference` may carry explicit `project_id` and `session_id` ownership; when
-those optional fields are absent, ownership comes from the enclosing
-`AssessmentInput`. Duplicate facts supplied through tool outputs and
-`AssessmentFacts` must agree or formal evaluation fails with a stable error code.
-
-## 11. Agent State Schema
-
-The M1.2 `AgentState` is a framework-neutral Pydantic model. A future Agent adapter
-may map or extend it with LangChain state types, while SQLite remains the durable
-source of truth.
-
-For the M2.2-lite demonstration, `PlanningRun` is the durable boundary and
-`AgentState` is not persisted. Full Agent-state history, turn replay and arbitrary
-conversation resume are Roadmap work; the contracts below remain available for
-that future implementation.
-
-| Field | Type | Meaning |
-|---|---|---|
-| `schema_version` | version string | Serializable state contract version |
-| `project_id` | `str` | Current aggregate |
-| `session_id` | `str` | Current interview session |
-| `session_project_id` | `str` | Standalone consistency reference; must equal `project_id` |
-| `workflow_stage` | project-status enum | Project lifecycle stage independent from interview section |
-| `interview_stage` | enum | `context`, `data`, `value`, `governance`, `review`, `complete` |
-| `known_fields` | `dict[str, JSONValue]` | Normalized accepted answers |
-| `missing_fields` | `list[str]` | Required information gaps |
-| `contradictions` | `list[str]` | Conflicts requiring clarification |
-| `questions_asked` | `list[str]` | Prevent duplicate follow-ups |
-| `clarifying_questions` | `list[ClarifyingQuestion]` | Current typed follow-ups |
-| `similar_case_ids` | `list[str]` | Retrieved evidence |
-| `evidence_refs` | `list[UUID]` | Typed references to accepted evidence records |
-| `tool_results` | `dict[str, JSONValue]` | Validated tool outputs |
-| `hard_gate_disposition` | enum or null | Strongest gate seen |
-| `assessment_id` | UUID or null | Required at assessed and later stages |
-| `proposal_id` | UUID or null | Required at proposal-generated and completed stages |
-| `proposal` | `PocProposal` or null | Final structured response |
-
-State transitions must persist the accepted user turn before model/tool processing and persist the resulting normalized snapshot after processing. A failed model call must not erase the accepted turn.
-
-## 12. Tool Interfaces
-
-M1.4 defines a framework-neutral provider boundary. A model provider accepts a
-typed `ProviderRequest` and returns a `ProviderPreparation` whose status is either
-`ready` or `clarification_required`. A ready result contains `AssessmentFacts` and
-all six typed tool inputs; a clarification result contains one to five typed
-questions and no assessment payload. Providers never return formal scores,
-weighted totals, hard-gate disposition, recommendation or evidence records. They
-may only reference evidence supplied by the enclosing application request.
-
-The minimal capability contract exposes structured-output, tool-calling and
-streaming flags plus a model identifier. An independent `EmbeddingProvider`
-protocol accepts a sequence of strings and returns typed vectors. M1.4 provides
-deterministic offline fakes for both protocols; no SDK, registry or live endpoint
-is introduced.
-
-| Tool | Input contract | Output contract | Deterministic boundary |
-|---|---|---|---|
-| `retrieve_similar_cases` | `RetrieveSimilarCasesInput` | `RetrieveSimilarCasesOutput` containing cases and evidence refs | Embedding query may vary by provider; filtering and output schema are deterministic |
-| `assess_data_readiness` | `AssessDataReadinessInput` | `AssessDataReadinessOutput` containing data-readiness result, gaps and prerequisites | Rules first; no free-form model score |
-| `assess_technical_fit_and_architecture` | `AssessTechnicalFitAndArchitectureInput` | `AssessTechnicalFitAndArchitectureOutput` containing two scores and options | Must recommend simpler non-Agent pattern when sufficient |
-| `evaluate_risk_and_hard_gates` | `EvaluateRiskAndHardGatesInput` | `EvaluateRiskAndHardGatesOutput` containing governance-readiness score, declared gates and aggregate disposition | M1.3 implements deterministic versioned rules |
-| `assess_business_value_roi_and_kpis` | `AssessBusinessValueRoiAndKpisInput` | `AssessBusinessValueRoiAndKpisOutput` containing two scores, ROI assumptions and KPI proposals | M1.3 implements arithmetic and rubric; unknown values remain assumptions |
-| `estimate_poc_scope` | `EstimatePocScopeInput` | `EstimatePocScopeOutput` containing weeks, roles, complexity points and assumptions | M1.3 implements versioned point mapping |
-
-Weighted score calculation and Markdown rendering are domain/application services, not model-selected tools.
-All twelve M1.2 tool contracts include `schema_version`, `correlation_id`,
-`project_id` and `session_id`; they are framework-neutral Pydantic models and do
-not execute tools. Each output is an exclusive success-or-error envelope: a success
-requires its complete typed payload, while a failure carries `ToolError` without
-fabricated success fields. `ToolError` contains a stable code, safe message,
-retryability flag and JSON-only details.
-
-The offline vertical-slice batch supplies framework-neutral implementations for
-all six interfaces. Case retrieval is a transparent, version-controlled fixture
-filter with fixed similarity values and `fixture:` source references; it is not
-semantic search. The other services may calculate their individual typed output
-fields from `AssessmentFacts`, but only `assess_project` recomputes the authoritative
-six scores, weighted total, gate precedence and recommendation.
-Before execution, the application validates duplicated facts against their formal
-tool-input fields (data access/digitization/sample, integration count, risk domain,
-impact, data flags, boundary, human review, authorization and scope signals).
-Contradictory provider output fails explicitly rather than producing mixed results.
-
-## 13. Case Knowledge Base Format
-
-Each case is a reviewed UTF-8 Markdown file with YAML front matter:
-
-```yaml
-id: contract-review-assistant
-title: 合約條款輔助審查
-industry: [legal, professional-services]
-problem: 大量 PDF 合約需要先標示可能的高風險條款
-data_inputs: [pdf, scanned-pdf]
-fit_conditions: [human-review-available, clause-policy-exists]
-non_fit_conditions: [fully-automated-approval]
-recommended_pattern: ocr-rag-rules-human-review
-risk_flags: [confidential-data, legal-impact]
-kpis: [review-time, risk-clause-recall, reviewer-override-rate]
-human_review: required
-source_urls: []
-review_status: approved
-```
-
-The Markdown body explains context, workflow, fit/non-fit rationale, architecture pattern, risks and evaluation notes. Only `review_status: approved` cases enter the FAISS index. The SQLite row stores the content hash and FAISS vector IDs so stale indexes can be detected.
-
-## 14. Scoring Framework — Single Source of Truth
-
-| Dimension | Weight |
-|---|---:|
-| Business value／ROI clarity | 25% |
-| Data readiness | 20% |
-| Technical fit | 15% |
-| Architecture controllability | 15% |
-| Governance and privacy readiness | 15% |
-| User adoption and change readiness | 10% |
-| **Total** | **100%** |
-
-Each dimension uses the 1–5 anchors defined in `deep-research-report.md`. Formula:
-
-`weighted_points = Decimal(rating) / 5 × weight`, quantized to `0.01` with
-`ROUND_HALF_UP`
-
-`weighted_score = sum(weighted_points)`, quantized to a whole point with
-`ROUND_HALF_UP`
-
-Score-only labels:
-
-- 75–100: 建議進行
-- 55–74: 條件式建議
-- 0–54: 暫不建議
-
-The public M1.3 API is `assess_project(assessment_input: AssessmentInput) ->
-Assessment`. It performs no I/O and uses the caller-supplied stable assessment ID
-and UTC evaluation timestamp, so identical serialized input produces identical
-serialized output. Tool-declared ratings are non-authoritative compatibility
-fields; the engine recomputes all six ratings from `AssessmentFacts`.
-
-## 15. Hard-gate Rules
-
-Hard gates run before score interpretation and cannot be offset by ROI.
-
-| Rule | Trigger | Disposition | Effect |
-|---|---|---|---|
-| HG-01 Unauthorized or autonomous use | No permission, lawful basis or accountable owner for required data/process; or autonomous final decisions／enterprise actions | `blocked` | No PoC recommendation; request authorization, constrain autonomy and obtain professional review |
-| HG-02 High-impact final decision | Employment, medical, legal, credit or similar final decision without meaningful human review | `blocked` | Reject autonomous-final-decision scope |
-| HG-03 High-impact assistive workflow | Same domains with documented human final decision and contest/review path | `assistive_only` | Cap at conditional; list mandatory controls |
-| HG-04 Data cannot leave boundary | External endpoint conflicts with stated data boundary | `requires_controls` | Require approved local/private endpoint before proceeding |
-| HG-05 Necessary controls missing | Required security, governance or audit controls are absent; sensitive/personal data additionally requires minimization, retention and access controls | `requires_controls` | Cap at conditional until controls exist |
-| HG-06 Low data maturity | Data unavailable, mostly non-digital or no validation sample | `requires_controls` | Cap at conditional and output prerequisite work |
-| HG-07 Financial final decision | Request asks the system to autonomously approve, price, lend or invest | `blocked` | MVP cannot perform or recommend autonomous financial decision |
-
-Aggregate precedence: `blocked > assistive_only > requires_controls > pass`.
-
-## 16. API Endpoints
-
-Before the HTTP layer, the approved offline demonstration exposes one application
-entry point: `run_offline_planning(request: OfflinePlanningRequest) ->
-OfflinePlanningResult`. It receives a typed project, fixed interview answers,
-stable IDs/timestamp, evidence and an optional report path. It injects a model
-provider, runs the six framework-neutral tools, calls M1.3 `assess_project`, builds
-one validated proposal and renders deterministic Markdown. The demo implementation
-is in-memory only; it does not satisfy SQLite persistence/reload acceptance.
-
-| Method and path | Purpose | Success response |
-|---|---|---|
-| `GET /health` | Liveness and dependency mode | status, app version, fake/real model mode; no secrets |
-| `POST /projects` | Create project | project record, `201` |
-| `GET /projects/{project_id}` | Read project summary | project plus latest status |
-| `POST /projects/{project_id}/interviews` | Start standard interview | session and first questions, `201` |
-| `POST /projects/{project_id}/interviews/{session_id}/turns` | Submit one answer turn | accepted turn, normalized state, gaps and next questions |
-| `GET /projects/{project_id}/interviews/{session_id}` | Resume interview | durable session, turns and state |
-| `POST /projects/{project_id}/analysis` | Run retrieval, tools, gates and proposal assembly | assessment and validated proposal, `201` |
-| `GET /projects/{project_id}/proposal` | Read latest proposal | `PocProposal` |
-| `POST /projects/{project_id}/reports` | Render Markdown export | report metadata and content/path, `201` |
-| `GET /projects/{project_id}/reports/{report_id}` | Read exported report | Markdown response or JSON envelope |
-
-MVP endpoints are synchronous. Streaming, background jobs and authentication are Roadmap concerns.
-
-## 17. Error Handling
-
-All errors use:
-
-```json
-{
-  "error": {
-    "code": "stable_machine_code",
-    "message": "safe user-facing message",
-    "details": {},
-    "correlation_id": "uuid"
-  }
-}
-```
-
-| Error | HTTP | Required behavior |
-|---|---:|---|
-| Pydantic input validation | 422 | Field-level safe details |
-| Project/session/report not found | 404 | No data leakage across IDs |
-| Invalid interview transition | 409 | Return current stage and allowed action |
-| Incomplete information for analysis | 409 | Return missing fields and next questions |
-| Hard-gate blocked | 200 assessment result | Business outcome, not transport failure |
-| Model timeout/provider unavailable | 503 | Preserve accepted turn; safe retry allowed |
-| Structured-output validation failure | 502 | Bounded retry, then fail without storing invalid proposal |
-| FAISS index missing/stale | 503 | Explain reindex requirement; do not silently fabricate cases |
-| Unexpected internal error | 500 | Correlation ID; no secrets or raw sensitive content |
-
-## 18. Security and Privacy Constraints
-
-- Secrets come only from environment variables or runtime secret facilities; `.env` is never committed.
-- The public repository contains synthetic cases only.
-- SQLite, FAISS, reports, traces and raw interview records are local ignored artifacts.
-- Log field names and IDs, not full sensitive answers, unless an explicit safe debug mode is approved.
-- Tool outputs are validated before entering Agent context.
-- No MVP tool can mutate an enterprise system, send messages, approve decisions or perform financial actions.
-- External model use requires an explicit data-boundary check; fake model is the safe default for tests.
-- Markdown export escapes or neutralizes untrusted content where needed and never embeds secrets.
-- Offline Markdown redacts values under secret-like interview keys and neutralizes HTML and Markdown control characters from all dynamic inline content.
-- This project flags governance issues; a qualified reviewer determines applicable law and compliance.
-
-## 19. Commands
-
-M1.1 establishes these executable standard-Python commands:
-
-- Setup: `python -m pip install -e ".[dev]"`
-- Smoke: `python -m ai_poc_planner`
-- Test: `python -m pytest`
-- Lint: `python -m ruff check .`
-
-The API, UI and Docker commands remain TODO until their corresponding tasks create
-the required files. Python 3.12 is the primary supported runtime.
-
-## 20. Planned Project Structure
-
-```text
-src/ai_poc_planner/            Installable Python package
-  domain/                      Pydantic contracts; later scoring and hard gates
-  providers/                   Fake and future model provider adapters
-  app/                         Planned FastAPI and application composition
-  agent/                       Planned LangChain state, tools and prompts
-  infrastructure/             Planned SQLite repositories and FAISS index
-ui/                            Planned Streamlit application
-case_library/                  Planned reviewed synthetic Markdown cases
-tests/                         Unit, contract, integration and vertical-slice tests
-docs/spec/                     Specification, plan and tasks
-```
-
-Folders are created only when their first approved implementation task needs them.
-
-## 21. Code Style
-
-- Python 3.12 primary target, confirmed by the M1.1 scaffold.
-- Type annotations on public functions and Pydantic at boundaries.
-- Small pure functions for scoring and hard gates.
-- `snake_case` functions/fields, `PascalCase` classes, uppercase constants.
-- Dependency injection for model, embeddings, repositories and clock/ID generation.
-- No mutable class-level defaults; use `Field(default_factory=list)` where needed.
-
-Documentation example:
-
-```python
-def weighted_points(rating: int, weight: int) -> float:
-    """Convert a validated 1–5 rating into weighted percentage points."""
-    if not 1 <= rating <= 5:
-        raise ValueError("rating must be between 1 and 5")
-    return rating / 5 * weight
-```
-
-## 22. Testing Strategy
-
-- Unit: scoring, rubric mapping, hard gates, ROI math, KPI derivation and report renderer.
-- Contract: every tool input/output and `PocProposal` validation.
-- Repository: SQLite round trips and FAISS metadata/vector mapping in temporary paths.
-- Trajectory: required tools called for each baseline case; forbidden tools absent.
-- Planning-run continuation: fake model persists a clarification state, accepts one answer batch and reloads the exact completed result.
-- Roadmap multi-turn: complete turn replay, arbitrary resume and conversation checkpoints.
-- Vertical slice: API/application path completes create → interview → assess → report.
-- Optional: export the same cases to LangSmith for offline comparison; never required for CI.
-
-Minimum gates before implementation is considered complete:
-
-- 100% Schema validity on baseline cases.
-- 0 missed hard-gate invocation on hard-gate cases.
-- 100% governance requirement for high-impact cases.
-- No network access in fake-model test suite.
-
-## 23. Boundaries
-
-### Always
-
-- Update the spec before changing a contract.
-- Persist accepted user input before model calls.
-- Run relevant pytest and lint checks before task completion.
-- Keep hard gates independent from weighted scoring.
-- Keep provider-specific code behind adapters.
-
-### Ask First
-
-- Add dependencies or change Python/runtime versions.
-- Change database schema after implementation begins.
-- Change weights, hard-gate precedence or report schema.
-- Add external services, authentication, CI or deployment.
-- Use real sensitive data or real model credentials.
-
-### Never
-
-- Commit secrets, local databases, FAISS indexes, reports, traces or interview data.
-- Bypass hard gates because the weighted score is high.
-- Give the Agent a tool that executes enterprise or financial actions in MVP.
-- Replace professional legal, medical, employment, credit or financial decisions.
-- Start multi-Agent, PostgreSQL or cloud work under an MVP task.
-
-## 24. Acceptance Criteria
-
-- AC-01 A fake-model run completes the full vertical slice without network.
-- AC-02 Reloading by planning-run ID returns the saved clarification or exact completed result from SQLite.
-- AC-03 Missing critical information results in one to four targeted M2.2-lite questions, not a proposal.
-- AC-04 Similar cases include inspectable source references and SQLite metadata.
-- AC-05 Six dimension ratings follow the rubric, weights total 100 and formula recomputes exactly.
-- AC-06 A high ROI cannot change a `blocked` or `assistive_only` result.
-- AC-07 Every baseline proposal validates against `PocProposal`.
-- AC-08 Markdown report contains assumptions, evidence, score breakdown, hard gates, architecture, ROI/KPI, scope and next actions.
-- AC-09 Docker development configuration reads secrets from environment and exposes no database port.
-- AC-10 The repository contains no real secret, database, FAISS index, trace or user report.
-- AC-11 README, PROJECT_LOG and TASKS reflect the implemented commands and status.
-
-## 25. Open Questions for Human Review
-
-- Which real OpenAI-compatible endpoint and model name should be the documented default after fake mode works?
-- Should embeddings use the same endpoint as chat, or a separately configured adapter by default?
-- Is Traditional Chinese-only output sufficient for MVP, or must report generation support English?
-- Should exported Markdown be stored as a file, SQLite content, or both? The current proposal stores metadata plus a local file.
-- Is LangSmith a Should item or entirely optional for the first public release?
-
-## 26. M2.3-lite Opportunity Catalog, Matching and Deployment
-
-- The reviewed catalog contains exactly nine `OpportunityType` values from `AI_ADOPTION_CASE_REVIEW.md`; `software_development_assist` is excluded.
-- `NonAiAlternativeDirection` contains rule-based automation, conventional software and data analytics, but these are not catalog entries and are not returned by `get_opportunity_catalog()`.
-- Each catalog entry is a validated, offline Python fixture with primary `CaseReference` records of Grade A–D only. Grade E evidence is allowed only in supplemental references.
-- Catalog contracts may provide human-oversight guidance and conditional guidance, but never recommendation, score, `assistive_only`, `blocked`, or hard-gate disposition.
-- `get_opportunity_catalog()` returns immutable copies of the nine fixed, version-controlled entries.
-- `match_opportunities()` uses only explicit structured request signals, counts direct matches, preserves catalog order on ties, returns at most three AI candidates, and may attach at most two non-AI alternative directions. It never returns a formal recommendation, a six-dimension score, or a hard-gate disposition.
-- `assess_deployment_posture()` uses data classification, external-processing permission, offline need and existing environment to return one posture or clarification needs. `disallowed` applies to a posture, not the whole PoC; hard-gate integration remains later work.
-- The deployment output describes only initial investment, variable operating cost, capacity-utilization risk and operations burden. It contains no provider, model, hardware or precise price recommendation.
-
-## 27. M2.4-lite LangChain and FastAPI Planning Slice
-
-The first LangChain／FastAPI surface is deliberately narrower than the persisted
-assessment workflow. It exposes only `GET /health` and
-`POST /v1/planning/interpret`; the request contains a non-empty
-`natural_language_request` and optional JSON-only `clarification_answers`.
-
-The HTTP composition receives an externally injected LangChain `BaseChatModel`.
-It creates one `langchain.agents.create_agent` Agent and gives that Agent one typed
-local tool, `evaluate_planning_intent(intent: PlanningIntent)`. `PlanningIntent`
-contains only `OpportunityMatchInput`, `DeploymentPostureInput`, and an optional
-short summary. The tool actually calls `match_opportunities()` and
-`assess_deployment_posture()` and returns a validated `PlanningEvaluation`.
-Responses use that captured tool result, never a model-written candidate or
-deployment conclusion.
-
-`PlanningEvaluation` contains only the validated intent, opportunity match result
-and deployment posture assessment. It must not contain a six-dimension score,
-recommendation, hard-gate disposition, proposal or Markdown report. This slice
-does not create, update or complete `PlanningRun`; callers resend the original
-request with clarification answers.
-
-Status is `clarification_required` when matching has no candidate or deployment
-requires clarification; otherwise it is `ready`. The application converts only
-those deterministic gaps into deduplicated, fixed-order Traditional-Chinese
-questions, capped at four. HTTP input validation is a safe 422 response; model
-execution failure, absent successful tool call and invalid tool arguments are safe
-502 responses; unexpected failures are safe 500 responses. Error responses never
-include raw request content, prompts or provider responses.
-
-LangChain may depend on LangGraph internally, but project source must not import
-`langgraph` or create graphs, nodes, edges, checkpoints, memory persistence or
-multi-agent orchestration. Tests and the offline demo use a scripted official
-LangChain fake chat model; no live provider adapter is part of this slice.
-
-## 28. M2.5 Persisted Planning Flow
-
-The stateless `POST /v1/planning/interpret` endpoint remains available for the
-bounded planning-only demonstration. The persisted flow adds only these
-synchronous endpoints:
-
-- `POST /v1/planning/runs` creates the internal `AnalysisProject` and one
-  `PlanningRun` from a natural-language request plus optional initial JSON
-  business facts.
-- `POST /v1/planning/runs/{run_id}/clarifications` accepts one non-empty batch
-  of JSON clarification answers.
-- `GET /v1/planning/runs/{run_id}` reloads the saved state and final result.
-
-Each create or clarification submission invokes the existing single LangChain
-Agent and accepts only the successful typed planning-tool evaluation. The run
-stores `PlanningIntent.model_dump(mode="json")` in `intent`; a successful
-clarification submission replaces it with the refreshed intent. `known_information`
-and `clarification_answers` contain only user-provided or normalized business
-facts that are safe to pass to the existing offline assessment workflow. They
-must not store an Agent message, prompt, tool trajectory, provider response,
-complete `PlanningEvaluation`, opportunity match or deployment assessment.
-
-When matching or deployment needs clarification, the application persists at
-most four fixed deterministic questions. After answers make planning ready, it
-hands the run to `run_and_persist_offline_planning()`. That existing workflow may
-persist a second bounded clarification batch for formal assessment facts; it
-must not invent missing data, add a round counter, or create another state
-machine. Once sufficient facts exist, the existing assessment, hard-gate,
-proposal and Markdown pipeline completes the run using the current `PlanningRun`
-completed semantics. No SQLite schema change is required.
-
-`GET /v1/planning/runs/{run_id}` reconstructs and validates `PlanningIntent`
-from the saved `intent`, then directly calls `match_opportunities()` and
-`assess_deployment_posture()`. It does not invoke LangChain or a chat model and
-does not write the recomputed matching/deployment outputs back to SQLite. Its
-assessment, proposal and Markdown fields come unchanged from the persisted
-`PlanningRun` record.
-
-The app factory receives the chat model, SQLite database path and deterministic
-assessment provider from its caller. It does not silently configure a fake chat
-model or a live provider runtime. Persistence configuration is unavailable as a
-safe 503; missing runs are 404; invalid run transitions are 409; model/tool
-failures remain safe 502 responses.
+# Specification: AI PoC Planner viable MVP
+
+## Status
+
+This document resets the product specification after PR #8 product UAT. It is
+documentation only: no implementation is authorized by this reset.
+
+The previous decision that a repeatable fake-model vertical slice represented a
+successful product MVP is revoked. A fake model remains a test fixture only.
+
+## Objective
+
+AI PoC Planner is a local-first enterprise AI adoption discovery and PoC
+planning tool. It connects to a real OpenAI-compatible chat API, interviews a
+user about a business problem, protects confirmed facts, applies programmatic
+governance constraints, and produces an actionable Markdown PoC plan.
+
+The first supported real-provider path is a user-operated llama.cpp server.
+The product does not install llama.cpp or download a GGUF model.
+
+## Goals
+
+- Require a working real model connection before formal AI analysis.
+- Let a user create, edit, delete, test, and select local model profiles.
+- Collect a minimal initial brief, then conduct a bounded, contextual interview.
+- Persist projects, versions, user/AI visible conversation, confirmed facts, and
+  completed reports locally.
+- Allow an outcome that recommends AI, non-AI, foundational non-AI work first,
+  or a hybrid approach.
+- Produce a readable, business-actionable Markdown report.
+
+## Non-goals
+
+- Multi-agent workflows, LangGraph, FAISS, Docker, cloud deployment, accounts,
+  multi-tenancy, email login, automatic model download, or llama.cpp management.
+- React/Next.js, PDF/DOCX export, online case search, and production-grade
+  credential encryption.
+- Any autonomous high-impact business, medical, legal, credit, or financial
+  decision.
+
+## Users and user stories
+
+| User | Story |
+| --- | --- |
+| Business owner | I can describe a problem, confirm the AI's understanding, correct it, and receive a plan I can act on. |
+| PoC lead | I can compare AI, non-AI, and hybrid options with cited facts, risks, cost assumptions, and next steps. |
+| Local operator | I can manage several OpenAI-compatible model connections and verify the selected connection before analysis. |
+| Reviewer | I can open a historical project version, see the visible conversation and confirmed facts, and understand why its recommendation was made. |
+
+## Product flow
+
+1. The home page shows model connection status, new planning, and historical
+   project versions without exposing UUIDs or run IDs.
+2. The user selects a tested model profile and submits a minimal initial brief.
+3. The AI returns a requirement understanding; the user confirms or corrects it.
+4. The AI asks at most three rounds of at most three contextual questions per
+   round. Every question includes why it matters, affected judgement, and an
+   example. The user may answer `不知道` and may proactively correct or add facts.
+5. The AI updates structured facts. The program validates structure, protects
+   confirmed facts, checks contradictions and missing data, and then enables
+   analysis.
+6. The AI proposes AI, non-AI, or hybrid directions; the program calculates the
+   weighted total and applies hard gates.
+7. The product displays and exports a Markdown planning report. A completed
+   version is immutable; subsequent edits create a new version.
+
+## Functional requirements
+
+### Model profiles and provider boundary
+
+- A profile contains `profile_name`, `base_url`, `model_name`, and optional
+  `api_key`.
+- Profiles, including API keys, are stored in a local ignored JSON file in MVP.
+- The UI supports create, edit, delete, test, select, and current-status views.
+- The application uses an OpenAI-compatible adapter. llama.cpp is the first
+  documented opt-in integration target.
+- Formal analysis must reject requests when no tested real profile is selected.
+- The runtime must never silently fall back to a fake model. Fake providers are
+  allowed only in automated tests.
+
+### Initial brief, conversation, and facts
+
+The initial form requires: project name, current problem/workflow, desired
+outcome, and available data. Available data accepts `不知道` or `目前没有`.
+Users and owners plus known constraints are optional. There is no catch-all
+"supplementary notes" input.
+
+The persisted visible conversation records user messages, AI requirement
+understanding, confirmations/corrections, questions, and answers. It does not
+store system prompts, chain of thought, LangChain trajectories, or raw provider
+metadata.
+
+Confirmed facts are structured Pydantic data. The program validates reference
+completeness, preserves confirmed facts until a user correction, detects
+contradictions, and marks unknown or missing data. The AI may infer a proposed
+fact but must label it as an assumption until the user confirms it.
+
+### Project and version model
+
+- The home page presents project name, version, status, created/updated time,
+  and selected model profile.
+- UUIDs may remain internal but never appear in the primary product UI.
+- A completed version cannot be overwritten. Editing it creates the next version
+  under the same project.
+
+### Analysis, opportunities, and scoring
+
+The existing nine AI opportunity catalog categories remain. The AI can propose
+an external category only when it is labelled `unstandardized_candidate`.
+
+The three retained non-AI directions are `rule_based_automation`,
+`conventional_software`, and `data_analytics`. Allowed conclusions are:
+
+- suitable for AI;
+- better suited to non-AI;
+- establish non-AI foundations before AI; or
+- hybrid AI and non-AI.
+
+The six dimensions remain: business value, data readiness, technical fit,
+architecture controllability, governance readiness, and user adoption. Each
+dimension contains a 1–5 score, rationale, referenced confirmed facts, data
+gaps, risks, and conditions required to improve the score.
+
+AI owns requirement understanding, factual organisation, assumptions and
+contradictions, questions, options, rubric ratings with evidence, and report
+writing. Program code owns persistence, Pydantic validation, score-range and
+fact-reference validation, confirmed-fact protection, consistency checks,
+weighted-total calculation, hard-gate enforcement, and profile management.
+Program code must not use the old fixed Boolean rules to decide a final
+dimension rating.
+
+Existing hard gates remain mandatory for unauthorised data use, autonomous
+high-impact decisions, forbidden external processing, missing required human
+review, and other explicit safety/governance conflicts. AI cannot override a
+hard-gate result.
+
+### Local success cases
+
+MVP uses a local, manually curated, source-backed case library. A case has
+title, industry, original problem, implementation method, result, applicability,
+non-applicability, source, and review status. AI must not fabricate companies,
+metrics, or sources. Initial matching uses tags/rules; FAISS is not required.
+
+### Report contract
+
+The Markdown report contains: executive summary; requirement understanding;
+current process and pain points; goals and success criteria; AI suitability;
+recommended direction; non-AI/hybrid alternatives; relevant cases; target
+workflow; data needs/gaps; local/cloud/hybrid deployment comparison; PoC scope;
+in/out of scope; KPI and acceptance method; cost range and assumptions;
+implementation stages and roles; risks/governance/human review; open issues and
+next actions; and a fact-backed scoring appendix.
+
+The UI renders the readable report first. Raw Markdown, IDs, rule IDs, and
+technical evidence are not primary product content.
+
+## UI boundaries
+
+Phase-one UI remains Streamlit, with home, model settings, initial brief,
+requirement confirmation, interview, analysis results, and report views.
+
+The formal UI must not display run IDs, UUIDs, API base URLs, correlation IDs,
+SQLite paths, raw JSON, fake-mode warnings, or technical architecture
+disclaimers. Portfolio context and technical limitations belong in the README.
+
+## Non-functional requirements
+
+- Local-first, single-user operation with durable local storage.
+- Explicit timeouts and safe user-facing provider errors; no secret leakage.
+- Model/profile data stays in ignored local files; API keys may be empty.
+- Deterministic automated tests use a fake provider and make no real network
+  calls. Real-provider integration tests are opt-in.
+- Formal analysis is blocked, not simulated, without a real selected profile.
+- Visible conversation and completed reports must survive restart/reload.
+
+## Installation and startup requirements
+
+Phase-seven deliverables are `安装 AI PoC Planner.bat`, `启动 AI PoC Planner.bat`,
+and `停止 AI PoC Planner.bat`.
+
+- Install checks Python 3.12, creates `.venv`, installs dependencies,
+  initialises local storage/data directories, creates Streamlit configuration,
+  and disables first-run email collection and usage telemetry.
+- Start launches FastAPI, waits for health, launches Streamlit, opens a browser,
+  and does not require two manual PowerShell windows.
+- Stop reliably terminates the two local processes.
+
+## Data model direction
+
+Future implementation will add model profiles, projects, immutable project
+versions, visible conversation entries, structured facts with confirmation
+status and references, analysis, report exports, and reviewed success cases.
+Schema design is deferred to the corresponding implementation phases; this
+specification authorises no migration.
+
+## Acceptance criteria for the viable MVP
+
+1. A selected, tested real OpenAI-compatible profile is required for formal
+   analysis; absent/failed connection blocks it with a safe explanation.
+2. llama.cpp can be manually started and tested through the documented opt-in
+   integration path.
+3. A user can complete the bounded confirmation/interview flow, including
+   unknown answers and corrections, and reload visible conversation/facts.
+4. Results can honestly recommend AI, non-AI, foundations-first, or hybrid.
+5. Scores cite confirmed facts; program validation rejects invalid ranges,
+   missing fact references, contradictions, and hard-gate violations.
+6. A completed version is immutable and a subsequent change creates a version.
+7. A readable Markdown report contains every report-contract section.
+8. The primary UI exposes no developer controls or internal identifiers.
+9. Automated tests use fakes only as test infrastructure; they are not product
+   acceptance proof for real-model analysis.
+
+## Revoked decisions
+
+- Fake-model vertical-slice completion is not MVP completion.
+- Fixed scripted clarification fields are not a viable interview experience.
+- Fixed Boolean business rules do not own final rubric ratings.
+- FAISS, Docker, and a live provider are not represented as completed features.
