@@ -28,6 +28,7 @@ from ai_poc_planner.application.persisted_planning import (
     PersistedPlanningOutcome,
 )
 from ai_poc_planner.application.planning_runs import PlanningRunService
+from ai_poc_planner.application.project_history import ProjectHistoryService
 from ai_poc_planner.application.projects import AnalysisProjectService
 from ai_poc_planner.application.provider_readiness import (
     ChatCompletionAdapter,
@@ -38,7 +39,12 @@ from ai_poc_planner.domain.catalog import (
     DeploymentPostureAssessment,
     OpportunityMatchResult,
 )
-from ai_poc_planner.domain.enums import PlanningRunStatus
+from ai_poc_planner.domain.enums import (
+    FactStatus,
+    InterviewRole,
+    PlanningRunStatus,
+    VisibleMessageKind,
+)
 from ai_poc_planner.domain.models import (
     ClarifyingQuestion,
     ContractModel,
@@ -46,12 +52,31 @@ from ai_poc_planner.domain.models import (
     NonEmptyStr,
     PocProposal,
 )
+from ai_poc_planner.domain.project_history import (
+    FactRevision,
+    PlanningProject,
+    ProjectHistorySummary,
+    ProjectVersion,
+    VisibleConversationMessage,
+)
 from ai_poc_planner.domain.workflow import Assessment
 from ai_poc_planner.persistence.connection import database_connection
 from ai_poc_planner.persistence.errors import (
+    CompletedVersionImmutableError,
+    CurrentVersionRequiredError,
+    FactConfirmationInvalidError,
+    FactConflictError,
+    FactCorrectionInvalidError,
+    FactCorrectionRequiredError,
+    FactNotCurrentError,
+    FactNotFoundError,
+    FactReferenceInvalidError,
     InvalidPlanningRunTransitionError,
+    InvalidProjectVersionTransitionError,
     PersistenceError,
     PlanningRunNotFoundError,
+    ProjectNotFoundError,
+    ProjectVersionNotFoundError,
 )
 from ai_poc_planner.persistence.model_profiles import (
     LocalModelProfileRepository,
@@ -59,6 +84,7 @@ from ai_poc_planner.persistence.model_profiles import (
     ModelProfileRepositoryError,
 )
 from ai_poc_planner.persistence.planning_runs import SQLitePlanningRunRepository
+from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.projects import SQLiteProjectRepository
 from ai_poc_planner.persistence.schema import initialize_database
 from ai_poc_planner.providers.base import ModelProvider
@@ -119,6 +145,38 @@ class ModelProfileUpdateRequest(ContractModel):
     model_name: NonEmptyStr | None = None
     api_key: str | None = None
     is_enabled: bool | None = None
+
+
+class ProjectCreateRequest(ContractModel):
+    project_name: NonEmptyStr
+
+
+class VisibleMessageCreateRequest(ContractModel):
+    role: InterviewRole
+    message_kind: VisibleMessageKind
+    content: NonEmptyStr
+
+
+class FactAssumptionRequest(ContractModel):
+    fact_key: NonEmptyStr
+    value: JSONValue
+    reference_message_ids: list[UUID] = Field(min_length=1)
+
+
+class FactReferenceRequest(ContractModel):
+    fact_key: NonEmptyStr
+    reference_message_ids: list[UUID] = Field(min_length=1)
+
+
+class FactConfirmationRequest(ContractModel):
+    reference_message_ids: list[UUID] = Field(min_length=1)
+
+
+class FactCorrectionRequest(ContractModel):
+    status: FactStatus
+    value: JSONValue
+    correction_reason: NonEmptyStr
+    reference_message_ids: list[UUID] = Field(min_length=1)
 
 
 def _error_response(
@@ -209,6 +267,20 @@ def create_app(
         finally:
             connection.close()
 
+    @contextmanager
+    def project_history_flow() -> Iterator[ProjectHistoryService]:
+        if database_path is None:
+            raise PersistedPlanningUnavailableError
+        connection = database_connection(database_path)
+        try:
+            initialize_database(connection)
+            yield ProjectHistoryService(
+                SQLiteProjectHistoryRepository(connection),
+                selected_profile_getter=profile_repository.get_selected,
+            )
+        finally:
+            connection.close()
+
     @app.exception_handler(RequestValidationError)
     async def request_validation_error(
         _: Request,
@@ -241,9 +313,31 @@ def create_app(
 
     @app.exception_handler(PersistenceError)
     async def persistence_error(_: Request, error: PersistenceError) -> JSONResponse:
-        if isinstance(error, PlanningRunNotFoundError):
+        if isinstance(
+            error,
+            (
+                PlanningRunNotFoundError,
+                ProjectNotFoundError,
+                ProjectVersionNotFoundError,
+                FactNotFoundError,
+            ),
+        ):
             return _error_response(404, error.code, uuid4())
-        if isinstance(error, InvalidPlanningRunTransitionError):
+        if isinstance(
+            error,
+            (
+                InvalidPlanningRunTransitionError,
+                InvalidProjectVersionTransitionError,
+                CompletedVersionImmutableError,
+                CurrentVersionRequiredError,
+                FactConfirmationInvalidError,
+                FactConflictError,
+                FactCorrectionInvalidError,
+                FactCorrectionRequiredError,
+                FactNotCurrentError,
+                FactReferenceInvalidError,
+            ),
+        ):
             return _error_response(409, error.code, uuid4())
         return _error_response(500, error.code, uuid4())
 
@@ -331,6 +425,197 @@ def create_app(
         """Expose only the guard; legacy fake planning endpoints are not wired here."""
 
         return readiness.require_formal_analysis_ready()
+
+    @app.post("/v1/projects", response_model=ProjectVersion, status_code=201)
+    def create_project(request: ProjectCreateRequest) -> ProjectVersion:
+        with project_history_flow() as history:
+            _, version = history.create_project(request.project_name)
+            return version
+
+    @app.get("/v1/projects", response_model=list[ProjectHistorySummary])
+    def list_projects() -> list[ProjectHistorySummary]:
+        with project_history_flow() as history:
+            return history.list_projects()
+
+    @app.get("/v1/projects/{project_id}", response_model=PlanningProject)
+    def get_project(project_id: UUID) -> PlanningProject:
+        with project_history_flow() as history:
+            return history.get_project(project_id)
+
+    @app.get("/v1/projects/{project_id}/versions", response_model=list[ProjectVersion])
+    def list_project_versions(project_id: UUID) -> list[ProjectVersion]:
+        with project_history_flow() as history:
+            return history.list_versions(project_id)
+
+    @app.get(
+        "/v1/projects/{project_id}/versions/{version_number}",
+        response_model=ProjectVersion,
+    )
+    def get_project_version(project_id: UUID, version_number: int) -> ProjectVersion:
+        with project_history_flow() as history:
+            return history.get_version(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/complete",
+        response_model=ProjectVersion,
+    )
+    def complete_project_version(
+        project_id: UUID, version_number: int
+    ) -> ProjectVersion:
+        with project_history_flow() as history:
+            return history.complete_version(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/next",
+        response_model=ProjectVersion,
+        status_code=201,
+    )
+    def create_next_project_version(
+        project_id: UUID, version_number: int
+    ) -> ProjectVersion:
+        with project_history_flow() as history:
+            return history.create_next_version(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/messages",
+        response_model=VisibleConversationMessage,
+        status_code=201,
+    )
+    def append_visible_message(
+        project_id: UUID,
+        version_number: int,
+        request: VisibleMessageCreateRequest,
+    ) -> VisibleConversationMessage:
+        with project_history_flow() as history:
+            return history.append_message(
+                project_id,
+                version_number,
+                role=request.role,
+                message_kind=request.message_kind.value,
+                content=request.content,
+            )
+
+    @app.get(
+        "/v1/projects/{project_id}/versions/{version_number}/messages",
+        response_model=list[VisibleConversationMessage],
+    )
+    def list_visible_messages(
+        project_id: UUID, version_number: int
+    ) -> list[VisibleConversationMessage]:
+        with project_history_flow() as history:
+            return history.list_messages(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/facts/assumptions",
+        response_model=FactRevision,
+        status_code=201,
+    )
+    def propose_fact_assumption(
+        project_id: UUID,
+        version_number: int,
+        request: FactAssumptionRequest,
+    ) -> FactRevision:
+        with project_history_flow() as history:
+            return history.propose_assumption(
+                project_id,
+                version_number,
+                fact_key=request.fact_key,
+                value=request.value,
+                reference_message_ids=request.reference_message_ids,
+            )
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/facts/unknown",
+        response_model=FactRevision,
+        status_code=201,
+    )
+    def record_unknown_fact(
+        project_id: UUID,
+        version_number: int,
+        request: FactReferenceRequest,
+    ) -> FactRevision:
+        with project_history_flow() as history:
+            return history.record_unknown_or_missing(
+                project_id,
+                version_number,
+                fact_key=request.fact_key,
+                status=FactStatus.UNKNOWN,
+                reference_message_ids=request.reference_message_ids,
+            )
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/facts/missing",
+        response_model=FactRevision,
+        status_code=201,
+    )
+    def record_missing_fact(
+        project_id: UUID,
+        version_number: int,
+        request: FactReferenceRequest,
+    ) -> FactRevision:
+        with project_history_flow() as history:
+            return history.record_unknown_or_missing(
+                project_id,
+                version_number,
+                fact_key=request.fact_key,
+                status=FactStatus.MISSING,
+                reference_message_ids=request.reference_message_ids,
+            )
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/facts/{fact_id}/confirm",
+        response_model=FactRevision,
+    )
+    def confirm_fact_assumption(
+        project_id: UUID,
+        version_number: int,
+        fact_id: UUID,
+        request: FactConfirmationRequest,
+    ) -> FactRevision:
+        with project_history_flow() as history:
+            return history.confirm_assumption(
+                project_id,
+                version_number,
+                fact_id,
+                reference_message_ids=request.reference_message_ids,
+            )
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/facts/{fact_id}/correct",
+        response_model=FactRevision,
+    )
+    def correct_current_fact(
+        project_id: UUID,
+        version_number: int,
+        fact_id: UUID,
+        request: FactCorrectionRequest,
+    ) -> FactRevision:
+        with project_history_flow() as history:
+            return history.correct_fact(
+                project_id,
+                version_number,
+                fact_id,
+                status=request.status,
+                value=request.value,
+                correction_reason=request.correction_reason,
+                reference_message_ids=request.reference_message_ids,
+            )
+
+    @app.get(
+        "/v1/projects/{project_id}/versions/{version_number}/facts",
+        response_model=list[FactRevision],
+    )
+    def list_current_facts(project_id: UUID, version_number: int) -> list[FactRevision]:
+        with project_history_flow() as history:
+            return history.list_current_facts(project_id, version_number)
+
+    @app.get(
+        "/v1/projects/{project_id}/versions/{version_number}/facts/history",
+        response_model=list[FactRevision],
+    )
+    def list_fact_history(project_id: UUID, version_number: int) -> list[FactRevision]:
+        with project_history_flow() as history:
+            return history.list_fact_history(project_id, version_number)
 
     @app.post("/v1/planning/interpret", response_model=PlanningInterpretResponse)
     def interpret(request: PlanningInterpretRequest) -> PlanningInterpretResponse:

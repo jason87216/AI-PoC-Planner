@@ -53,3 +53,47 @@ class SchemaMismatchError(PersistenceError):
 
 class UnsupportedSchemaVersionError(PersistenceError):
     code = "unsupported_schema_version"
+
+
+class ProjectVersionNotFoundError(PersistenceError):
+    code = "project_version_not_found"
+
+
+class InvalidProjectVersionTransitionError(PersistenceError):
+    code = "invalid_project_version_transition"
+
+
+class CompletedVersionImmutableError(PersistenceError):
+    code = "completed_version_immutable"
+
+
+class CurrentVersionRequiredError(PersistenceError):
+    code = "current_version_required"
+
+
+class FactNotFoundError(PersistenceError):
+    code = "fact_not_found"
+
+
+class FactNotCurrentError(PersistenceError):
+    code = "fact_not_current"
+
+
+class FactConflictError(PersistenceError):
+    code = "fact_conflict"
+
+
+class FactReferenceInvalidError(PersistenceError):
+    code = "fact_reference_invalid"
+
+
+class FactConfirmationInvalidError(PersistenceError):
+    code = "fact_confirmation_invalid"
+
+
+class FactCorrectionRequiredError(PersistenceError):
+    code = "fact_correction_required"
+
+
+class FactCorrectionInvalidError(PersistenceError):
+    code = "fact_correction_invalid"

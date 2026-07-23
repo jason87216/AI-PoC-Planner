@@ -101,7 +101,7 @@ def test_database_initialization_creates_current_schema(tmp_path: Path) -> None:
             "created_at",
             "updated_at",
         }
-        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 2
+        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 3
         assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     finally:
         connection.close()
