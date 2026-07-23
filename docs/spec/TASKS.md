@@ -1,278 +1,233 @@
-# Tasks: AI PoC Planner
+# Tasks: viable MVP reset
 
-## Status Legend
+## Status legend
 
-- Priority: **Must**, **Should**, **Could**.
-- Status: the specification baseline was approved on 2026-07-19; implementation tasks remain independently tracked below.
-- Scope: XS = 1 file, S = 1–2 files, M = 3–5 files. Tasks larger than M must be split.
+- **Must**: required before viable-MVP release.
+- **Should**: valuable after the blocking path works.
+- **Deferred**: explicitly outside this MVP.
+- Every task is one small PR and must state tests plus a human verification.
 
-## Phase 0 — Specification Gate
+## Deprecated roadmap items
 
-### [Must] S0.1 Review and approve specification package
+The following previous completion logic is deprecated and must not be revived as
+product acceptance:
 
-- [x] **Purpose:** Confirm product boundaries, architecture, scoring, hard gates, API and open questions before code. Approved by the user on 2026-07-19.
-- **Modification scope:** `docs/spec/SPEC.md`, `docs/spec/PLAN.md`, `docs/spec/TASKS.md`, `PROJECT_LOG.md`.
-- **Acceptance:** Human explicitly approves implementation or records required revisions; all open decisions needed by Task M1.1 are resolved or marked as implementation-safe TODOs.
-- **Verification:** Manual review of cross-document consistency; no application source files exist.
-- **Dependencies:** None.
-- **Estimated scope:** S.
+- a fake-model API/Streamlit vertical slice as a successful MVP;
+- scripted fixed-field clarification as a viable interview;
+- fake-mode browser flow as evidence of real AI analysis;
+- Docker, FAISS, or live-provider claims in the current product README.
 
-## Phase 1 — Foundation
+Fake models remain permitted for deterministic automated tests only.
 
-### [Must] M1.1 Create executable Python scaffold and offline test entry
+## Phase 0 — Specification reset
 
-- [x] **Purpose:** Establish the smallest real project structure, dependency manifest and commands without implementing product behavior. Completed on 2026-07-19.
-- **Modification scope:** `pyproject.toml`, `src/ai_poc_planner/`, `tests/`, README／AGENTS／SPEC command blocks, `PROJECT_LOG.md`.
-- **Acceptance:** Standard `pip` editable install, `python -m pytest`, `python -m ruff check .` and `python -m ai_poc_planner` are grounded in real files and pass without runtime network or API keys.
-- **Verification:** Run the four commands under Python 3.12; fake-provider tests prevent network use through the tested socket boundary.
+### [Must] S0.1 Approve viable-MVP specification package
+
+- **Purpose:** Approve the real-provider-first product contract.
+- **Scope:** Documentation only.
+- **Acceptance:** SPEC, PLAN, TASKS, README, and project log agree that no
+  formal analysis occurs without a real selected profile.
+- **Verification:** Cross-document review and `git diff --check`.
+
+## Phase 1 — Model profile and OpenAI-compatible connection
+
+### [Must] P1.1 Define model profile and provider-status contracts
+
+- **Purpose:** Define profile name, base URL, model name, optional API key,
+  selected status, and safe connection-test result.
+- **Scope:** Pydantic/API contracts and tests only.
 - **Dependencies:** S0.1.
-- **Estimated scope:** M.
-- **Execution note:** The user explicitly expanded M1.1 to include initial contracts and a proposal-producing fake provider. M1.2 later completed full contract coverage; M1.4 remains open for embeddings and later Agent event seams.
+- **Acceptance:** No contract implies a fake fallback.
 
-### [Must] M1.2 Implement core Pydantic contracts
+### [Must] P1.2 Add ignored local JSON model-profile repository
 
-- [x] **Purpose:** Turn SPEC schema names and invariants into the shared contract layer. Completed on 2026-07-19.
-- **Modification scope:** `domain/models.py`, `domain/enums.py`, `domain/workflow.py`, `domain/tools.py`, public exports, contract tests and synchronized project documentation.
-- **Acceptance:** Persistence, workflow, Agent state and all six tool input/output contracts validate and JSON round-trip; missing dimensions, bad weights, invalid ranges, duplicate collections and invalid references are rejected. Per the approved M1.2 decision, calculation, gate precedence and recommendation decisions remain assigned to M1.3.
-- **Verification:** `python -m pytest tests/domain/test_schemas.py` (80 tests) plus the complete offline suite.
-- **Dependencies:** M1.1.
-- **Estimated scope:** S.
+- **Purpose:** Persist profile CRUD and selection locally, including optional
+  API key, without committing secrets.
+- **Scope:** Local repository/config boundary and tests.
+- **Dependencies:** P1.1.
+- **Acceptance:** Create, edit, delete, and select profiles; ignored file is
+  never staged.
 
-### [Must] M1.3 Implement scoring rubric and hard-gate engine
+### [Must] P1.3 Add OpenAI-compatible chat adapter
 
-- [x] **Purpose:** Create deterministic 1–5 scoring, 100% weighting and gate precedence independent of the Agent. Completed on 2026-07-19.
-- **Modification scope:** scoring module, hard-gate rules/module, unit tests.
-- **Acceptance:** Weights equal 100; all ratings enforce 1–5; `blocked > assistive_only > requires_controls > pass`; high ROI never overrides a gate.
-- **Verification:** `python -m pytest tests/domain/test_scoring.py tests/domain/test_hard_gates.py tests/domain/test_assessment_engine.py` (119 M1.3 tests) plus the complete offline suite.
-- **Dependencies:** M1.2.
-- **Estimated scope:** M.
+- **Purpose:** Send real chat requests through an injected adapter.
+- **Scope:** Provider adapter and unit tests; no report/interview/UI rewrite.
+- **Dependencies:** P1.1.
+- **Acceptance:** Explicit timeout/safe error handling; no runtime fake default.
 
-### [Must] M1.4 Define provider interfaces and deterministic fake model
+### [Must] P1.4 Add profile connection test and provider-status API
 
-- [x] **Purpose:** Make model and embeddings dependencies injectable before any real API integration. Completed on 2026-07-19.
-- **Modification scope:** provider protocol module, fake model/embeddings module, tests.
-- **Acceptance:** Fake responses are deterministic, support required tool/structured events and make no network call; domain code imports no provider SDK.
-- **Verification:** `python -m pytest tests/providers/test_fake_provider.py` with network disabled, plus the complete offline suite.
-- **Dependencies:** M1.2.
-- **Estimated scope:** M.
+- **Purpose:** Test selected profile connectivity and expose safe current status.
+- **Scope:** API/application boundary and tests.
+- **Dependencies:** P1.2, P1.3.
+- **Acceptance:** Absent/failed profile blocks formal analysis.
 
-### Checkpoint F1 — Foundation
+### [Must] P1.5 Add opt-in llama.cpp integration test
 
-- [x] All Phase 1 tests and lint pass.
-- [x] Commands in README and AGENTS are executable and current.
-- [x] User authorized the offline-only vertical-slice batch on 2026-07-19.
+- **Purpose:** Verify a manually started llama.cpp OpenAI-compatible server.
+- **Scope:** Explicit integration marker/test and documentation.
+- **Dependencies:** P1.3, P1.4.
+- **Acceptance:** Not run by default; validates empty API-key path when server
+  permits it.
 
-## Phase 2 — First Testable Vertical Slice
+### Checkpoint P1
 
-### [Must] M2.1 Create and load an analysis project
+- Human verifies a real local endpoint is called and formal analysis is rejected
+  when no tested profile is selected.
 
-- [x] **Purpose:** Deliver the first end-to-end capability using SQLite: create and retrieve a project.
-- **Modification scope:** project application service, SQLite project repository, migration/schema setup, tests.
-- **Acceptance:** Project UUID/timestamps/status persist and reload from a temporary SQLite file; duplicate/invalid input has a stable error.
-- **Verification:** `python -m pytest tests/integration/test_project_lifecycle.py`.
-- **Dependencies:** M1.2.
-- **Estimated scope:** M.
-- **Completion note (2026-07-20):** SQLite `user_version = 1`, explicit connection lifecycle, project create/load, stable duplicate/not-found/input/corrupt-data errors and temporary-file integration tests are complete. The deterministic demo remains in memory by design.
+## Phase 2 — Project versions, conversation, and facts
 
-### [Must] M2.2-lite Persist and continue a planning run
+### [Must] P2.1 Define project/version/conversation/fact contracts
 
-- [x] **Purpose:** Persist one natural-language planning run from initial clarification through the exact saved assessment, proposal and Markdown result.
-- **Modification scope:** `PlanningRun` contract, SQLite v1→v2 migration, planning-run repository/service/coordinator, tests and synchronized scope documentation.
-- **Acceptance:** A vague request saves one to four questions; one persisted answer batch can rerun to `completed`; loading by run ID returns the exact saved assessment, proposal and report; duplicate, invalid transition and corrupt storage paths use stable typed errors.
-- **Verification:** `python -m pytest tests/integration/test_planning_run_lifecycle.py`.
-- **Dependencies:** M1.4, M2.1.
-- **Estimated scope:** M.
-- **Scope adjustment (2026-07-20):** 展示版优先完成自然语言需求、追问、正式评估、结果保存、FastAPI 与 Streamlit 的完整闭环，暂缓完整 conversation resume。Full interview turns, arbitrary resume, checkpoints, Agent-state history and complete replay move to Roadmap without deleting their original contracts.
-- **Completion note (2026-07-20):** `PlanningRun`, SQLite schema v2 and v1→v2 upgrade, create/get/update/list repository, lifecycle service and deterministic clarification→completed coordinator are complete. Thirty new tests cover contracts, migration, round trips, corruption, rollback and the persisted offline loop; the CLI demo remains in memory.
+- **Purpose:** Model project identity, immutable versions, visible conversation,
+  confirmed facts, assumptions, references, and correction state.
+- **Dependencies:** P1.
+- **Acceptance:** No system prompt, chain of thought, trajectory, or raw
+  provider metadata appears in durable visible records.
 
-### [Must] M2.3-lite Add a common AI implementation pattern catalog
+### [Must] P2.2 Persist projects and immutable completed versions
 
-- [x] **Purpose:** Give the later planning surface a small, reviewed directory of common AI delivery patterns.
-- **Modification scope:** Catalog domain contracts, fixed Python fixture, public catalog API, direct deterministic matching and a limited deployment posture assessment. No catalog persistence, generic rule framework or proposal integration.
-- **Acceptance:** `get_opportunity_catalog()` returns exactly the nine approved AI opportunities; non-AI alternatives remain separate; Grade E references are supplemental only; matching returns at most three candidates and deployment returns a posture or clarification needs without a final recommendation or hard-gate disposition.
-- **Verification:** `python -m pytest tests/domain/test_opportunity_catalog.py tests/application/test_catalog_matching.py tests/application/test_deployment_posture.py`, then full offline suite and Ruff checks.
-- **Dependencies:** M2.2-lite.
-- **Estimated scope:** M.
+- **Purpose:** Save history and create a new version for completed-project edits.
+- **Dependencies:** P2.1.
+- **Acceptance:** Reload is durable; completed versions cannot be overwritten.
 
-### [Must] M2.4-lite Add the minimal LangChain + FastAPI planning slice
+### [Must] P2.3 Persist visible conversation and protect confirmed facts
 
-- [x] **Purpose:** Demonstrate one Agent turning a natural-language request into a typed local planning-tool call and returning inspected deterministic planning outputs.
-- **Modification scope:** LangChain planning contracts／Agent, FastAPI composition, scripted offline demo, contract tests and synchronized documentation.
-- **Acceptance:** `POST /v1/planning/interpret` returns a validated intent, matching result, deployment posture and at most four deterministic clarification questions; `GET /health` is live; the Agent has one typed planning tool that actually invokes the existing matching and deployment services.
-- **Verification:** `python -m pytest tests/agent/test_planning_agent.py tests/api/test_planning_api.py`, then the complete offline suite and Ruff checks.
-- **Dependencies:** M2.3-lite.
-- **Estimated scope:** M.
-- **Completion note (2026-07-21):** Completed without PlanningRun integration, a live provider, scoring, hard gates, proposal generation or Markdown export. The API receives an externally injected LangChain chat model; tests and `planning-demo` use a scripted official fake chat model.
+- **Purpose:** Save user/AI messages and prevent silent overwrite of confirmed
+  facts while allowing explicit corrections.
+- **Dependencies:** P2.1, P2.2.
+- **Acceptance:** Contradictions/missing facts are detectable and test-covered.
 
-### [Must] M2.5 Persist the FastAPI planning flow
+### Checkpoint P2
 
-- [x] **Purpose:** Connect the existing single-Agent interpretation, deterministic planning tool, durable PlanningRun lifecycle and formal offline assessment pipeline without adding a new workflow engine.
-- **Modification scope:** A small persisted planning application bridge, minimal FastAPI run endpoints, lifecycle service refresh support, API/integration tests and synchronized documentation.
-- **Acceptance:** A run saves the validated PlanningIntent; matching/deployment gaps persist up to four questions; a later answer batch can persist the existing formal-assessment clarification; sufficient facts complete and reload the exact assessment, proposal and Markdown report.
-- **Verification:** `python -m pytest tests/api/test_persisted_planning_api.py tests/api/test_planning_api.py tests/integration/test_planning_run_lifecycle.py`, then the complete offline suite and Ruff checks.
-- **Dependencies:** M2.2-lite, M2.4-lite.
-- **Estimated scope:** M.
-- **Completion note (2026-07-21):** No SQLite schema, scoring, hard-gate, catalog, deployment-rule, proposal or renderer changes. GET reloads matching and deployment directly from the persisted intent without a LangChain invocation.
+- Human reloads a project and creates a new version from a completed version.
 
-### Roadmap History — Full Conversation and Separate Result Repositories
+## Phase 3 — AI understanding and interview
 
-The original M2.2 interview-turn/session replay, arbitrary resume and conversation
-checkpoint scope remains Roadmap work. The original M2.3–M2.5 separate assessment,
-proposal and report repository tasks below remain historical design detail; the
-demonstration does not wait for those additional repository boundaries because
-M2.2-lite stores the validated final result on `PlanningRun`.
+### [Must] P3.1 Add minimal initial-brief contract and API
 
-### [Roadmap] M2.3 Execute deterministic assessment and hard gates
+- **Purpose:** Require project name, current workflow/problem, desired outcome,
+  and available data; accept unknown/no data.
+- **Dependencies:** P1, P2.
+- **Acceptance:** Optional users/owner and known constraints only; no generic
+  supplementary-notes field.
 
-- [ ] **Purpose:** Produce all six ratings, ROI/KPI assumptions, scope and independent gate disposition from completed interview data.
-- **Modification scope:** assessment service, tool adapters, assessment repository, tests.
-- **Acceptance:** Same input gives same outputs; missing critical data prevents final proposal; high-impact test case returns the expected gate regardless of score.
-- **Verification:** `python -m pytest tests/integration/test_assessment_service.py`.
-- **Dependencies:** M1.3, M2.2.
-- **Estimated scope:** M.
-- **Offline batch note:** the in-memory six-tool → M1.3 assessment path and error mapping are implemented; the assessment repository and persisted interview dependency remain open.
+### [Must] P3.2 Add AI requirement-understanding confirmation
 
-### [Roadmap] M2.4 Assemble and validate the structured PoC proposal
+- **Purpose:** Obtain structured understanding and user confirmation/correction.
+- **Dependencies:** P3.1.
+- **Acceptance:** Unconfirmed claims remain assumptions.
 
-- [ ] **Purpose:** Convert persisted interview and assessment results into `PocProposal` with the fake model.
-- **Modification scope:** proposal assembler, Agent workflow/state, proposal repository, tests.
-- **Acceptance:** Proposal passes schema, contains each dimension once, records gate effects and stores no invalid output after bounded failure.
-- **Verification:** `python -m pytest tests/integration/test_proposal_generation.py`.
-- **Dependencies:** M2.3.
-- **Estimated scope:** M.
-- **Offline batch note:** deterministic proposal assembly covers pass, blocked, assistive-only and requires-controls outcomes; Agent workflow and proposal persistence remain open.
+### [Must] P3.3 Add bounded contextual interview
 
-### [Roadmap] M2.5 Export a deterministic Markdown report
+- **Purpose:** Enable at most three rounds of at most three questions, each with
+  why, impact, and example.
+- **Dependencies:** P3.2.
+- **Acceptance:** User can answer unknown, add corrections, and the AI updates
+  structured facts without storing reasoning traces.
 
-- [ ] **Purpose:** Complete the vertical slice with a readable, stable report artifact.
-- **Modification scope:** Markdown renderer, export service/repository, golden-file tests.
-- **Acceptance:** Report includes inputs, assumptions, cases, score table, hard gates, architecture, ROI/KPI, scope and next actions; section order is stable.
-- **Verification:** `python -m pytest tests/domain/test_markdown_report.py tests/integration/test_vertical_slice.py`.
-- **Dependencies:** M2.4.
-- **Estimated scope:** M.
-- **Offline batch note:** the typed fixed-order renderer, local file writer and CLI demo are implemented; the formal persisted vertical-slice dependency remains open.
+### Checkpoint P3
 
-### Checkpoint V1 — Core Vertical Slice
+- Human UAT with a real model confirms questions are contextual rather than a
+  fixed template.
 
-- [ ] Fake-model flow completes `建立專案 → 訪談 → 評估 → 報告` without network.
-- [ ] Process/repository reload returns the persisted planning-run clarification or completed result.
-- [ ] One normal case and one blocked case pass end to end.
-- [ ] Human reviews the generated Markdown before retrieval work.
+## Phase 4 — Analysis, rubric, and hard gates
 
-## Deferred Retrieval Roadmap — Local Case Knowledge Base
+### [Must] P4.1 Define AI option and evidence-backed rubric contracts
 
-These tasks are intentionally deferred until after the persisted planning-flow
-demonstration is accepted. Fixed catalog case references and the existing
-deterministic fixture output are sufficient for the current offline demo.
+- **Purpose:** Add AI/non-AI/hybrid options, six ratings, fact references, gaps,
+  risks, and score-improvement conditions.
+- **Dependencies:** P3.
+- **Acceptance:** Catalog-external candidate is marked `unstandardized_candidate`.
 
-### [Roadmap] M3.1 Add reviewed synthetic case format and fixtures
+### [Must] P4.2 Validate AI ratings and calculate weighted total
 
-- [ ] **Purpose:** Establish public-safe evidence cases without private or copyrighted datasets.
-- **Modification scope:** case schema/loader, 3–5 initial Markdown fixtures, tests.
-- **Acceptance:** Only approved UTF-8 cases load; required front matter and content hash validate; source fields are inspectable.
-- **Verification:** `python -m pytest tests/cases/test_case_loader.py`.
-- **Dependencies:** M1.2.
-- **Estimated scope:** M.
+- **Purpose:** Program validates score range/references and calculates totals.
+- **Dependencies:** P4.1.
+- **Acceptance:** No old fixed Boolean rules set a final rating.
 
-### [Roadmap] M3.2 Build FAISS index with SQLite metadata mapping
+### [Must] P4.3 Apply existing hard gates to AI analysis
 
-- [ ] **Purpose:** Implement local embeddings storage and reliable metadata linkage.
-- **Modification scope:** case metadata repository, FAISS index adapter, reindex service, tests.
-- **Acceptance:** Fake embeddings produce stable top-k results; content-hash mismatch reports stale index; metadata is not treated as authoritative inside FAISS.
-- **Verification:** `python -m pytest tests/infrastructure/test_case_index.py`.
-- **Dependencies:** M1.4, M3.1.
-- **Estimated scope:** M.
+- **Purpose:** Enforce safety/governance conflicts after AI proposal generation.
+- **Dependencies:** P4.2.
+- **Acceptance:** AI cannot bypass a triggered gate.
 
-### [Roadmap] M3.3 Integrate similar-case evidence into proposal
+### Checkpoint P4
 
-- [ ] **Purpose:** Add retrieval to the vertical slice without weakening deterministic gates.
-- **Modification scope:** retrieval tool, Agent/application orchestration, proposal tests.
-- **Acceptance:** Proposal includes case ID, source reference and fit summary; missing index fails explicitly; hard gates still run.
-- **Verification:** `python -m pytest tests/integration/test_retrieval_proposal.py`.
-- **Dependencies:** M2.4, M3.2.
-- **Estimated scope:** M.
+- Human verifies a real model can recommend non-AI, foundations-first, or hybrid.
 
-### Checkpoint K1 — Evidence-backed Proposal
+## Phase 5 — Cases and report
 
-- [ ] Retrieval metrics pass on reviewed fixtures.
-- [ ] No unapproved case is indexed.
-- [ ] Full fake-model vertical slice remains green.
+### [Must] P5.1 Define and validate reviewed local success cases
 
-## Phase 4 — API and UI
+- **Purpose:** Add manually curated source-backed case records and tag/rule
+  filtering.
+- **Dependencies:** P4.
+- **Acceptance:** No FAISS and no fabricated company, metric, or source.
 
-### [Must] M4.1 Expose the vertical slice through FastAPI
+### [Must] P5.2 Assemble full Markdown planning report
 
-- [ ] **Purpose:** Implement the SPEC endpoints over existing application services.
-- **Modification scope:** FastAPI composition/routes, error mapping, API tests.
-- **Acceptance:** Required status codes and Pydantic response models match SPEC; errors have safe envelopes and correlation IDs.
-- **Verification:** `python -m pytest tests/api`.
-- **Dependencies:** M2.5. Retrieval enrichment is optional deferred Roadmap work.
-- **Estimated scope:** M.
+- **Purpose:** Produce every section in the SPEC report contract.
+- **Dependencies:** P4, P5.1.
+- **Acceptance:** Report is business-actionable and preserves fact references.
 
-### [Must] M4.2 Build basic Streamlit interview and report UI
+### Checkpoint P5
 
-- [ ] **Purpose:** Provide the public demo surface for project creation, interview, assessment and report display/export.
-- **Modification scope:** Streamlit entry/client/views, smoke/manual checklist.
-- **Acceptance:** User completes the standard flow; validation errors are visible; reload uses API/SQLite state rather than browser-only state.
-- **Verification:** Streamlit smoke test plus documented manual flow in fake mode.
-- **Dependencies:** M4.1.
-- **Estimated scope:** M.
+- Business reviewer approves sample report usefulness, not merely schema validity.
 
-### Checkpoint U1 — Local Product Flow
+## Phase 6 — Streamlit product UI
 
-- [ ] API and UI complete the same fake-mode vertical slice.
-- [ ] Keyboard and error-summary manual checks pass.
-- [ ] README screenshots/video are deferred until behavior is accepted.
+### [Must] P6.1 Build home/history and model-settings views
 
-## Phase 5 — Provider and Evaluation
+- **Purpose:** Show project history and profile management without developer
+  controls.
+- **Dependencies:** P1, P2.
 
-### [Should] S5.1 Implement configured OpenAI-compatible adapters
+### [Must] P6.2 Build brief, confirmation, and interview views
 
-- [ ] **Purpose:** Connect real chat and embedding endpoints without changing domain/application code.
-- **Modification scope:** settings, chat adapter, embeddings adapter, opt-in tests.
-- **Acceptance:** Model/provider/base URL/key are environment-driven; capability checks fail safely; tests skip without credentials.
-- **Verification:** Fake suite plus explicit provider integration marker.
-- **Dependencies:** M1.4, M3.2, M4.1.
-- **Estimated scope:** M.
+- **Purpose:** Render the Phase 3 flow through HTTP only.
+- **Dependencies:** P3, P6.1.
 
-### [Should] S5.2 Add trajectory and multi-turn baseline suite
+### [Must] P6.3 Build analysis and readable report views
 
-- [ ] **Purpose:** Validate tool selection and hard-gate coverage across the 15 research scenarios.
-- **Modification scope:** baseline fixtures, trajectory evaluator, parametrized tests.
-- **Acceptance:** Hard-gate miss rate is 0%; proposal schema validity is 100%; expected mandatory tools are called.
-- **Verification:** `python -m pytest tests/evaluation`.
-- **Dependencies:** M3.3.
-- **Estimated scope:** M.
+- **Purpose:** Render Phase 4–5 results and Markdown export without raw JSON,
+  UUIDs, API URLs, or technical warnings.
+- **Dependencies:** P4, P5, P6.2.
 
-### [Could] C5.3 Add optional LangSmith export/evaluation
+### Checkpoint P6
 
-- [ ] **Purpose:** Compare real-model experiments without making LangSmith a runtime dependency.
-- **Modification scope:** optional dependency/config, dataset export, documentation/tests.
-- **Acceptance:** Feature is disabled by default; no sensitive fixture is uploaded; local pytest remains sufficient.
-- **Verification:** Dry-run export test and opt-in manual experiment.
-- **Dependencies:** S5.2.
-- **Estimated scope:** M.
+- Human completes a real-model planning flow without internal identifiers.
 
-## Phase 6 — Docker and Publication Readiness
+## Phase 7 — Local launcher
 
-### [Must] M6.1 Add development and production-oriented Docker configuration
+### [Must] P7.1 Add install batch entry point
 
-- [ ] **Purpose:** Package API/UI while preserving local SQLite/FAISS data and secret boundaries.
-- **Modification scope:** Dockerfile, `compose.yaml`, `compose.dev.yaml`, Docker smoke test/docs.
-- **Acceptance:** API keys come from environment; no real secret or DB password is committed; no database port exists; development ports bind to localhost.
-- **Verification:** Build and run fake-mode vertical slice with Compose.
-- **Dependencies:** M4.2.
-- **Estimated scope:** M.
+- **Purpose:** Check Python 3.12, create venv, install dependencies, initialise
+  local storage/data, and disable Streamlit email prompt/telemetry.
+- **Dependencies:** P6.
 
-### [Must] M6.2 Finalize public README, project log and repository audit
+### [Must] P7.2 Add start batch entry point
 
-- [ ] **Purpose:** Make the repository understandable and safe before any publish request.
-- **Modification scope:** README, PROJECT_LOG, TASKS statuses, optional public assets.
-- **Acceptance:** Commands are current; limitations and MIT license are visible; secret/local-artifact scan is clean; no remote/push occurs without separate authorization.
-- **Verification:** Git status/diff review, ignored-file check and documented demo steps.
-- **Dependencies:** All Must implementation tasks.
-- **Estimated scope:** M.
+- **Purpose:** Start API, wait for health, start Streamlit, and open browser.
+- **Dependencies:** P7.1.
 
-## First Recommended Implementation Task
+### [Must] P7.3 Add reliable stop batch entry point
 
-After human approval, execute **M1.1 — Create executable Python scaffold and offline test entry**. It creates the real command surface needed to verify every later vertical slice while adding no product behavior prematurely.
+- **Purpose:** Stop the two owned local processes without broad process kills.
+- **Dependencies:** P7.2.
+
+## Phase 8 — Portfolio UAT
+
+### [Must] P8.1 Execute viable-MVP acceptance review
+
+- **Purpose:** Verify real provider, blocked-no-provider behavior, versioning,
+  interview, analysis choices, report, launcher, and ignored-artifact hygiene.
+- **Dependencies:** P1–P7.
+- **Acceptance:** Human product UAT passes; fake-model test suite is supporting
+  evidence only.
+
+## Deferred
+
+- Multi-agent, LangGraph, FAISS, Docker, cloud deployment, accounts, online
+  search, multi-tenancy, production-grade credential encryption, PDF/DOCX, and
+  automatic llama.cpp/model installation.
