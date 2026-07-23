@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -153,16 +153,33 @@ def create_app(
 ) -> FastAPI:
     """Compose an API only from the caller-provided LangChain chat model."""
 
-    app = FastAPI(title="AI PoC Planner", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(lifespan_app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            owned_client = getattr(lifespan_app.state, "provider_http_client", None)
+            if isinstance(owned_client, httpx.Client) and not owned_client.is_closed:
+                owned_client.close()
+
+    app = FastAPI(title="AI PoC Planner", version="0.1.0", lifespan=lifespan)
     planning_agent = PlanningAgent(chat_model)
     profile_repository = model_profile_repository or LocalModelProfileRepository()
+
+    def app_owned_provider_client() -> httpx.Client:
+        client = getattr(app.state, "provider_http_client", None)
+        if isinstance(client, httpx.Client) and not client.is_closed:
+            return client
+        client = httpx.Client()
+        app.state.provider_http_client = client
+        return client
 
     def default_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
         return OpenAICompatibleChatAdapter(
             base_url=str(profile.base_url),
             model_name=profile.model_name,
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
-            client=httpx.Client(),
+            client=app_owned_provider_client(),
         )
 
     readiness = ProviderReadinessService(

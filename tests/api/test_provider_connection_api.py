@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
@@ -21,6 +22,26 @@ class SuccessfulAdapter:
 class FailingAdapter:
     def complete(self, **_: object) -> str:
         raise OpenAICompatibleProviderError("provider_unavailable")
+
+
+class CapturingDefaultAdapter:
+    clients: list[httpx.Client] = []
+
+    def __init__(self, **kwargs: object) -> None:
+        client = kwargs["client"]
+        assert isinstance(client, httpx.Client)
+        self.clients.append(client)
+
+    def complete(self, **_: object) -> str:
+        return "connection ok"
+
+
+class InjectedClientAdapter:
+    def __init__(self, client: httpx.Client) -> None:
+        self.client = client
+
+    def complete(self, **_: object) -> str:
+        return "connection ok"
 
 
 def _client(tmp_path: Path, adapter: object = SuccessfulAdapter()) -> TestClient:
@@ -143,3 +164,88 @@ def test_disabled_profile_cannot_be_selected_or_tested_and_new_registry_is_untes
     restarted.patch(f"/v1/model-profiles/{profile['id']}", json={"is_enabled": True})
     restarted.post(f"/v1/model-profiles/{profile['id']}/select")
     assert restarted.get("/v1/provider-status").json()["connection_state"] == "untested"
+
+
+def test_default_connection_tests_reuse_and_close_the_app_owned_http_client(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    CapturingDefaultAdapter.clients = []
+    monkeypatch.setattr(
+        "ai_poc_planner.app.api.OpenAICompatibleChatAdapter",
+        CapturingDefaultAdapter,
+    )
+    repository = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
+    app = create_app(
+        chat_model=GenericFakeChatModel(messages=iter([])),
+        model_profile_repository=repository,
+    )
+
+    with TestClient(app) as client:
+        profile = _create_profile(client)
+        client.post(f"/v1/model-profiles/{profile['id']}/select")
+
+        assert (
+            client.post(f"/v1/model-profiles/{profile['id']}/test").status_code == 200
+        )
+        assert (
+            client.post(f"/v1/model-profiles/{profile['id']}/test").status_code == 200
+        )
+
+        app_owned_client = CapturingDefaultAdapter.clients[0]
+        assert CapturingDefaultAdapter.clients == [app_owned_client, app_owned_client]
+        assert not app_owned_client.is_closed
+
+    assert app_owned_client.is_closed
+
+
+def test_injected_connection_adapter_client_is_not_owned_by_app_lifecycle(
+    tmp_path: Path,
+) -> None:
+    injected_client = httpx.Client()
+    adapter = InjectedClientAdapter(injected_client)
+    repository = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
+    app = create_app(
+        chat_model=GenericFakeChatModel(messages=iter([])),
+        model_profile_repository=repository,
+        connection_adapter_factory=lambda _: adapter,
+    )
+
+    try:
+        with TestClient(app) as client:
+            profile = _create_profile(client)
+            client.post(f"/v1/model-profiles/{profile['id']}/select")
+            assert (
+                client.post(f"/v1/model-profiles/{profile['id']}/test").status_code
+                == 200
+            )
+
+        assert not injected_client.is_closed
+    finally:
+        injected_client.close()
+
+
+def test_app_owned_client_shutdown_is_idempotent(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    CapturingDefaultAdapter.clients = []
+    monkeypatch.setattr(
+        "ai_poc_planner.app.api.OpenAICompatibleChatAdapter",
+        CapturingDefaultAdapter,
+    )
+    repository = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
+    app = create_app(
+        chat_model=GenericFakeChatModel(messages=iter([])),
+        model_profile_repository=repository,
+    )
+    client = TestClient(app)
+
+    with client:
+        profile = _create_profile(client)
+        client.post(f"/v1/model-profiles/{profile['id']}/select")
+        assert (
+            client.post(f"/v1/model-profiles/{profile['id']}/test").status_code == 200
+        )
+        app_owned_client = CapturingDefaultAdapter.clients[0]
+
+    client.close()
+    assert app_owned_client.is_closed
