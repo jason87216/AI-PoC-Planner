@@ -41,6 +41,22 @@ class InterviewRole(StrEnum):
     ASSISTANT = "assistant"
 
 
+class VisibleMessageKind(StrEnum):
+    USER_INPUT = "user_input"
+    AI_UNDERSTANDING = "ai_understanding"
+    CONFIRMATION = "confirmation"
+    CORRECTION = "correction"
+    QUESTION = "question"
+    ANSWER = "answer"
+
+
+class FactStatus(StrEnum):
+    ASSUMPTION = "assumption"
+    CONFIRMED = "confirmed"
+    UNKNOWN = "unknown"
+    MISSING = "missing"
+
+
 class ScoreDimension(StrEnum):
     BUSINESS_VALUE = "business_value"
     DATA_READINESS = "data_readiness"
