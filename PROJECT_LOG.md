@@ -2,8 +2,8 @@
 
 ## Current goal
 
-Complete a documentation-only viable-MVP specification reset. No code
-implementation is authorised until this package passes human review.
+Complete P1.1 model-profile and provider-status contracts, then stop for human
+review before P1.2 or later implementation.
 
 ## Current status
 
@@ -14,7 +14,8 @@ implementation is authorised until this package passes human review.
   success.
 - The replacement direction is a local-first tool using a real
   OpenAI-compatible provider, first targeting a user-started llama.cpp server.
-- This branch changes only documentation. Real model, UI, persistence, report,
+- `feat/model-profile-contracts` contains only framework-neutral P1.1 contracts
+  and tests. Local profile storage, real provider HTTP, UI, persistence, report,
   launcher, and database implementation remain unauthorised.
 
 ## UAT findings recorded from PR #8
@@ -63,8 +64,8 @@ implementation is authorised until this package passes human review.
 
 - PR #8 is retained as a technical prototype/experiment record and is not a
   release candidate.
-- The user has authorised only this documentation review, commit, push, and a
-  Draft PR against `main`; no code work begins until the Draft PR passes human
+- P1.1 is authorised only through contracts and tests on
+  `feat/model-profile-contracts`; do not begin P1.2 or later work before human
   review.
 
 ## Known open questions for later code design
