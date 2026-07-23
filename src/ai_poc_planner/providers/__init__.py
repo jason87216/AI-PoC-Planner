@@ -17,6 +17,12 @@ from ai_poc_planner.providers.fake import (
     FakeModelProvider,
     FakeProviderError,
 )
+from ai_poc_planner.providers.openai_compatible import (
+    OpenAIChatCompletionRequest,
+    OpenAIChatMessage,
+    OpenAICompatibleChatAdapter,
+    OpenAICompatibleProviderError,
+)
 from ai_poc_planner.providers.profiles import (
     ModelProfile,
     ModelProfilePublic,
@@ -32,6 +38,10 @@ __all__ = [
     "ModelProfile",
     "ModelProfilePublic",
     "ModelProvider",
+    "OpenAIChatCompletionRequest",
+    "OpenAIChatMessage",
+    "OpenAICompatibleChatAdapter",
+    "OpenAICompatibleProviderError",
     "ProviderConnectionMessage",
     "ProviderConnectionState",
     "ProviderConnectionStatus",
