@@ -2,7 +2,7 @@
 
 ## Current goal
 
-Complete Phase 1 real-provider foundation and stop for human UAT before Phase 2.
+Complete Phase 1 PR review after successful real-provider UAT; do not begin Phase 2.
 
 ## Current status
 
@@ -18,6 +18,11 @@ Complete Phase 1 real-provider foundation and stop for human UAT before Phase 2.
   opt-in llama.cpp test. It does not start Phase 2 conversation/version/fact
   work, rebuild Streamlit UI, or connect the old planning prototype to a fake
   runtime fallback.
+- Real llama.cpp UAT passed using `D:\ai_class\tools\llama-cpp\bin\llama-server.exe`
+  with `Qwen3-8B-Q4_K_M.gguf`, bound only to `127.0.0.1` with an empty API key.
+  The integration test plus profile CRUD, selection, connection test, readiness,
+  invalidation, and fresh-process status reset all passed; there was no fake
+  runtime fallback and no Phase 1 code bug.
 
 ## UAT findings recorded from PR #8
 
@@ -65,8 +70,8 @@ Complete Phase 1 real-provider foundation and stop for human UAT before Phase 2.
 
 - PR #8 is retained as a technical prototype/experiment record and is not a
   release candidate.
-- Phase 1 is awaiting human UAT on `feat/model-profile-contracts`; do not begin
-  Phase 2 or later work before that review.
+- Phase 1 real UAT has passed on `feat/model-profile-contracts`; keep PR #11 at
+  the review gate and do not begin Phase 2 or later work.
 
 ## Known open questions for later code design
 

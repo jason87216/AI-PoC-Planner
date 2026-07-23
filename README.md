@@ -92,6 +92,16 @@ Then run:
 python -m pytest tests/providers/test_llama_cpp_integration.py
 ```
 
+### Qwen3 compatibility note
+
+In the verified Qwen3 llama.cpp UAT, the server's default reasoning mode
+returned only a reasoning channel while ordinary assistant `content` was empty.
+The Phase 1 adapter requires non-empty assistant content for a successful
+connection test, so that UAT server used `--reasoning off`. This is a verified
+startup configuration for that model/server combination, not a requirement for
+every model. The current adapter does not treat reasoning-only responses as
+successful connection-test responses.
+
 A successful connection test proves only that the configured endpoint was
 reachable at that time. Fake providers remain offline automated-test fixtures;
 there is no fake runtime fallback for provider readiness or formal analysis.
