@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -28,6 +29,11 @@ from ai_poc_planner.application.persisted_planning import (
 )
 from ai_poc_planner.application.planning_runs import PlanningRunService
 from ai_poc_planner.application.projects import AnalysisProjectService
+from ai_poc_planner.application.provider_readiness import (
+    ChatCompletionAdapter,
+    ProviderReadinessError,
+    ProviderReadinessService,
+)
 from ai_poc_planner.domain.catalog import (
     DeploymentPostureAssessment,
     OpportunityMatchResult,
@@ -47,10 +53,21 @@ from ai_poc_planner.persistence.errors import (
     PersistenceError,
     PlanningRunNotFoundError,
 )
+from ai_poc_planner.persistence.model_profiles import (
+    LocalModelProfileRepository,
+    ModelProfileNotFoundError,
+    ModelProfileRepositoryError,
+)
 from ai_poc_planner.persistence.planning_runs import SQLitePlanningRunRepository
 from ai_poc_planner.persistence.projects import SQLiteProjectRepository
 from ai_poc_planner.persistence.schema import initialize_database
 from ai_poc_planner.providers.base import ModelProvider
+from ai_poc_planner.providers.openai_compatible import OpenAICompatibleChatAdapter
+from ai_poc_planner.providers.profiles import (
+    ModelProfile,
+    ModelProfilePublic,
+    ProviderConnectionStatus,
+)
 
 
 class PlanningInterpretRequest(ContractModel):
@@ -88,6 +105,22 @@ class PersistedPlanningUnavailableError(RuntimeError):
     code = "persistence_not_configured"
 
 
+class ModelProfileCreateRequest(ContractModel):
+    profile_name: NonEmptyStr
+    base_url: str
+    model_name: NonEmptyStr
+    api_key: str | None = None
+    is_enabled: bool = True
+
+
+class ModelProfileUpdateRequest(ContractModel):
+    profile_name: NonEmptyStr | None = None
+    base_url: str | None = None
+    model_name: NonEmptyStr | None = None
+    api_key: str | None = None
+    is_enabled: bool | None = None
+
+
 def _error_response(
     status_code: int,
     code: str,
@@ -113,11 +146,30 @@ def create_app(
     chat_model: BaseChatModel,
     database_path: str | Path | None = None,
     assessment_provider: ModelProvider | None = None,
+    model_profile_repository: LocalModelProfileRepository | None = None,
+    connection_adapter_factory: (
+        Callable[[ModelProfile], ChatCompletionAdapter] | None
+    ) = None,
 ) -> FastAPI:
     """Compose an API only from the caller-provided LangChain chat model."""
 
     app = FastAPI(title="AI PoC Planner", version="0.1.0")
     planning_agent = PlanningAgent(chat_model)
+    profile_repository = model_profile_repository or LocalModelProfileRepository()
+
+    def default_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
+        return OpenAICompatibleChatAdapter(
+            base_url=str(profile.base_url),
+            model_name=profile.model_name,
+            api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
+            client=httpx.Client(),
+        )
+
+    readiness = ProviderReadinessService(
+        profiles=profile_repository,
+        adapter_factory=connection_adapter_factory or default_adapter,
+    )
+    app.state.provider_readiness = readiness
 
     @contextmanager
     def persisted_flow() -> Iterator[PersistedPlanningFlow]:
@@ -178,6 +230,19 @@ def create_app(
             return _error_response(409, error.code, uuid4())
         return _error_response(500, error.code, uuid4())
 
+    @app.exception_handler(ModelProfileRepositoryError)
+    async def model_profile_error(
+        _: Request, error: ModelProfileRepositoryError
+    ) -> JSONResponse:
+        status_code = 404 if isinstance(error, ModelProfileNotFoundError) else 409
+        return _error_response(status_code, error.code, uuid4())
+
+    @app.exception_handler(ProviderReadinessError)
+    async def provider_readiness_error(
+        _: Request, error: ProviderReadinessError
+    ) -> JSONResponse:
+        return _error_response(409, error.code, uuid4())
+
     @app.exception_handler(Exception)
     async def unexpected_error(_: Request, __: Exception) -> JSONResponse:
         return _error_response(500, "internal_error", uuid4())
@@ -185,6 +250,70 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/v1/model-profiles", response_model=list[ModelProfilePublic])
+    def list_model_profiles() -> list[ModelProfilePublic]:
+        return [profile.to_public() for profile in profile_repository.list()]
+
+    @app.post(
+        "/v1/model-profiles",
+        response_model=ModelProfilePublic,
+        status_code=201,
+    )
+    def create_model_profile(request: ModelProfileCreateRequest) -> ModelProfilePublic:
+        return profile_repository.create(
+            profile_name=request.profile_name,
+            base_url=request.base_url,
+            model_name=request.model_name,
+            api_key=request.api_key,
+            is_enabled=request.is_enabled,
+        ).to_public()
+
+    @app.get("/v1/model-profiles/{profile_id}", response_model=ModelProfilePublic)
+    def get_model_profile(profile_id: UUID) -> ModelProfilePublic:
+        return profile_repository.get(profile_id).to_public()
+
+    @app.patch("/v1/model-profiles/{profile_id}", response_model=ModelProfilePublic)
+    def update_model_profile(
+        profile_id: UUID, request: ModelProfileUpdateRequest
+    ) -> ModelProfilePublic:
+        updates = request.model_dump(exclude_unset=True)
+        profile = profile_repository.update(profile_id, **updates)
+        readiness.invalidate(profile_id)
+        return profile.to_public()
+
+    @app.delete("/v1/model-profiles/{profile_id}", status_code=204)
+    def delete_model_profile(profile_id: UUID) -> None:
+        profile_repository.delete(profile_id)
+        readiness.invalidate(profile_id)
+
+    @app.post(
+        "/v1/model-profiles/{profile_id}/select",
+        response_model=ModelProfilePublic,
+    )
+    def select_model_profile(profile_id: UUID) -> ModelProfilePublic:
+        profile = profile_repository.select(profile_id)
+        return profile.to_public()
+
+    @app.post(
+        "/v1/model-profiles/{profile_id}/test",
+        response_model=ProviderConnectionStatus,
+    )
+    def test_model_profile(profile_id: UUID) -> ProviderConnectionStatus:
+        return readiness.test(profile_id)
+
+    @app.get("/v1/provider-status", response_model=ProviderConnectionStatus)
+    def selected_provider_status() -> ProviderConnectionStatus:
+        status = readiness.selected_status()
+        if status is None:
+            raise ProviderReadinessError("provider_not_ready")
+        return status
+
+    @app.get("/v1/provider-readiness", response_model=ProviderConnectionStatus)
+    def formal_analysis_readiness() -> ProviderConnectionStatus:
+        """Expose only the guard; legacy fake planning endpoints are not wired here."""
+
+        return readiness.require_formal_analysis_ready()
 
     @app.post("/v1/planning/interpret", response_model=PlanningInterpretResponse)
     def interpret(request: PlanningInterpretRequest) -> PlanningInterpretResponse:
