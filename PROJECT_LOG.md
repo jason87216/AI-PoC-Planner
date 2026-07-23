@@ -2,8 +2,7 @@
 
 ## Current goal
 
-Complete P1.1 model-profile and provider-status contracts, then stop for human
-review before P1.2 or later implementation.
+Complete Phase 1 real-provider foundation and stop for human UAT before Phase 2.
 
 ## Current status
 
@@ -14,9 +13,11 @@ review before P1.2 or later implementation.
   success.
 - The replacement direction is a local-first tool using a real
   OpenAI-compatible provider, first targeting a user-started llama.cpp server.
-- `feat/model-profile-contracts` contains only framework-neutral P1.1 contracts
-  and tests. Local profile storage, real provider HTTP, UI, persistence, report,
-  launcher, and database implementation remain unauthorised.
+- `feat/model-profile-contracts` now contains Phase 1 only: P1.1 contracts,
+  local JSON profiles, OpenAI-compatible adapter, status/readiness API, and an
+  opt-in llama.cpp test. It does not start Phase 2 conversation/version/fact
+  work, rebuild Streamlit UI, or connect the old planning prototype to a fake
+  runtime fallback.
 
 ## UAT findings recorded from PR #8
 
@@ -64,9 +65,8 @@ review before P1.2 or later implementation.
 
 - PR #8 is retained as a technical prototype/experiment record and is not a
   release candidate.
-- P1.1 is authorised only through contracts and tests on
-  `feat/model-profile-contracts`; do not begin P1.2 or later work before human
-  review.
+- Phase 1 is awaiting human UAT on `feat/model-profile-contracts`; do not begin
+  Phase 2 or later work before that review.
 
 ## Known open questions for later code design
 

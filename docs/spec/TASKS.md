@@ -75,6 +75,11 @@ Fake models remain permitted for deterministic automated tests only.
 - Human verifies a real local endpoint is called and formal analysis is rejected
   when no tested profile is selected.
 
+**Implementation status (PR #11, human UAT pending):** P1.1 contracts, P1.2
+local JSON profile repository, P1.3 OpenAI-compatible adapter, P1.4 safe
+profile/status API plus readiness guard, and P1.5 opt-in llama.cpp test are
+implemented. No fake runtime fallback is introduced.
+
 ## Phase 2 — Project versions, conversation, and facts
 
 ### [Must] P2.1 Define project/version/conversation/fact contracts

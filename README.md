@@ -66,6 +66,36 @@ python -m ruff format --check .
 - 未授权资料外传、禁止外部端点、缺少必要人工审核等 hard-gate 冲突会阻挡结论。
 - 产品只保存正式可见的使用者/AI 对话与结构化事实；不保存 system prompt、chain of thought、LangChain tool trajectory 或 raw provider metadata。
 
+## Phase 1 provider foundation
+
+Phase 1 implements local model-profile storage, an OpenAI-compatible chat
+adapter, safe profile/status API endpoints, a formal-analysis readiness guard,
+and an opt-in llama.cpp validation. This is a provider foundation only: the
+Streamlit product UI has not been rebuilt, and the formal business interview,
+scoring, and report are not connected to a real model yet.
+
+Profiles are stored for this MVP in a private local JSON file. The default is
+`%LOCALAPPDATA%\AI-PoC-Planner\model_profiles.json` on Windows, or
+`~/.local/share/ai-poc-planner/model_profiles.json` elsewhere; set
+`AI_POC_PLANNER_DATA_DIR` to override the directory. API keys are plaintext in
+that user-local file by deliberate MVP trade-off. They are excluded from public
+profile responses, normal representations, and safe error responses.
+
+The user starts llama.cpp independently. The default test suite never calls the
+network. To opt in after starting an OpenAI-compatible llama.cpp server, set
+`AI_POC_PLANNER_LLAMA_CPP_TEST=1`,
+`AI_POC_PLANNER_LLAMA_CPP_BASE_URL`, and
+`AI_POC_PLANNER_LLAMA_CPP_MODEL`; `AI_POC_PLANNER_LLAMA_CPP_API_KEY` is optional.
+Then run:
+
+```powershell
+python -m pytest tests/providers/test_llama_cpp_integration.py
+```
+
+A successful connection test proves only that the configured endpoint was
+reachable at that time. Fake providers remain offline automated-test fixtures;
+there is no fake runtime fallback for provider readiness or formal analysis.
+
 ## License
 
 MIT License. See [LICENSE](LICENSE).
