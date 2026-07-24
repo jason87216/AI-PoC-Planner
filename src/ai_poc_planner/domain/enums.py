@@ -82,6 +82,38 @@ class FactStatus(StrEnum):
     MISSING = "missing"
 
 
+class AnalysisConclusion(StrEnum):
+    SUITABLE_FOR_AI = "suitable_for_ai"
+    BETTER_SUITED_TO_NON_AI = "better_suited_to_non_ai"
+    ESTABLISH_NON_AI_FOUNDATIONS_BEFORE_AI = "establish_non_ai_foundations_before_ai"
+    HYBRID_AI_AND_NON_AI = "hybrid_ai_and_non_ai"
+
+
+class AnalysisOptionKind(StrEnum):
+    AI = "ai"
+    NON_AI = "non_ai"
+    FOUNDATIONS_FIRST = "foundations_first"
+    HYBRID = "hybrid"
+
+
+class DecisionAuthority(StrEnum):
+    ASSISTIVE_ONLY = "assistive_only"
+    HUMAN_FINAL_DECISION = "human_final_decision"
+    AUTONOMOUS_ACTION = "autonomous_action"
+
+
+class ProcessingBoundary(StrEnum):
+    LOCAL_ONLY = "local_only"
+    PRIVATE_ENDPOINT = "private_endpoint"
+    EXTERNAL_ENDPOINT = "external_endpoint"
+
+
+class EvidenceState(StrEnum):
+    CONFIRMED = "confirmed"
+    DENIED = "denied"
+    UNKNOWN = "unknown"
+
+
 class ScoreDimension(StrEnum):
     BUSINESS_VALUE = "business_value"
     DATA_READINESS = "data_readiness"
