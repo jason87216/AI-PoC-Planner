@@ -2,7 +2,7 @@
 
 ## Current goal
 
-Complete Phase 3 real-model discovery interview; do not begin Phase 4.
+Complete Phase 4 evidence-backed assessment; do not begin Phase 5.
 
 ## Current status
 
@@ -43,8 +43,17 @@ Complete Phase 3 real-model discovery interview; do not begin Phase 4.
   covered initial brief, correction/regeneration, confirmation, bounded rounds,
   unknown/addition/correction, ready-for-assessment, and fresh-app reload. It
   exposed and fixed a local structured-output timeout and an over-specified
-  correction contract. Phase 4 scoring, hard gates, cases, reports, and the
-  Streamlit rebuild have not started.
+  correction contract.
+- Phase 4 upgrades SQLite additively to schema v5. It keeps legacy,
+  Phase 2, and Phase 3 records intact while adding immutable analysis results,
+  options, scores, resolved current-fact references, and hard-gate results.
+  The provider proposes structured options and ratings only; the program
+  validates current `Fxxx` fact references, assigns the six normative weights,
+  calculates the weighted total, and applies existing HG-01 through HG-07 with
+  conservative handling for unknown gate inputs. No prompt, reasoning, raw
+  response, API key, Authorization header, or base URL is persisted. Offline
+  tests pass; real llama.cpp Phase 4 UAT is pending. Phase 5 cases/reports and
+  the Streamlit rebuild have not started.
 
 ## UAT findings recorded from PR #8
 
