@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from ai_poc_planner.providers.openai_compatible import (
+    JSONSchemaResponseFormat,
     OpenAICompatibleChatAdapter,
     OpenAICompatibleProviderError,
 )
@@ -66,6 +67,43 @@ def test_adapter_joins_openai_endpoint_once(
         "messages": [{"role": "user", "content": "hello"}],
         "temperature": 0,
         "max_tokens": 12,
+    }
+
+
+def test_adapter_sends_structured_response_format_only_when_requested() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return _success(request)
+
+    _adapter(handler).complete(
+        messages=[{"role": "user", "content": "hello"}],
+        temperature=0,
+        max_tokens=12,
+        response_format=JSONSchemaResponseFormat(
+            name="probe",
+            schema={
+                "type": "object",
+                "properties": {"status": {"type": "string", "enum": ["ok"]}},
+                "required": ["status"],
+                "additionalProperties": False,
+            },
+        ),
+    )
+
+    assert json.loads(seen[0].content)["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "probe",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {"status": {"type": "string", "enum": ["ok"]}},
+                "required": ["status"],
+                "additionalProperties": False,
+            },
+        },
     }
     assert seen[0].headers["Authorization"] == f"Bearer {SECRET_MARKER}"
 

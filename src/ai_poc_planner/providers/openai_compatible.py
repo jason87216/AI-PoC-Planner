@@ -9,7 +9,7 @@ from typing import Literal
 import httpx
 from pydantic import AnyHttpUrl, Field, SecretStr, TypeAdapter, ValidationError
 
-from ai_poc_planner.domain.models import ContractModel, NonEmptyStr
+from ai_poc_planner.domain.models import ContractModel, JSONValue, NonEmptyStr
 from ai_poc_planner.providers.base import ProviderError
 
 _HTTP_URL = TypeAdapter(AnyHttpUrl)
@@ -29,6 +29,25 @@ class OpenAIChatCompletionRequest(ContractModel):
     messages: list[OpenAIChatMessage] = Field(min_length=1)
     temperature: float = Field(ge=0, le=2)
     max_tokens: int = Field(ge=1, le=4096)
+    response_format: dict[str, JSONValue] | None = None
+
+
+class JSONSchemaResponseFormat(ContractModel):
+    """OpenAI-compatible structured-output request payload."""
+
+    name: NonEmptyStr
+    json_schema: dict[str, JSONValue] = Field(alias="schema")
+    strict: bool = True
+
+    def as_request_value(self) -> dict[str, JSONValue]:
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": self.name,
+                "strict": self.strict,
+                "schema": self.json_schema,
+            },
+        }
 
 
 class OpenAICompatibleProviderError(ProviderError):
@@ -98,16 +117,18 @@ class OpenAICompatibleChatAdapter:
         messages: Sequence[Mapping[str, str]],
         temperature: float,
         max_tokens: int,
+        response_format: JSONSchemaResponseFormat | None = None,
     ) -> str:
         try:
-            request_payload = OpenAIChatCompletionRequest.model_validate(
-                {
-                    "model": self._model_name,
-                    "messages": list(messages),
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                }
-            )
+            payload = {
+                "model": self._model_name,
+                "messages": list(messages),
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            if response_format is not None:
+                payload["response_format"] = response_format.as_request_value()
+            request_payload = OpenAIChatCompletionRequest.model_validate(payload)
         except ValidationError as error:
             raise ValueError("invalid chat completion request") from error
         headers = {"Content-Type": "application/json"}
@@ -116,7 +137,7 @@ class OpenAICompatibleChatAdapter:
         try:
             response = self._client.post(
                 self._endpoint_url(),
-                json=request_payload.model_dump(mode="json"),
+                json=request_payload.model_dump(mode="json", exclude_none=True),
                 headers=headers,
                 timeout=self._timeout_seconds,
             )
