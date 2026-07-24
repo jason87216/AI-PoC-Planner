@@ -105,7 +105,7 @@ class EvidenceAnalysisService:
         ]
         raw = self._adapter_factory(profile).complete(
             messages=messages,
-            max_tokens=1024,
+            max_tokens=2048,
             temperature=0,
         )
         try:
@@ -116,13 +116,17 @@ class EvidenceAnalysisService:
                     {
                         "role": "system",
                         "content": (
-                            "Return only a complete JSON object for the same schema. "
-                            "Repair invalid fields; do not provide prose or reasoning."
+                            "Return only a complete JSON object. Required keys are "
+                            "schema_version, requirement_summary, options, "
+                            "recommended_option_key, conclusion, conclusion_rationale, "
+                            "conclusion_fact_refs, rubric_ratings, gate_signals, "
+                            "overall_risks, unresolved_gaps. Include 2-4 options and "
+                            "exactly six ratings. Do not include weights, totals, or gates."
                         ),
                     },
                     {"role": "user", "content": '{"schema_version":"1.0"}'},
                 ],
-                max_tokens=1024,
+                max_tokens=2048,
                 temperature=0,
             )
             try:
