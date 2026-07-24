@@ -10,7 +10,7 @@ from ai_poc_planner.persistence.errors import (
     UnsupportedSchemaVersionError,
 )
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 _PROJECT_COLUMNS = frozenset(
     {
         "id",
@@ -122,6 +122,39 @@ _FACT_COLUMNS = frozenset(
     }
 )
 _FACT_REFERENCE_COLUMNS = frozenset({"fact_id", "message_id"})
+_INTERVIEW_SESSION_COLUMNS = frozenset(
+    {
+        "id",
+        "version_id",
+        "brief_message_id",
+        "latest_understanding_message_id",
+        "understanding_revision",
+        "status",
+        "current_round",
+        "understanding_confirmed_at",
+        "completed_at",
+        "created_at",
+        "updated_at",
+    }
+)
+_INTERVIEW_QUESTION_COLUMNS = frozenset(
+    {
+        "id",
+        "session_id",
+        "version_id",
+        "round_number",
+        "position",
+        "visible_message_id",
+        "fact_key",
+        "question",
+        "why_it_matters",
+        "affected_judgement",
+        "example",
+        "answer_message_id",
+        "created_at",
+        "answered_at",
+    }
+)
 _CREATE_PLANNING_PROJECTS_TABLE = """
 CREATE TABLE IF NOT EXISTS planning_projects (
     id TEXT PRIMARY KEY NOT NULL,
@@ -187,6 +220,84 @@ CREATE TABLE IF NOT EXISTS fact_message_references (
     message_id TEXT NOT NULL REFERENCES visible_conversation_messages(id),
     PRIMARY KEY (fact_id, message_id)
 )
+"""
+_CREATE_INTERVIEW_SESSIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS planning_interview_sessions (
+    id TEXT PRIMARY KEY NOT NULL,
+    version_id TEXT NOT NULL UNIQUE REFERENCES planning_project_versions(id),
+    brief_message_id TEXT NOT NULL REFERENCES visible_conversation_messages(id),
+    latest_understanding_message_id TEXT REFERENCES visible_conversation_messages(id),
+    understanding_revision INTEGER NOT NULL CHECK (understanding_revision >= 0),
+    status TEXT NOT NULL,
+    current_round INTEGER NOT NULL CHECK (current_round BETWEEN 0 AND 3),
+    understanding_confirmed_at TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+_CREATE_INTERVIEW_QUESTIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS planning_interview_questions (
+    id TEXT PRIMARY KEY NOT NULL,
+    session_id TEXT NOT NULL REFERENCES planning_interview_sessions(id),
+    version_id TEXT NOT NULL REFERENCES planning_project_versions(id),
+    round_number INTEGER NOT NULL CHECK (round_number BETWEEN 1 AND 3),
+    position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 3),
+    visible_message_id TEXT NOT NULL REFERENCES visible_conversation_messages(id),
+    fact_key TEXT NOT NULL,
+    question TEXT NOT NULL,
+    why_it_matters TEXT NOT NULL,
+    affected_judgement TEXT NOT NULL,
+    example TEXT NOT NULL,
+    answer_message_id TEXT REFERENCES visible_conversation_messages(id),
+    created_at TEXT NOT NULL,
+    answered_at TEXT,
+    UNIQUE (session_id, round_number, position)
+)
+"""
+_CREATE_INTERVIEW_SESSION_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_interview_sessions_version
+ON planning_interview_sessions(version_id)
+"""
+_CREATE_INTERVIEW_QUESTION_ORDER_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_interview_questions_order
+ON planning_interview_questions(session_id, round_number, position)
+"""
+_CREATE_COMPLETED_SESSION_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_completed_version_session_write
+BEFORE INSERT ON planning_interview_sessions
+WHEN (SELECT status FROM planning_project_versions
+      WHERE id = NEW.version_id) = 'complete'
+BEGIN
+    SELECT RAISE(ABORT, 'completed version is immutable');
+END
+"""
+_CREATE_COMPLETED_SESSION_UPDATE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_completed_version_session_update
+BEFORE UPDATE ON planning_interview_sessions
+WHEN (SELECT status FROM planning_project_versions
+      WHERE id = OLD.version_id) = 'complete'
+BEGIN
+    SELECT RAISE(ABORT, 'completed version is immutable');
+END
+"""
+_CREATE_COMPLETED_QUESTION_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_completed_version_question_write
+BEFORE INSERT ON planning_interview_questions
+WHEN (SELECT status FROM planning_project_versions
+      WHERE id = NEW.version_id) = 'complete'
+BEGIN
+    SELECT RAISE(ABORT, 'completed version is immutable');
+END
+"""
+_CREATE_COMPLETED_QUESTION_UPDATE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_completed_version_question_update
+BEFORE UPDATE ON planning_interview_questions
+WHEN (SELECT status FROM planning_project_versions
+      WHERE id = OLD.version_id) = 'complete'
+BEGIN
+    SELECT RAISE(ABORT, 'completed version is immutable');
+END
 """
 _CREATE_PROJECT_HISTORY_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_planning_projects_updated
@@ -371,6 +482,7 @@ def _validate_current_schema(connection: sqlite3.Connection) -> None:
     _validate_project_table(connection)
     _validate_planning_run_table(connection)
     _validate_phase_two_tables(connection)
+    _validate_phase_three_tables(connection)
 
 
 def _validate_columns(
@@ -393,6 +505,15 @@ def _validate_phase_two_tables(connection: sqlite3.Connection) -> None:
     _validate_columns(connection, "visible_conversation_messages", _MESSAGE_COLUMNS)
     _validate_columns(connection, "project_fact_revisions", _FACT_COLUMNS)
     _validate_columns(connection, "fact_message_references", _FACT_REFERENCE_COLUMNS)
+
+
+def _validate_phase_three_tables(connection: sqlite3.Connection) -> None:
+    _validate_columns(
+        connection, "planning_interview_sessions", _INTERVIEW_SESSION_COLUMNS
+    )
+    _validate_columns(
+        connection, "planning_interview_questions", _INTERVIEW_QUESTION_COLUMNS
+    )
 
 
 def _create_phase_two_schema(connection: sqlite3.Connection) -> None:
@@ -422,6 +543,20 @@ def _create_phase_two_schema(connection: sqlite3.Connection) -> None:
         connection.execute(statement)
 
 
+def _create_phase_three_schema(connection: sqlite3.Connection) -> None:
+    for statement in (
+        _CREATE_INTERVIEW_SESSIONS_TABLE,
+        _CREATE_INTERVIEW_QUESTIONS_TABLE,
+        _CREATE_INTERVIEW_SESSION_INDEX,
+        _CREATE_INTERVIEW_QUESTION_ORDER_INDEX,
+        _CREATE_COMPLETED_SESSION_TRIGGER,
+        _CREATE_COMPLETED_SESSION_UPDATE_TRIGGER,
+        _CREATE_COMPLETED_QUESTION_TRIGGER,
+        _CREATE_COMPLETED_QUESTION_UPDATE_TRIGGER,
+    ):
+        connection.execute(statement)
+
+
 def _phase_two_table_count(connection: sqlite3.Connection) -> int:
     names = {
         "planning_projects",
@@ -444,9 +579,9 @@ def _rollback_quietly(connection: sqlite3.Connection) -> None:
 
 
 def initialize_database(connection: sqlite3.Connection) -> None:
-    """Create schema v3 or additively upgrade supported v1/v2 legacy databases."""
+    """Create schema v4 or additively upgrade supported legacy databases."""
     version = read_schema_version(connection)
-    if version not in {0, 1, 2, CURRENT_SCHEMA_VERSION}:
+    if version not in {0, 1, 2, 3, CURRENT_SCHEMA_VERSION}:
         raise UnsupportedSchemaVersionError(
             "database schema version is not supported by this application"
         )
@@ -474,6 +609,8 @@ def initialize_database(connection: sqlite3.Connection) -> None:
             _validate_phase_two_tables(connection)
         _create_phase_two_schema(connection)
         _validate_phase_two_tables(connection)
+        _create_phase_three_schema(connection)
+        _validate_phase_three_tables(connection)
         connection.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION}")
         connection.commit()
     except SchemaMismatchError:

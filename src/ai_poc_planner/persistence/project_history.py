@@ -47,20 +47,32 @@ class SQLiteProjectHistoryRepository:
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
+        owns_transaction = not self._connection.in_transaction
         try:
-            self._connection.execute("BEGIN")
+            if owns_transaction:
+                self._connection.execute("BEGIN")
             yield
-            self._connection.commit()
+            if owns_transaction:
+                self._connection.commit()
         except sqlite3.Error as error:
-            self._rollback_quietly()
+            if owns_transaction:
+                self._rollback_quietly()
             if "completed version is immutable" in str(error):
                 raise CompletedVersionImmutableError(
                     "completed versions cannot be modified"
                 ) from error
             raise DatabaseOperationError("unable to persist project history") from error
         except Exception:
-            self._rollback_quietly()
+            if owns_transaction:
+                self._rollback_quietly()
             raise
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Expose one explicit aggregate transaction for Phase 3 composition."""
+
+        with self._transaction():
+            yield
 
     def _rollback_quietly(self) -> None:
         try:
@@ -181,6 +193,27 @@ class SQLiteProjectHistoryRepository:
                     version.status.value,
                     version.updated_at.isoformat(),
                     version.completed_at.isoformat() if version.completed_at else None,
+                    str(version.id),
+                    str(version.project_id),
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ProjectVersionNotFoundError("project version was not found")
+            self._touch_project(version.project_id, project_updated_at)
+        return self.get_version(version.project_id, version.version_number)
+
+    def update_version(
+        self, version: ProjectVersion, project_updated_at: datetime
+    ) -> ProjectVersion:
+        """Persist an allowed non-completion state transition."""
+
+        with self._transaction():
+            cursor = self._connection.execute(
+                "UPDATE planning_project_versions SET status=?, updated_at=? "
+                "WHERE id=? AND project_id=?",
+                (
+                    version.status.value,
+                    version.updated_at.isoformat(),
                     str(version.id),
                     str(version.project_id),
                 ),

@@ -50,6 +50,31 @@ class VisibleMessageKind(StrEnum):
     ANSWER = "answer"
 
 
+class DiscoverySessionStatus(StrEnum):
+    """Durable Phase 3 discovery state; it never represents model internals."""
+
+    BRIEF_SUBMITTED = "brief_submitted"
+    AWAITING_UNDERSTANDING_CONFIRMATION = "awaiting_understanding_confirmation"
+    CORRECTION_PENDING = "correction_pending"
+    READY_FOR_INTERVIEW = "ready_for_interview"
+    AWAITING_ANSWERS = "awaiting_answers"
+    READY_FOR_NEXT_ROUND = "ready_for_next_round"
+    READY_FOR_ASSESSMENT = "ready_for_assessment"
+    FAILED = "failed"
+
+
+class AvailableDataStatus(StrEnum):
+    KNOWN = "known"
+    UNKNOWN = "unknown"
+    MISSING = "missing"
+
+
+class InterviewAnswerStatus(StrEnum):
+    ANSWERED = "answered"
+    UNKNOWN = "unknown"
+    MISSING = "missing"
+
+
 class FactStatus(StrEnum):
     ASSUMPTION = "assumption"
     CONFIRMED = "confirmed"

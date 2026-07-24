@@ -23,6 +23,10 @@ from ai_poc_planner.agent.planning import (
     PlanningAgentExecutionError,
     build_planning_result,
 )
+from ai_poc_planner.application.discovery_interview import (
+    DiscoveryError,
+    DiscoveryInterviewService,
+)
 from ai_poc_planner.application.persisted_planning import (
     PersistedPlanningFlow,
     PersistedPlanningOutcome,
@@ -38,6 +42,14 @@ from ai_poc_planner.application.provider_readiness import (
 from ai_poc_planner.domain.catalog import (
     DeploymentPostureAssessment,
     OpportunityMatchResult,
+)
+from ai_poc_planner.domain.discovery import (
+    DiscoverySession,
+    InitialBrief,
+    InterviewQuestion,
+    InterviewRoundAnswerSubmission,
+    NormalizedInitialBrief,
+    UnderstandingCorrectionSubmission,
 )
 from ai_poc_planner.domain.enums import (
     FactStatus,
@@ -61,6 +73,7 @@ from ai_poc_planner.domain.project_history import (
 )
 from ai_poc_planner.domain.workflow import Assessment
 from ai_poc_planner.persistence.connection import database_connection
+from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import (
     CompletedVersionImmutableError,
     CurrentVersionRequiredError,
@@ -71,6 +84,13 @@ from ai_poc_planner.persistence.errors import (
     FactNotCurrentError,
     FactNotFoundError,
     FactReferenceInvalidError,
+    InitialBriefAlreadyExistsError,
+    InterviewAnswersIncompleteError,
+    InterviewQuestionAlreadyAnsweredError,
+    InterviewQuestionInvalidError,
+    InterviewRoundLimitReachedError,
+    InterviewSessionNotFoundError,
+    InvalidInterviewTransitionError,
     InvalidPlanningRunTransitionError,
     InvalidProjectVersionTransitionError,
     InvalidVisibleMessageError,
@@ -78,6 +98,8 @@ from ai_poc_planner.persistence.errors import (
     PlanningRunNotFoundError,
     ProjectNotFoundError,
     ProjectVersionNotFoundError,
+    UnderstandingAlreadyConfirmedError,
+    UnderstandingConfirmationRequiredError,
 )
 from ai_poc_planner.persistence.model_profiles import (
     LocalModelProfileRepository,
@@ -180,6 +202,14 @@ class FactCorrectionRequest(ContractModel):
     reference_message_ids: list[UUID] = Field(min_length=1)
 
 
+class DiscoveryProjectResponse(ContractModel):
+    project: PlanningProject
+    version: ProjectVersion
+    selected_model: object | None = None
+    session: DiscoverySession
+    normalized_brief: NormalizedInitialBrief
+
+
 def _error_response(
     status_code: int,
     code: str,
@@ -207,6 +237,9 @@ def create_app(
     assessment_provider: ModelProvider | None = None,
     model_profile_repository: LocalModelProfileRepository | None = None,
     connection_adapter_factory: (
+        Callable[[ModelProfile], ChatCompletionAdapter] | None
+    ) = None,
+    interview_adapter_factory: (
         Callable[[ModelProfile], ChatCompletionAdapter] | None
     ) = None,
 ) -> FastAPI:
@@ -239,6 +272,17 @@ def create_app(
             model_name=profile.model_name,
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
+        )
+
+    def default_interview_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
+        """Allow bounded local structured output without weakening connection tests."""
+
+        return OpenAICompatibleChatAdapter(
+            base_url=str(profile.base_url),
+            model_name=profile.model_name,
+            api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
+            client=app_owned_provider_client(),
+            timeout_seconds=180,
         )
 
     readiness = ProviderReadinessService(
@@ -282,6 +326,27 @@ def create_app(
         finally:
             connection.close()
 
+    @contextmanager
+    def discovery_flow() -> Iterator[DiscoveryInterviewService]:
+        if database_path is None:
+            raise PersistedPlanningUnavailableError
+        connection = database_connection(database_path)
+        try:
+            initialize_database(connection)
+            history = ProjectHistoryService(
+                SQLiteProjectHistoryRepository(connection),
+                selected_profile_getter=profile_repository.get_selected,
+            )
+            yield DiscoveryInterviewService(
+                history=history,
+                sessions=SQLiteDiscoveryRepository(connection),
+                readiness=readiness,
+                selected_profile_getter=profile_repository.get_selected,
+                adapter_factory=interview_adapter_factory or default_interview_adapter,
+            )
+        finally:
+            connection.close()
+
     @app.exception_handler(RequestValidationError)
     async def request_validation_error(
         _: Request,
@@ -321,6 +386,7 @@ def create_app(
                 ProjectNotFoundError,
                 ProjectVersionNotFoundError,
                 FactNotFoundError,
+                InterviewSessionNotFoundError,
             ),
         ):
             return _error_response(404, error.code, uuid4())
@@ -338,6 +404,14 @@ def create_app(
                 FactNotCurrentError,
                 FactReferenceInvalidError,
                 InvalidVisibleMessageError,
+                InitialBriefAlreadyExistsError,
+                InvalidInterviewTransitionError,
+                UnderstandingConfirmationRequiredError,
+                UnderstandingAlreadyConfirmedError,
+                InterviewRoundLimitReachedError,
+                InterviewAnswersIncompleteError,
+                InterviewQuestionInvalidError,
+                InterviewQuestionAlreadyAnsweredError,
             ),
         ):
             return _error_response(409, error.code, uuid4())
@@ -355,6 +429,12 @@ def create_app(
         _: Request, error: ProviderReadinessError
     ) -> JSONResponse:
         return _error_response(409, error.code, uuid4())
+
+    @app.exception_handler(DiscoveryError)
+    async def discovery_error(_: Request, error: DiscoveryError) -> JSONResponse:
+        return _error_response(
+            502 if error.code == "provider_output_invalid" else 409, error.code, uuid4()
+        )
 
     @app.exception_handler(Exception)
     async def unexpected_error(_: Request, __: Exception) -> JSONResponse:
@@ -427,6 +507,98 @@ def create_app(
         """Expose only the guard; legacy fake planning endpoints are not wired here."""
 
         return readiness.require_formal_analysis_ready()
+
+    @app.post(
+        "/v1/discovery-projects",
+        response_model=DiscoveryProjectResponse,
+        status_code=201,
+    )
+    def create_discovery_project(request: InitialBrief) -> DiscoveryProjectResponse:
+        with discovery_flow() as discovery:
+            project, version, session, normalized = discovery.create_initial_brief(
+                request
+            )
+            return DiscoveryProjectResponse(
+                project=project,
+                version=version,
+                selected_model=version.selected_model,
+                session=session,
+                normalized_brief=normalized,
+            )
+
+    @app.get(
+        "/v1/projects/{project_id}/versions/{version_number}/discovery",
+        response_model=DiscoverySession,
+    )
+    def get_discovery_session(
+        project_id: UUID, version_number: int
+    ) -> DiscoverySession:
+        with discovery_flow() as discovery:
+            return discovery.get_session(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/understanding",
+        response_model=DiscoverySession,
+    )
+    def generate_requirement_understanding(
+        project_id: UUID, version_number: int
+    ) -> DiscoverySession:
+        with discovery_flow() as discovery:
+            session, _ = discovery.generate_understanding(project_id, version_number)
+            return session
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/understanding/confirm",
+        response_model=DiscoverySession,
+    )
+    def confirm_requirement_understanding(
+        project_id: UUID, version_number: int
+    ) -> DiscoverySession:
+        with discovery_flow() as discovery:
+            return discovery.confirm_understanding(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/understanding/corrections",
+        response_model=DiscoverySession,
+    )
+    def submit_understanding_corrections(
+        project_id: UUID,
+        version_number: int,
+        request: UnderstandingCorrectionSubmission,
+    ) -> DiscoverySession:
+        with discovery_flow() as discovery:
+            return discovery.submit_corrections(project_id, version_number, request)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/interview-rounds",
+        response_model=list[InterviewQuestion],
+    )
+    def generate_interview_round(
+        project_id: UUID, version_number: int
+    ) -> list[InterviewQuestion]:
+        with discovery_flow() as discovery:
+            _, questions = discovery.generate_round(project_id, version_number)
+            return questions
+
+    @app.get(
+        "/v1/projects/{project_id}/versions/{version_number}/interview-questions",
+        response_model=list[InterviewQuestion],
+    )
+    def list_interview_questions(
+        project_id: UUID, version_number: int
+    ) -> list[InterviewQuestion]:
+        with discovery_flow() as discovery:
+            return discovery.list_questions(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/interview-answers",
+        response_model=DiscoverySession,
+    )
+    def submit_interview_answers(
+        project_id: UUID, version_number: int, request: InterviewRoundAnswerSubmission
+    ) -> DiscoverySession:
+        with discovery_flow() as discovery:
+            return discovery.submit_round_answers(project_id, version_number, request)
 
     @app.post("/v1/projects", response_model=ProjectVersion, status_code=201)
     def create_project(request: ProjectCreateRequest) -> ProjectVersion:

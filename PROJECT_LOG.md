@@ -2,7 +2,7 @@
 
 ## Current goal
 
-Complete Phase 2 durable project/version history; do not begin Phase 3.
+Complete Phase 3 real-model discovery interview; do not begin Phase 4.
 
 ## Current status
 
@@ -30,6 +30,21 @@ Complete Phase 2 durable project/version history; do not begin Phase 3.
   aggregate. Local API UAT passed create/reload, completion, successor cloning,
   fact confirmation/correction, unknown/missing facts, and completed-version
   blocking without any provider call or fake runtime fallback.
+- Phase 3 upgrades SQLite additively to schema v4. It retains every legacy and
+  Phase 2 table, and adds `planning_interview_sessions` plus
+  `planning_interview_questions` for a bounded, reloadable discovery flow.
+  The flow requires a selected, enabled, tested real profile; creates a minimal
+  initial brief with confirmed/unknown/missing facts; validates real-model JSON
+  understanding before user confirmation; and supports explicit correction plus
+  at most three interview rounds of at most three visible questions. No prompt,
+  reasoning, raw provider response, API key, or Authorization value is stored.
+  Offline validation and the real Qwen3 llama.cpp UAT passed using
+  `--reasoning off`, empty API key, and loopback-only server binding. The UAT
+  covered initial brief, correction/regeneration, confirmation, bounded rounds,
+  unknown/addition/correction, ready-for-assessment, and fresh-app reload. It
+  exposed and fixed a local structured-output timeout and an over-specified
+  correction contract. Phase 4 scoring, hard gates, cases, reports, and the
+  Streamlit rebuild have not started.
 
 ## UAT findings recorded from PR #8
 
@@ -77,8 +92,8 @@ Complete Phase 2 durable project/version history; do not begin Phase 3.
 
 - PR #8 is retained as a technical prototype/experiment record and is not a
   release candidate.
-- PR #11 merged Phase 1 after real llama.cpp UAT. Phase 2 is implemented on
-  `feat/project-version-history`; do not begin Phase 3 or later work.
+- PR #11 merged Phase 1 after real llama.cpp UAT. PR #12 merged Phase 2.
+  Phase 3 is in progress on `feat/real-model-interview`; do not begin Phase 4.
 
 ## Known open questions for later code design
 

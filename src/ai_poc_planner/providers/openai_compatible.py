@@ -28,7 +28,7 @@ class OpenAIChatCompletionRequest(ContractModel):
     model: NonEmptyStr
     messages: list[OpenAIChatMessage] = Field(min_length=1)
     temperature: float = Field(ge=0, le=2)
-    max_tokens: int = Field(ge=1, le=256)
+    max_tokens: int = Field(ge=1, le=1024)
 
 
 class OpenAICompatibleProviderError(ProviderError):

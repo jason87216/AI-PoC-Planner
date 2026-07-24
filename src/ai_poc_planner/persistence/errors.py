@@ -101,3 +101,39 @@ class FactCorrectionInvalidError(PersistenceError):
 
 class InvalidVisibleMessageError(PersistenceError):
     code = "invalid_visible_message"
+
+
+class InterviewSessionNotFoundError(PersistenceError):
+    code = "interview_session_not_found"
+
+
+class InitialBriefAlreadyExistsError(PersistenceError):
+    code = "initial_brief_already_exists"
+
+
+class InvalidInterviewTransitionError(PersistenceError):
+    code = "invalid_interview_transition"
+
+
+class UnderstandingConfirmationRequiredError(PersistenceError):
+    code = "understanding_confirmation_required"
+
+
+class UnderstandingAlreadyConfirmedError(PersistenceError):
+    code = "understanding_already_confirmed"
+
+
+class InterviewRoundLimitReachedError(PersistenceError):
+    code = "interview_round_limit_reached"
+
+
+class InterviewAnswersIncompleteError(PersistenceError):
+    code = "interview_answers_incomplete"
+
+
+class InterviewQuestionInvalidError(PersistenceError):
+    code = "interview_question_invalid"
+
+
+class InterviewQuestionAlreadyAnsweredError(PersistenceError):
+    code = "interview_question_already_answered"

@@ -121,9 +121,27 @@ user correction. The database does not persist system prompts, reasoning,
 chain-of-thought, tool/LangChain trajectories, raw provider metadata, API keys,
 or Authorization headers.
 
-Phase 3 real-model interviews are not implemented yet. Scoring, hard-gate
-rewrites, reports, and the Streamlit product UI are also still outside the
-implemented product flow.
+## Phase 3 real-model discovery interview
+
+Phase 3 adds a provider-readiness-gated minimal initial brief, a real-model
+requirement-understanding confirmation/correction step, and a contextual
+interview bounded to three rounds with at most three questions per round.
+Only visible conversation and append-only fact revisions survive reload. A
+completed version remains immutable; Phase 3 stops at `ready_for_assessment`.
+
+The structured provider boundary accepts only a complete JSON object (or one
+complete `json` fence), validates it with Pydantic, and allows one safe repair
+retry. It never persists system prompts, reasoning, chain of thought, tool
+trajectories, raw provider responses, API keys, or Authorization headers.
+Runtime calls require the currently selected, enabled, successfully tested real
+profile to match the version's safe model snapshot. Test fakes are dependency
+injection only; no fake runtime fallback exists.
+
+The real Qwen3 llama.cpp UAT passed with `--reasoning off`, including correction
+and regeneration, confirmation, bounded interview completion, and fresh-app
+reload. Provider connection status remains process-local and is not persisted.
+Phase 4 scoring/hard gates, reports, and the Streamlit product UI are still not
+implemented.
 
 ## License
 
