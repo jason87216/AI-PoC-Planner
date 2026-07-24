@@ -291,7 +291,7 @@ def create_app(
             model_name=profile.model_name,
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
-            timeout_seconds=180,
+            timeout_seconds=300,
         )
 
     def default_analysis_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
