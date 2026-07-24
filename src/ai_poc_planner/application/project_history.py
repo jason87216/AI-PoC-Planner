@@ -214,6 +214,32 @@ class ProjectHistoryService:
             reference_message_ids=reference_message_ids,
         )
 
+    def record_user_confirmed_fact(
+        self,
+        project_id: UUID,
+        version_number: int,
+        *,
+        fact_key: str,
+        value: object,
+        reference_message_ids: Sequence[UUID],
+    ) -> FactRevision:
+        """Record direct user input without allowing a silent current-fact overwrite."""
+
+        version = self._require_mutable_latest(project_id, version_number)
+        self._ensure_new_fact_key(version.id, fact_key)
+        self._validate_references(
+            version.id,
+            reference_message_ids,
+            required_role=InterviewRole.USER,
+        )
+        return self._write_fact(
+            version.id,
+            fact_key=fact_key,
+            value=value,
+            status=FactStatus.CONFIRMED,
+            reference_message_ids=reference_message_ids,
+        )
+
     def confirm_assumption(
         self,
         project_id: UUID,

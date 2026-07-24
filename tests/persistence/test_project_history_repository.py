@@ -38,7 +38,7 @@ def test_fresh_schema_contains_phase_two_tables_and_preserves_foreign_keys(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
-        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 3
+        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 4
         assert {
             "analysis_projects",
             "planning_runs",
@@ -47,6 +47,8 @@ def test_fresh_schema_contains_phase_two_tables_and_preserves_foreign_keys(
             "visible_conversation_messages",
             "project_fact_revisions",
             "fact_message_references",
+            "planning_interview_sessions",
+            "planning_interview_questions",
         } <= tables
         assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     finally:
@@ -140,9 +142,29 @@ def test_v1_and_v2_legacy_data_survive_additive_upgrade(tmp_path: Path) -> None:
                     ]
                     == 1
                 )
-            assert read_schema_version(connection) == 3
+            assert read_schema_version(connection) == 4
         finally:
             connection.close()
+
+
+def test_v3_schema_additively_upgrades_to_v4(tmp_path: Path) -> None:
+    connection = database_connection(tmp_path / "v3.sqlite3")
+    try:
+        initialize_database(connection)
+        connection.execute("DROP TABLE planning_interview_questions")
+        connection.execute("DROP TABLE planning_interview_sessions")
+        connection.execute("PRAGMA user_version = 3")
+        connection.commit()
+
+        initialize_database(connection)
+
+        assert read_schema_version(connection) == 4
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name='planning_interview_sessions'"
+        ).fetchone()
+    finally:
+        connection.close()
 
 
 def test_project_creation_completion_and_successor_are_durable_and_immutable(
