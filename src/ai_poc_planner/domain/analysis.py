@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import Field, StringConstraints, model_validator
 
@@ -11,10 +12,16 @@ from ai_poc_planner.domain.enums import (
     AnalysisConclusion,
     AnalysisOptionKind,
     DecisionAuthority,
+    GateDisposition,
     ProcessingBoundary,
     ScoreDimension,
 )
-from ai_poc_planner.domain.models import ContractModel, JSONValue, NonEmptyStr
+from ai_poc_planner.domain.models import (
+    ContractModel,
+    JSONValue,
+    NonEmptyStr,
+    UtcDateTime,
+)
 
 FactToken = Annotated[str, StringConstraints(pattern=r"^F[0-9]{3}$")]
 OptionKey = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9_-]{0,39}$")]
@@ -35,6 +42,7 @@ GateSignalName = Literal[
     "data_availability",
     "digitization",
     "validation_sample",
+    "data_boundary",
 ]
 
 
@@ -156,3 +164,44 @@ class AIAnalysisDraft(ContractModel):
         ):
             raise ValueError("rubric_ratings must contain each dimension exactly once")
         return self
+
+
+class ProgramScore(ContractModel):
+    dimension: ScoreDimension
+    rating: int = Field(ge=1, le=5)
+    weight: int = Field(ge=0, le=100)
+    weighted_points: int = Field(ge=0, le=100)
+    rationale: NonEmptyStr
+    evidence_fact_refs: list[FactToken] = Field(min_length=1)
+    gap_fact_refs: list[FactToken] = Field(default_factory=list)
+    data_gaps: list[NonEmptyStr] = Field(default_factory=list)
+    risks: list[NonEmptyStr] = Field(default_factory=list)
+    improvement_conditions: list[NonEmptyStr] = Field(default_factory=list)
+
+
+class ProgramGateResult(ContractModel):
+    rule_id: NonEmptyStr
+    disposition: GateDisposition
+    reason: NonEmptyStr
+    required_controls: list[NonEmptyStr] = Field(default_factory=list)
+    human_review_required: bool
+
+
+class ValidatedAnalysisResult(ContractModel):
+    id: UUID
+    version_id: UUID
+    rubric_version: Literal["1.0"]
+    hard_gate_version: Literal["legacy-1"]
+    requirement_summary: NonEmptyStr
+    options: list[AnalysisOptionDraft] = Field(min_length=2, max_length=4)
+    recommended_option_key: OptionKey
+    conclusion: AnalysisConclusion
+    conclusion_rationale: NonEmptyStr
+    conclusion_fact_refs: list[FactToken] = Field(min_length=1)
+    scores: list[ProgramScore] = Field(min_length=6, max_length=6)
+    weighted_total: int = Field(ge=0, le=100)
+    gate_results: list[ProgramGateResult]
+    gate_disposition: GateDisposition
+    overall_risks: list[NonEmptyStr] = Field(default_factory=list)
+    unresolved_gaps: list[NonEmptyStr] = Field(default_factory=list)
+    created_at: UtcDateTime

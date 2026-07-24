@@ -27,6 +27,10 @@ from ai_poc_planner.application.discovery_interview import (
     DiscoveryError,
     DiscoveryInterviewService,
 )
+from ai_poc_planner.application.evidence_analysis import (
+    EvidenceAnalysisError,
+    EvidenceAnalysisService,
+)
 from ai_poc_planner.application.persisted_planning import (
     PersistedPlanningFlow,
     PersistedPlanningOutcome,
@@ -39,6 +43,7 @@ from ai_poc_planner.application.provider_readiness import (
     ProviderReadinessError,
     ProviderReadinessService,
 )
+from ai_poc_planner.domain.analysis import ValidatedAnalysisResult
 from ai_poc_planner.domain.catalog import (
     DeploymentPostureAssessment,
     OpportunityMatchResult,
@@ -72,6 +77,7 @@ from ai_poc_planner.domain.project_history import (
     VisibleConversationMessage,
 )
 from ai_poc_planner.domain.workflow import Assessment
+from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.connection import database_connection
 from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import (
@@ -242,6 +248,9 @@ def create_app(
     interview_adapter_factory: (
         Callable[[ModelProfile], ChatCompletionAdapter] | None
     ) = None,
+    analysis_adapter_factory: (
+        Callable[[ModelProfile], ChatCompletionAdapter] | None
+    ) = None,
 ) -> FastAPI:
     """Compose an API only from the caller-provided LangChain chat model."""
 
@@ -283,6 +292,15 @@ def create_app(
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
             timeout_seconds=180,
+        )
+
+    def default_analysis_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
+        return OpenAICompatibleChatAdapter(
+            base_url=str(profile.base_url),
+            model_name=profile.model_name,
+            api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
+            client=app_owned_provider_client(),
+            timeout_seconds=240,
         )
 
     readiness = ProviderReadinessService(
@@ -343,6 +361,28 @@ def create_app(
                 readiness=readiness,
                 selected_profile_getter=profile_repository.get_selected,
                 adapter_factory=interview_adapter_factory or default_interview_adapter,
+            )
+        finally:
+            connection.close()
+
+    @contextmanager
+    def analysis_flow() -> Iterator[EvidenceAnalysisService]:
+        if database_path is None:
+            raise PersistedPlanningUnavailableError
+        connection = database_connection(database_path)
+        try:
+            initialize_database(connection)
+            history = ProjectHistoryService(
+                SQLiteProjectHistoryRepository(connection),
+                selected_profile_getter=profile_repository.get_selected,
+            )
+            yield EvidenceAnalysisService(
+                history=history,
+                sessions=SQLiteDiscoveryRepository(connection),
+                analyses=SQLiteAnalysisRepository(connection),
+                readiness=readiness,
+                selected_profile_getter=profile_repository.get_selected,
+                adapter_factory=analysis_adapter_factory or default_analysis_adapter,
             )
         finally:
             connection.close()
@@ -435,6 +475,13 @@ def create_app(
         return _error_response(
             502 if error.code == "provider_output_invalid" else 409, error.code, uuid4()
         )
+
+    @app.exception_handler(EvidenceAnalysisError)
+    async def analysis_error(_: Request, error: EvidenceAnalysisError) -> JSONResponse:
+        status = 502 if error.code == "provider_output_invalid" else 409
+        if error.code == "analysis_not_found":
+            status = 404
+        return _error_response(status, error.code, uuid4())
 
     @app.exception_handler(Exception)
     async def unexpected_error(_: Request, __: Exception) -> JSONResponse:
@@ -790,6 +837,25 @@ def create_app(
     def list_fact_history(project_id: UUID, version_number: int) -> list[FactRevision]:
         with project_history_flow() as history:
             return history.list_fact_history(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/analysis",
+        response_model=ValidatedAnalysisResult,
+        status_code=201,
+    )
+    def create_analysis(
+        project_id: UUID, version_number: int
+    ) -> ValidatedAnalysisResult:
+        with analysis_flow() as analysis:
+            return analysis.create(project_id, version_number)
+
+    @app.get(
+        "/v1/projects/{project_id}/versions/{version_number}/analysis",
+        response_model=ValidatedAnalysisResult,
+    )
+    def get_analysis(project_id: UUID, version_number: int) -> ValidatedAnalysisResult:
+        with analysis_flow() as analysis:
+            return analysis.get(project_id, version_number)
 
     @app.post("/v1/planning/interpret", response_model=PlanningInterpretResponse)
     def interpret(request: PlanningInterpretRequest) -> PlanningInterpretResponse:
