@@ -153,7 +153,7 @@ class EvidenceAnalysisService:
             raise EvidenceAnalysisError("unresolved_assumptions")
         if not any(item.status is FactStatus.CONFIRMED for item in facts):
             raise EvidenceAnalysisError("confirmed_evidence_required")
-        ordered = sorted(facts, key=lambda item: item.normalized_fact_key)
+        ordered = sorted(facts, key=lambda item: item.fact_key.strip().casefold())
         tokens = {f"F{index:03d}": fact.id for index, fact in enumerate(ordered, 1)}
         return version, ordered, tokens
 
