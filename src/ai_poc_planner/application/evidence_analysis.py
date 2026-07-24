@@ -105,7 +105,7 @@ class EvidenceAnalysisService:
         ]
         raw = self._adapter_factory(profile).complete(
             messages=messages,
-            max_tokens=4096,
+            max_tokens=1024,
             temperature=0,
         )
         try:
@@ -122,7 +122,7 @@ class EvidenceAnalysisService:
                     },
                     {"role": "user", "content": '{"schema_version":"1.0"}'},
                 ],
-                max_tokens=4096,
+                max_tokens=1024,
                 temperature=0,
             )
             try:
