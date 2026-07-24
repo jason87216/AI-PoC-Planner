@@ -110,6 +110,13 @@ pending.
 
 - Human reloads a project and creates a new version from a completed version.
 
+**Implementation status (Phase 2):** P2.1 project/version/conversation/fact
+contracts, P2.2 schema v3 SQLite persistence with additive v1/v2 migration and
+immutable completed versions, and P2.3 visible conversation plus append-only
+confirmed-fact revisions are implemented. Offline tests and local SQLite API
+UAT passed. Phase 3 interview, viable-MVP completion, scoring, reports, and
+the Streamlit product UI remain pending.
+
 ## Phase 3 — AI understanding and interview
 
 ### [Must] P3.1 Add minimal initial-brief contract and API

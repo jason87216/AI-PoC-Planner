@@ -97,3 +97,7 @@ class FactCorrectionRequiredError(PersistenceError):
 
 class FactCorrectionInvalidError(PersistenceError):
     code = "fact_correction_invalid"
+
+
+class InvalidVisibleMessageError(PersistenceError):
+    code = "invalid_visible_message"

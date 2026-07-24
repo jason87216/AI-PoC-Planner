@@ -73,6 +73,7 @@ from ai_poc_planner.persistence.errors import (
     FactReferenceInvalidError,
     InvalidPlanningRunTransitionError,
     InvalidProjectVersionTransitionError,
+    InvalidVisibleMessageError,
     PersistenceError,
     PlanningRunNotFoundError,
     ProjectNotFoundError,
@@ -336,6 +337,7 @@ def create_app(
                 FactCorrectionRequiredError,
                 FactNotCurrentError,
                 FactReferenceInvalidError,
+                InvalidVisibleMessageError,
             ),
         ):
             return _error_response(409, error.code, uuid4())

@@ -106,6 +106,25 @@ A successful connection test proves only that the configured endpoint was
 reachable at that time. Fake providers remain offline automated-test fixtures;
 there is no fake runtime fallback for provider readiness or formal analysis.
 
+## Phase 2 durable project history
+
+Phase 2 adds durable SQLite project identity and linear planning-version
+history. Creating a project creates version 1 in `draft`; completing a version
+makes it immutable, and subsequent edits require a new successor version. A
+successor copies only visible conversation and current fact revisions, with new
+local IDs and mapped message references.
+
+Only user-visible conversation is persisted. Facts are append-only revisions:
+an assistant assumption needs visible evidence, a user confirmation creates a
+new confirmed revision, and changing a confirmed fact requires an explicit
+user correction. The database does not persist system prompts, reasoning,
+chain-of-thought, tool/LangChain trajectories, raw provider metadata, API keys,
+or Authorization headers.
+
+Phase 3 real-model interviews are not implemented yet. Scoring, hard-gate
+rewrites, reports, and the Streamlit product UI are also still outside the
+implemented product flow.
+
 ## License
 
 MIT License. See [LICENSE](LICENSE).

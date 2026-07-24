@@ -24,6 +24,7 @@ from ai_poc_planner.domain.enums import (
     DecisionImpact,
     DigitizationLevel,
     EvidenceSourceType,
+    FactStatus,
     GateDisposition,
     HighImpactDomain,
     HumanReviewRequirement,
@@ -35,6 +36,7 @@ from ai_poc_planner.domain.enums import (
     Recommendation,
     ReportFormat,
     ScoreDimension,
+    VisibleMessageKind,
 )
 from ai_poc_planner.domain.facts import (
     ArchitectureControllabilityFacts,
@@ -57,6 +59,14 @@ from ai_poc_planner.domain.models import (
     SchemaVersion,
     ScoreDimensionResult,
     SimilarCase,
+)
+from ai_poc_planner.domain.project_history import (
+    FactRevision,
+    PlanningProject,
+    ProjectHistorySummary,
+    ProjectVersion,
+    SelectedModelSnapshot,
+    VisibleConversationMessage,
 )
 from ai_poc_planner.domain.tools import (
     AssessBusinessValueRoiAndKpisInput,
@@ -127,6 +137,8 @@ __all__ = [
     "EvaluateRiskAndHardGatesOutput",
     "EvidenceReference",
     "EvidenceSourceType",
+    "FactRevision",
+    "FactStatus",
     "GateDisposition",
     "GateFacts",
     "HardGateResult",
@@ -148,6 +160,9 @@ __all__ = [
     "BusinessValueFacts",
     "PocProposal",
     "PlanningRun",
+    "PlanningProject",
+    "ProjectHistorySummary",
+    "ProjectVersion",
     "PlanningRunStatus",
     "PocProposalRecord",
     "ProjectStatus",
@@ -158,10 +173,13 @@ __all__ = [
     "RetrieveSimilarCasesOutput",
     "SchemaVersion",
     "ScoreDimension",
+    "SelectedModelSnapshot",
     "ScoreDimensionResult",
     "SimilarCase",
     "GovernanceReadinessFacts",
     "TechnicalFitFacts",
     "ToolError",
     "UserAdoptionFacts",
+    "VisibleConversationMessage",
+    "VisibleMessageKind",
 ]

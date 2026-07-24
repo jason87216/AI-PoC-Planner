@@ -24,6 +24,7 @@ from ai_poc_planner.persistence.errors import (
     FactNotCurrentError,
     FactReferenceInvalidError,
     InvalidProjectVersionTransitionError,
+    InvalidVisibleMessageError,
 )
 from ai_poc_planner.persistence.project_history import (
     SQLiteProjectHistoryRepository,
@@ -135,13 +136,28 @@ class ProjectHistoryService:
     ) -> VisibleConversationMessage:
         version = self._require_mutable_latest(project_id, version_number)
         timestamp = self._clock()
+        message_id = self._uuid_factory()
+        try:
+            VisibleConversationMessage(
+                id=message_id,
+                version_id=version.id,
+                sequence=1,
+                role=role,
+                message_kind=message_kind,
+                content=content,
+                created_at=timestamp,
+            )
+        except Exception as error:
+            raise InvalidVisibleMessageError(
+                "visible message input is invalid"
+            ) from error
         return self._repository.append_message(
             version_id=version.id,
             role=role,
             message_kind=message_kind,
             content=content,
             created_at=timestamp,
-            message_id=self._uuid_factory(),
+            message_id=message_id,
             project_updated_at=timestamp,
         )
 

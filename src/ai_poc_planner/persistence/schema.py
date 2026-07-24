@@ -297,6 +297,32 @@ BEGIN
     SELECT RAISE(ABORT, 'completed version is immutable');
 END
 """
+_CREATE_COMPLETED_FACT_REFERENCE_UPDATE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_completed_version_fact_reference_update
+BEFORE UPDATE ON fact_message_references
+WHEN (
+    SELECT v.status
+    FROM project_fact_revisions f
+    JOIN planning_project_versions v ON v.id = f.version_id
+    WHERE f.id = OLD.fact_id
+) = 'complete'
+BEGIN
+    SELECT RAISE(ABORT, 'completed version is immutable');
+END
+"""
+_CREATE_COMPLETED_FACT_REFERENCE_DELETE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_completed_version_fact_reference_delete
+BEFORE DELETE ON fact_message_references
+WHEN (
+    SELECT v.status
+    FROM project_fact_revisions f
+    JOIN planning_project_versions v ON v.id = f.version_id
+    WHERE f.id = OLD.fact_id
+) = 'complete'
+BEGIN
+    SELECT RAISE(ABORT, 'completed version is immutable');
+END
+"""
 
 
 def read_schema_version(connection: sqlite3.Connection) -> int:
@@ -390,6 +416,8 @@ def _create_phase_two_schema(connection: sqlite3.Connection) -> None:
         _CREATE_COMPLETED_FACT_UPDATE_TRIGGER,
         _CREATE_COMPLETED_FACT_DELETE_TRIGGER,
         _CREATE_COMPLETED_FACT_REFERENCE_TRIGGER,
+        _CREATE_COMPLETED_FACT_REFERENCE_UPDATE_TRIGGER,
+        _CREATE_COMPLETED_FACT_REFERENCE_DELETE_TRIGGER,
     ):
         connection.execute(statement)
 

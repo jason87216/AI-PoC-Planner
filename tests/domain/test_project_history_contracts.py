@@ -144,13 +144,24 @@ def test_fact_requires_references_and_rejects_internal_provider_fields() -> None
             reference_message_ids=[],
             created_at=NOW,
         )
-    with pytest.raises(ValidationError):
-        PlanningProject.model_validate(
-            {
-                "id": str(uuid4()),
-                "project_name": "Safe",
-                "created_at": NOW.isoformat(),
-                "updated_at": NOW.isoformat(),
-                "system_prompt": "not durable",
-            }
-        )
+    for forbidden_field in (
+        "system_prompt",
+        "chain_of_thought",
+        "reasoning",
+        "trajectory",
+        "tool_calls",
+        "provider_metadata",
+        "raw_response",
+        "authorization",
+        "api_key",
+    ):
+        with pytest.raises(ValidationError):
+            PlanningProject.model_validate(
+                {
+                    "id": str(uuid4()),
+                    "project_name": "Safe",
+                    "created_at": NOW.isoformat(),
+                    "updated_at": NOW.isoformat(),
+                    forbidden_field: "not durable",
+                }
+            )
