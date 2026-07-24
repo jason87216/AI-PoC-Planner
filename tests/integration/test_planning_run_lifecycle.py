@@ -221,7 +221,7 @@ def test_run_rejects_unknown_status_and_invalid_timestamp_order() -> None:
         PlanningRun.model_validate(_run_payload(updated_at=NOW - timedelta(seconds=1)))
 
 
-def test_fresh_database_initializes_planning_run_schema_at_version_two(
+def test_fresh_database_initializes_planning_run_schema_at_current_version(
     tmp_path: Path,
 ) -> None:
     connection = database_connection(tmp_path / "planner.sqlite3")
@@ -232,7 +232,7 @@ def test_fresh_database_initializes_planning_run_schema_at_version_two(
             row["name"]
             for row in connection.execute("PRAGMA table_info(planning_runs)")
         }
-        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 2
+        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 3
         assert {
             "id",
             "project_id",
@@ -262,7 +262,7 @@ def test_fresh_database_initializes_planning_run_schema_at_version_two(
         connection.close()
 
 
-def test_version_one_database_upgrades_to_two_and_preserves_project(
+def test_version_one_database_upgrades_to_current_and_preserves_project(
     tmp_path: Path,
 ) -> None:
     connection = database_connection(tmp_path / "planner.sqlite3")
@@ -285,7 +285,7 @@ def test_version_one_database_upgrades_to_two_and_preserves_project(
 
         initialize_database(connection)
 
-        assert read_schema_version(connection) == 2
+        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 3
         assert SQLiteProjectRepository(connection).get(PROJECT_ID) == _project()
         assert (
             connection.execute(

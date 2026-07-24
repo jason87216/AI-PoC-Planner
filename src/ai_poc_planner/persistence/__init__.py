@@ -2,21 +2,34 @@
 
 from ai_poc_planner.persistence.connection import database_connection
 from ai_poc_planner.persistence.errors import (
+    CompletedVersionImmutableError,
+    CurrentVersionRequiredError,
     DatabaseOperationError,
+    FactConfirmationInvalidError,
+    FactConflictError,
+    FactCorrectionInvalidError,
+    FactCorrectionRequiredError,
+    FactNotCurrentError,
+    FactNotFoundError,
+    FactReferenceInvalidError,
     InvalidPlanningRunInputError,
     InvalidPlanningRunTransitionError,
     InvalidProjectInputError,
+    InvalidProjectVersionTransitionError,
     InvalidStoredPlanningRunError,
     InvalidStoredProjectError,
+    InvalidVisibleMessageError,
     PersistenceError,
     PlanningRunAlreadyExistsError,
     PlanningRunNotFoundError,
     ProjectAlreadyExistsError,
     ProjectNotFoundError,
+    ProjectVersionNotFoundError,
     SchemaMismatchError,
     UnsupportedSchemaVersionError,
 )
 from ai_poc_planner.persistence.planning_runs import SQLitePlanningRunRepository
+from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.projects import SQLiteProjectRepository
 from ai_poc_planner.persistence.schema import (
     CURRENT_SCHEMA_VERSION,
@@ -26,8 +39,12 @@ from ai_poc_planner.persistence.schema import (
 
 __all__ = [
     "CURRENT_SCHEMA_VERSION",
+    "CompletedVersionImmutableError",
+    "CurrentVersionRequiredError",
     "DatabaseOperationError",
     "InvalidProjectInputError",
+    "InvalidProjectVersionTransitionError",
+    "InvalidVisibleMessageError",
     "InvalidPlanningRunInputError",
     "InvalidPlanningRunTransitionError",
     "InvalidStoredPlanningRunError",
@@ -36,7 +53,16 @@ __all__ = [
     "ProjectAlreadyExistsError",
     "PlanningRunAlreadyExistsError",
     "PlanningRunNotFoundError",
+    "FactConfirmationInvalidError",
+    "FactConflictError",
+    "FactCorrectionInvalidError",
+    "FactCorrectionRequiredError",
+    "FactNotCurrentError",
+    "FactNotFoundError",
+    "FactReferenceInvalidError",
     "ProjectNotFoundError",
+    "ProjectVersionNotFoundError",
+    "SQLiteProjectHistoryRepository",
     "SQLiteProjectRepository",
     "SQLitePlanningRunRepository",
     "SchemaMismatchError",

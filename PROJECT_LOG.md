@@ -2,7 +2,7 @@
 
 ## Current goal
 
-Complete Phase 1 PR review after successful real-provider UAT; do not begin Phase 2.
+Complete Phase 2 durable project/version history; do not begin Phase 3.
 
 ## Current status
 
@@ -23,6 +23,13 @@ Complete Phase 1 PR review after successful real-provider UAT; do not begin Phas
   The integration test plus profile CRUD, selection, connection test, readiness,
   invalidation, and fresh-process status reset all passed; there was no fake
   runtime fallback and no Phase 1 code bug.
+- Phase 2 uses schema v3 with additive migration from legacy v1/v2 schemas.
+  Existing `analysis_projects` and `planning_runs` remain legacy prototype
+  tables; new `planning_projects`, linear immutable versions, visible messages,
+  append-only fact revisions, and fact/message references form the viable-MVP
+  aggregate. Local API UAT passed create/reload, completion, successor cloning,
+  fact confirmation/correction, unknown/missing facts, and completed-version
+  blocking without any provider call or fake runtime fallback.
 
 ## UAT findings recorded from PR #8
 
@@ -70,8 +77,8 @@ Complete Phase 1 PR review after successful real-provider UAT; do not begin Phas
 
 - PR #8 is retained as a technical prototype/experiment record and is not a
   release candidate.
-- Phase 1 real UAT has passed on `feat/model-profile-contracts`; keep PR #11 at
-  the review gate and do not begin Phase 2 or later work.
+- PR #11 merged Phase 1 after real llama.cpp UAT. Phase 2 is implemented on
+  `feat/project-version-history`; do not begin Phase 3 or later work.
 
 ## Known open questions for later code design
 
