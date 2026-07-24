@@ -163,7 +163,7 @@ class EvidenceAnalysisService:
         except Exception as error:
             raise EvidenceAnalysisError("provider_not_ready") from error
         profile = self._selected_profile_getter()
-        snapshot = version.selected_model_snapshot
+        snapshot = version.selected_model
         if (
             profile is None
             or snapshot is None
