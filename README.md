@@ -121,9 +121,9 @@ user correction. The database does not persist system prompts, reasoning,
 chain-of-thought, tool/LangChain trajectories, raw provider metadata, API keys,
 or Authorization headers.
 
-## Phase 3 real-model discovery interview (in progress)
+## Phase 3 real-model discovery interview
 
-Phase 3 work adds a provider-readiness-gated minimal initial brief, a real-model
+Phase 3 adds a provider-readiness-gated minimal initial brief, a real-model
 requirement-understanding confirmation/correction step, and a contextual
 interview bounded to three rounds with at most three questions per round.
 Only visible conversation and append-only fact revisions survive reload. A
@@ -137,8 +137,11 @@ Runtime calls require the currently selected, enabled, successfully tested real
 profile to match the version's safe model snapshot. Test fakes are dependency
 injection only; no fake runtime fallback exists.
 
-Phase 3 real llama.cpp UAT is not complete yet. Phase 4 scoring/hard gates,
-reports, and the Streamlit product UI are still not implemented.
+The real Qwen3 llama.cpp UAT passed with `--reasoning off`, including correction
+and regeneration, confirmation, bounded interview completion, and fresh-app
+reload. Provider connection status remains process-local and is not persisted.
+Phase 4 scoring/hard gates, reports, and the Streamlit product UI are still not
+implemented.
 
 ## License
 

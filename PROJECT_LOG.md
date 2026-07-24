@@ -38,10 +38,13 @@ Complete Phase 3 real-model discovery interview; do not begin Phase 4.
   understanding before user confirmation; and supports explicit correction plus
   at most three interview rounds of at most three visible questions. No prompt,
   reasoning, raw provider response, API key, or Authorization value is stored.
-  Offline validation passed. A real llama.cpp UAT reached initial-brief and
-  requirement-understanding success, then exposed correction-contract and local
-  structured-output timeout fixes; the full UAT remains in progress. Phase 4
-  scoring, hard gates, cases, reports, and the Streamlit rebuild have not started.
+  Offline validation and the real Qwen3 llama.cpp UAT passed using
+  `--reasoning off`, empty API key, and loopback-only server binding. The UAT
+  covered initial brief, correction/regeneration, confirmation, bounded rounds,
+  unknown/addition/correction, ready-for-assessment, and fresh-app reload. It
+  exposed and fixed a local structured-output timeout and an over-specified
+  correction contract. Phase 4 scoring, hard gates, cases, reports, and the
+  Streamlit rebuild have not started.
 
 ## UAT findings recorded from PR #8
 

@@ -114,8 +114,8 @@ pending.
 contracts, P2.2 schema v3 SQLite persistence with additive v1/v2 migration and
 immutable completed versions, and P2.3 visible conversation plus append-only
 confirmed-fact revisions are implemented. Offline tests and local SQLite API
-UAT passed. Phase 3 implementation is in progress on schema v4; viable-MVP
-completion, scoring, reports, and the Streamlit product UI remain pending.
+UAT passed. Phase 3 is implemented on schema v4; viable-MVP completion,
+scoring, reports, and the Streamlit product UI remain pending.
 
 ## Phase 3 — AI understanding and interview
 
@@ -126,14 +126,14 @@ completion, scoring, reports, and the Streamlit product UI remain pending.
 - **Dependencies:** P1, P2.
 - **Acceptance:** Optional users/owner and known constraints only; no generic
   supplementary-notes field.
-- **Status:** in progress (schema v4; provider-readiness-gated initial brief).
+- **Status:** implemented (schema v4; provider-readiness-gated initial brief).
 
 ### [Must] P3.2 Add AI requirement-understanding confirmation
 
 - **Purpose:** Obtain structured understanding and user confirmation/correction.
 - **Dependencies:** P3.1.
 - **Acceptance:** Unconfirmed claims remain assumptions.
-- **Status:** in progress (strict structured output, confirmation, correction).
+- **Status:** implemented (strict structured output, confirmation, correction).
 
 ### [Must] P3.3 Add bounded contextual interview
 
@@ -142,13 +142,13 @@ completion, scoring, reports, and the Streamlit product UI remain pending.
 - **Dependencies:** P3.2.
 - **Acceptance:** User can answer unknown, add corrections, and the AI updates
   structured facts without storing reasoning traces.
-- **Status:** in progress (visible questions/answers; maximum 3 rounds × 3 questions).
+- **Status:** implemented (visible questions/answers; maximum 3 rounds × 3 questions).
 
 ### Checkpoint P3
 
 - Human UAT with a real model confirms questions are contextual rather than a
   fixed template.
-- Offline/API validation passed; real llama.cpp UAT remains in progress.
+- Offline/API validation and real Qwen3 llama.cpp UAT passed.
 
 ## Phase 4 — Analysis, rubric, and hard gates
 
