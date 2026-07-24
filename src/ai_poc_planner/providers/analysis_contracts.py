@@ -28,7 +28,18 @@ class ProviderOption(ContractModel):
     processing_boundary: Literal["local_only", "private_endpoint", "external_endpoint"]
     human_review_points: list[NonEmptyStr] = Field(max_length=4)
     opportunity_kind: Literal["catalog", "unstandardized_candidate", "not_applicable"]
-    opportunity_type: str
+    opportunity_type: Literal[
+        "enterprise_knowledge_and_professional_document_assist",
+        "customer_service_assist",
+        "document_classification_and_extraction",
+        "meeting_summary_and_action_items",
+        "marketing_content_assist",
+        "demand_forecasting",
+        "predictive_maintenance",
+        "anomaly_and_risk_detection",
+        "recruiting_process_assist",
+        "not_applicable",
+    ]
     opportunity_rationale: str
     candidate_name: str
     candidate_definition: str
