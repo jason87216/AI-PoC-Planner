@@ -2,7 +2,7 @@
 
 ## Current goal
 
-Complete Phase 4 evidence-backed assessment; do not begin Phase 5.
+Complete P5.1 reviewed local cases; do not begin P5.2.
 
 ## Current status
 
@@ -58,6 +58,13 @@ Complete Phase 4 evidence-backed assessment; do not begin Phase 5.
   runs passed with `json_schema`, `reasoning_effort=low`, temporary state, and
   production APIs. Phase 5 cases/reports and the Streamlit rebuild have not
   started.
+- Phase 5.1 adds a read-only `data/reviewed_cases.json` library with nine
+  manually reviewed source-backed cases covering the existing opportunity
+  catalog. Its Pydantic contracts reject invalid records as a complete-library
+  failure; deterministic matching uses approved status, exact opportunity type,
+  applicability/non-applicability tags, evidence grade, and stable case ID.
+  It does not call a provider, search online, write SQLite, change assessment
+  scores/gates, or begin P5.2 report assembly.
 
 ## UAT findings recorded from PR #8
 

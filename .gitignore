@@ -21,6 +21,8 @@ build/
 
 # Local application data
 data/
+!data/
+!data/reviewed_cases.json
 *.db
 *.db-*
 *.sqlite

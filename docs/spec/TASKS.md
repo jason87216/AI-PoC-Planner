@@ -194,6 +194,9 @@ scoring, reports, and the Streamlit product UI remain pending.
   filtering.
 - **Dependencies:** P4.
 - **Acceptance:** No FAISS and no fabricated company, metric, or source.
+- **Status:** implemented (nine approved, source-backed local cases; strict
+  validation and deterministic tag/rule matching only). Offline validation
+  passed. P5.2 has not started.
 
 ### [Must] P5.2 Assemble full Markdown planning report
 
