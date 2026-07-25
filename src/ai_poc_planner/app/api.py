@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -268,6 +269,9 @@ def create_app(
     analysis_adapter_factory: (
         Callable[[ModelProfile], ChatCompletionAdapter] | None
     ) = None,
+    runtime_mode: str = "test",
+    instance_id: str = "test-instance",
+    started_at: datetime | None = None,
 ) -> FastAPI:
     """Compose an API only from the caller-provided LangChain chat model."""
 
@@ -281,6 +285,16 @@ def create_app(
                 owned_client.close()
 
     app = FastAPI(title="AI PoC Planner", version="0.1.0", lifespan=lifespan)
+    app.state.runtime_info = {
+        "application": "ai-poc-planner",
+        "api_contract_version": "1",
+        "runtime_mode": runtime_mode,
+        "instance_id": instance_id,
+        "started_at": (started_at or datetime.now(UTC)).isoformat(),
+        "data_persistence": "persistent"
+        if runtime_mode in {"local", "uat"}
+        else "temporary",
+    }
     planning_agent = PlanningAgent(chat_model)
     profile_repository = model_profile_repository or LocalModelProfileRepository()
 
@@ -543,6 +557,12 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/v1/runtime-info")
+    def runtime_info() -> dict[str, str]:
+        """Return a secret-free identity contract for local runtime validation."""
+
+        return app.state.runtime_info
 
     @app.get("/v1/model-profiles", response_model=list[ModelProfilePublic])
     def list_model_profiles() -> list[ModelProfilePublic]:

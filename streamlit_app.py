@@ -2,10 +2,20 @@
 
 import streamlit as st
 
+from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.runtime import validate_streamlit_runtime
+
 st.set_page_config(
     page_title="AI PoC Planner", page_icon=":material/insights:", layout="wide"
 )
 st.session_state.setdefault("selected_project", None)
+
+try:
+    validate_streamlit_runtime()
+except ApiClientError as error:
+    st.title("AI PoC Planner")
+    st.error(error.user_message)
+    st.stop()
 
 page = st.navigation(
     [

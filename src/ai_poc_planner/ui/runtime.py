@@ -11,8 +11,15 @@ from ai_poc_planner.ui.api_client import ApiClient
 
 
 @st.cache_resource
-def get_api_client() -> ApiClient:
-    return ApiClient(base_url=os.environ.get("AI_POC_PLANNER_API_BASE_URL"))
+def get_api_client(
+    base_url: str | None = None, expected_instance_id: str | None = None
+) -> ApiClient:
+    del expected_instance_id
+    return ApiClient(base_url=base_url or os.environ.get("AI_POC_PLANNER_API_BASE_URL"))
+
+
+def validate_streamlit_runtime() -> None:
+    get_api_client().validate_runtime(os.environ.get("AI_POC_PLANNER_INSTANCE_ID"))
 
 
 @st.cache_data(ttl=10)
