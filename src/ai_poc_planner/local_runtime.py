@@ -288,9 +288,7 @@ def stop(mode: Mode) -> int:
         while _pid_exists(pid) and time.monotonic() < deadline:
             time.sleep(0.2)
         if _pid_exists(pid):
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"], check=False
-            )
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], check=False)
     state_path(root).unlink(missing_ok=True)
     print("stopped")
     return 0
