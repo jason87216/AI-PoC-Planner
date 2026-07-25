@@ -6,7 +6,7 @@ AI PoC Planner 的目标是成为一个本机运行、连接真实 OpenAI-compat
 
 `main` 目前是技术基础，不是可用产品，也不是发布版本。它包含 FastAPI、SQLite、LangChain 与 Streamlit 的实验性基础，但当前公开流程使用 scripted fake provider，不能真正理解使用者输入，也不能代表可行 MVP。
 
-PR #8 保留为技术原型与实验记录，不作为发布版本。真实模型连接、可行 MVP 的访谈、报告、产品 UI 与启动体验均尚未实现。
+PR #8 保留为技术原型与实验记录，不作为发布版本。真实模型连接、可行 MVP 的访谈与报告已经具备后端契约；产品 UI 目前只完成首页、项目历史与模型设定，完整流程与启动体验仍未完成。
 
 fake provider 仅用于自动测试；它不是可提供给使用者的分析模式。项目不会自动回退到 fake model。
 
@@ -159,8 +159,10 @@ A and Report Part B), then deterministically renders program-owned conclusions,
 scores, gates, resolved fact references, and reviewed-case attribution. Numeric
 claims and KPI thresholds are rejected unless fact-backed. It does not persist
 prompts, reasoning, raw provider responses, API keys, Authorization headers, or
-base URLs. A report completes its version. The Streamlit product UI is still
-not implemented.
+base URLs. A report completes its version. Phase 6.1 adds a Streamlit home,
+project-history, and model-settings surface that talks only to the existing
+FastAPI HTTP API. The brief, interview, analysis, and report views remain
+future Phase 6 work.
 
 The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
 API using `json_schema`, `reasoning_effort=low`, and temporary local state. The

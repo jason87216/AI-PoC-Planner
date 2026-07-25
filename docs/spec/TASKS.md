@@ -207,7 +207,7 @@ scoring, reports, and the Streamlit product UI remain pending.
   calls; deterministic Markdown rendering with reviewed-case integration; and
   reloadable report APIs). Numeric/KPI safeguards reject unsupported numeric
   claims. The report-only NVIDIA UAT passed twice using fresh temporary state;
-  full cross-phase UAT is deferred to Phase 8. Phase 6 has not started.
+  full cross-phase UAT is deferred to Phase 8.
 - **Acceptance:** Report is business-actionable and preserves fact references.
 
 ### Checkpoint P5
@@ -221,6 +221,11 @@ scoring, reports, and the Streamlit product UI remain pending.
 - **Purpose:** Show project history and profile management without developer
   controls.
 - **Dependencies:** P1, P2.
+- **Status:** implemented (a Streamlit home, readable project history, and
+  model-settings views backed exclusively by a thin FastAPI HTTP client).
+  The UI caches short-lived public reads, keeps API keys masked and never
+  renders internal IDs, raw JSON, API base URLs, or developer controls.
+  Offline client and Streamlit smoke tests pass.
 
 ### [Must] P6.2 Build brief, confirmation, and interview views
 
