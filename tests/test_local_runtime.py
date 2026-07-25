@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 from pathlib import Path
 
 from ai_poc_planner.local_runtime import (
@@ -8,6 +9,7 @@ from ai_poc_planner.local_runtime import (
     RuntimeState,
     child_environment,
     data_root,
+    find_port,
     read_state,
     state_path,
     write_state,
@@ -36,6 +38,23 @@ def test_child_environment_hands_off_exact_api_and_instance() -> None:
     environment = child_environment("http://127.0.0.1:18611", "instance")
     assert environment["AI_POC_PLANNER_API_BASE_URL"] == "http://127.0.0.1:18611"
     assert environment["AI_POC_PLANNER_INSTANCE_ID"] == "instance"
+
+
+def test_preferred_port_is_selected_when_available() -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = int(probe.getsockname()[1])
+    assert find_port(port, port) == port
+
+
+def test_occupied_preferred_port_selects_next_port_without_taking_it() -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen()
+        port = int(occupied.getsockname()[1])
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as available:
+            available.bind(("127.0.0.1", port + 1))
+        assert find_port(port, port + 1) == port + 1
 
 
 def test_powershell_launcher_requires_project_venv_and_no_system_fallback() -> None:
