@@ -161,8 +161,14 @@ claims and KPI thresholds are rejected unless fact-backed. It does not persist
 prompts, reasoning, raw provider responses, API keys, Authorization headers, or
 base URLs. A report completes its version. Phase 6.1 adds a Streamlit home,
 project-history, and model-settings surface that talks only to the existing
-FastAPI HTTP API. The brief, interview, analysis, and report views remain
-future Phase 6 work.
+FastAPI HTTP API. Phase 6.2 adds the Phase 3 brief, real-provider requirement
+understanding, correction/confirmation, and bounded interview flow through the
+same public HTTP boundary. It restores durable discovery state after a rerun,
+shows only readable facts at completion, and keeps UUIDs, raw JSON, prompts,
+API URLs, SQLite paths, and technical diagnostics out of the UI. A real NVIDIA
+NIM browser UAT covered profile readiness, brief, correction, confirmation,
+unknown answer, proactive fact addition, bounded completion, and refresh
+recovery. Analysis and report views remain future Phase 6 work.
 
 The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
 API using `json_schema`, `reasoning_effort=low`, and temporary local state. The

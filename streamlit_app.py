@@ -8,6 +8,11 @@ st.session_state.setdefault("selected_project", None)
 page = st.navigation(
     [
         st.Page("app_pages/home.py", title="首頁", icon=":material/home:"),
+        st.Page(
+            "app_pages/discovery.py",
+            title="新建規劃",
+            icon=":material/assignment:",
+        ),
         st.Page("app_pages/history.py", title="專案歷史", icon=":material/history:"),
         st.Page(
             "app_pages/model_settings.py",

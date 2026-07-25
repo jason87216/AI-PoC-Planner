@@ -2,8 +2,8 @@
 
 ## Current goal
 
-P6.1 Streamlit home, project-history, and model-settings views are complete;
-P6.2 is next.
+P6.2 Streamlit brief, confirmation, and bounded-interview views are complete;
+P6.3 is next.
 
 ## Current status
 
@@ -81,7 +81,17 @@ P6.2 is next.
   the public FastAPI boundary; the UI imports no application, persistence, or
   provider layers. It shows human-readable project/model state, keeps API keys
   password-masked and non-retrievable, and avoids UUIDs, raw JSON, API URLs,
-  and developer diagnostics. P6.2 and P6.3 remain pending.
+  and developer diagnostics.
+- Phase 6.2 adds a Streamlit Phase 3 discovery surface: a minimal formal brief,
+  real-provider requirement understanding, correction/regeneration,
+  confirmation, and API-state-driven bounded interview rounds. It restores the
+  latest discovery item on rerun, renders the completed fact summary without
+  technical identifiers, and never imports application, persistence, or
+  provider layers. Real NVIDIA NIM `openai/gpt-oss-20b` browser UAT passed with
+  `json_schema`, `reasoning_effort=low`, a tested selected temporary profile,
+  a correction, an unknown answer, a proactive fact addition, three bounded
+  rounds, ready-for-assessment, and page-refresh recovery. P6.3 remains
+  unstarted.
 
 ## UAT findings recorded from PR #8
 

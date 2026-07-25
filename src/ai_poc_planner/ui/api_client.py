@@ -19,8 +19,19 @@ class ApiClientError(RuntimeError):
 
 _USER_MESSAGES = {
     "provider_not_ready": "尚未有可用的已測試模型設定。",
+    "provider_profile_mismatch": "目前模型設定不適用於這份規劃，請重新選擇並測試模型。",
+    "provider_output_invalid": "模型暫時無法產生可用結果，請稍後再試。",
     "model_profile_not_found": "找不到指定的模型設定。",
     "project_not_found": "找不到指定的專案。",
+    "project_version_not_found": "找不到這個專案版本。",
+    "invalid_interview_transition": "目前狀態無法執行這項操作，請重新整理後再試。",
+    "interview_answers_incomplete": "請完成本輪每一題，或選擇不知道。",
+    "interview_question_already_answered": "這一輪已經提交，請重新整理後繼續。",
+    "interview_round_limit_reached": "訪談已達既有上限，請依目前狀態繼續。",
+    "fact_correction_invalid": "修正內容不完整或無法套用，請檢查後再試。",
+    "fact_correction_required": "這項已確認資訊需要使用明確修正方式更新。",
+    "understanding_already_confirmed": "需求理解已確認。",
+    "understanding_confirmation_required": "請先確認或修正目前的需求理解。",
     "internal_error": "服務暫時無法完成此操作，請稍後再試。",
 }
 
@@ -73,6 +84,106 @@ class ApiClient:
         return self._object(
             self._request("POST", f"/v1/model-profiles/{profile_id}/test")
         )
+
+    def create_discovery_project(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        return self._object(self._request("POST", "/v1/discovery-projects", payload))
+
+    def get_discovery_session(
+        self, project_id: str, version_number: int
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "GET", self._discovery_path(project_id, version_number, "discovery")
+            )
+        )
+
+    def generate_understanding(
+        self, project_id: str, version_number: int
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST",
+                self._discovery_path(project_id, version_number, "understanding"),
+            )
+        )
+
+    def confirm_understanding(
+        self, project_id: str, version_number: int
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST",
+                self._discovery_path(
+                    project_id, version_number, "understanding/confirm"
+                ),
+            )
+        )
+
+    def submit_understanding_corrections(
+        self, project_id: str, version_number: int, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST",
+                self._discovery_path(
+                    project_id, version_number, "understanding/corrections"
+                ),
+                payload,
+            )
+        )
+
+    def generate_interview_round(
+        self, project_id: str, version_number: int
+    ) -> list[dict[str, Any]]:
+        return self._list_of_objects(
+            self._request(
+                "POST",
+                self._discovery_path(project_id, version_number, "interview-rounds"),
+            )
+        )
+
+    def list_interview_questions(
+        self, project_id: str, version_number: int
+    ) -> list[dict[str, Any]]:
+        return self._list_of_objects(
+            self._request(
+                "GET",
+                self._discovery_path(project_id, version_number, "interview-questions"),
+            )
+        )
+
+    def submit_interview_answers(
+        self, project_id: str, version_number: int, payload: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST",
+                self._discovery_path(project_id, version_number, "interview-answers"),
+                payload,
+            )
+        )
+
+    def list_visible_messages(
+        self, project_id: str, version_number: int
+    ) -> list[dict[str, Any]]:
+        return self._list_of_objects(
+            self._request(
+                "GET", self._discovery_path(project_id, version_number, "messages")
+            )
+        )
+
+    def list_current_facts(
+        self, project_id: str, version_number: int
+    ) -> list[dict[str, Any]]:
+        return self._list_of_objects(
+            self._request(
+                "GET", self._discovery_path(project_id, version_number, "facts")
+            )
+        )
+
+    @staticmethod
+    def _discovery_path(project_id: str, version_number: int, suffix: str) -> str:
+        return f"/v1/projects/{project_id}/versions/{version_number}/{suffix}"
 
     def _request(
         self,

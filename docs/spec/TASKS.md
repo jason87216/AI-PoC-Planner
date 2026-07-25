@@ -231,12 +231,22 @@ scoring, reports, and the Streamlit product UI remain pending.
 
 - **Purpose:** Render the Phase 3 flow through HTTP only.
 - **Dependencies:** P3, P6.1.
+- **Status:** implemented. The Streamlit brief uses only the formal initial-brief
+  fields and calls the public FastAPI API for requirement understanding,
+  correction/regeneration, confirmation, bounded interview rounds, and
+  ready-for-assessment facts. The UI follows durable API status rather than
+  recreating the interview state machine, restores the latest discovery item
+  after a rerun, and keeps UUIDs, raw JSON, prompts, API URLs, SQLite paths,
+  and technical errors out of the product surface. Real NVIDIA NIM browser UAT
+  passed with a selected/tested profile, a correction, unknown answer, proactive
+  fact, bounded completion, and refresh recovery.
 
 ### [Must] P6.3 Build analysis and readable report views
 
 - **Purpose:** Render Phase 4–5 results and Markdown export without raw JSON,
   UUIDs, API URLs, or technical warnings.
 - **Dependencies:** P4, P5, P6.2.
+- **Status:** not started.
 
 ### Checkpoint P6
 

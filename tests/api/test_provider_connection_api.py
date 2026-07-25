@@ -193,6 +193,7 @@ def test_default_connection_tests_reuse_and_close_the_app_owned_http_client(
 
         app_owned_client = CapturingDefaultAdapter.clients[0]
         assert CapturingDefaultAdapter.clients == [app_owned_client, app_owned_client]
+        assert app_owned_client._trust_env is False
         assert not app_owned_client.is_closed
 
     assert app_owned_client.is_closed

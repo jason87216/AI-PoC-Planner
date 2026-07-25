@@ -1,0 +1,231 @@
+from __future__ import annotations
+
+import json
+from collections.abc import Callable
+from pathlib import Path
+
+import httpx
+import pytest
+
+from ai_poc_planner.ui.api_client import ApiClient, ApiClientError
+from ai_poc_planner.ui.discovery import (
+    discovery_view_for_status,
+    facts_summary,
+    interview_payload,
+    question_details,
+)
+
+PROJECT_ID = "10000000-0000-0000-0000-000000000001"
+QUESTION_ID = "10000000-0000-0000-0000-000000000002"
+FACT_ID = "10000000-0000-0000-0000-000000000003"
+
+
+def _client(handler: Callable[[httpx.Request], httpx.Response]) -> ApiClient:
+    return ApiClient(
+        client=httpx.Client(
+            base_url="http://planner.test",
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+
+def test_create_discovery_brief_uses_only_the_formal_contract_fields() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(201, json={"project": {}, "version": {}, "session": {}})
+
+    api = _client(handler)
+
+    api.create_discovery_project(
+        {
+            "project_name": "Invoice triage",
+            "current_workflow_problem": "Manual routing",
+            "desired_outcome": "Faster routing",
+            "available_data": "不知道",
+            "users_and_owners": "Operations team",
+            "known_constraints": "Human review remains required",
+        }
+    )
+
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("POST", "/v1/discovery-projects")
+    ]
+    payload = json.loads(requests[0].content)
+    assert payload["available_data"] == "不知道"
+    assert set(payload) == {
+        "project_name",
+        "current_workflow_problem",
+        "desired_outcome",
+        "available_data",
+        "users_and_owners",
+        "known_constraints",
+    }
+    assert "supplementary_notes" not in payload
+
+
+def test_understanding_confirmation_and_correction_use_discovery_endpoints() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"status": "correction_pending"})
+
+    api = _client(handler)
+
+    api.confirm_understanding(PROJECT_ID, 1)
+    api.submit_understanding_corrections(
+        PROJECT_ID,
+        1,
+        {
+            "corrections": [
+                {
+                    "target_fact_id": FACT_ID,
+                    "status": "confirmed",
+                    "value": "Updated workflow",
+                    "correction_reason": "The workflow changed",
+                }
+            ],
+            "additional_facts": [],
+        },
+    )
+
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("POST", f"/v1/projects/{PROJECT_ID}/versions/1/understanding/confirm"),
+        (
+            "POST",
+            f"/v1/projects/{PROJECT_ID}/versions/1/understanding/corrections",
+        ),
+    ]
+
+
+def test_unknown_answer_and_proactive_fact_changes_use_the_round_contract() -> None:
+    payload = interview_payload(
+        answers=[
+            {"question_id": QUESTION_ID, "answer_status": "unknown", "answer": None}
+        ],
+        additional_fact={
+            "fact_key": "deployment_owner",
+            "status": "confirmed",
+            "value": "Operations director",
+        },
+        correction={
+            "target_fact_id": FACT_ID,
+            "status": "missing",
+            "value": None,
+            "correction_reason": "The source is no longer available",
+        },
+    )
+
+    assert payload["answers"] == [
+        {"question_id": QUESTION_ID, "answer_status": "unknown", "answer": None}
+    ]
+    assert payload["additional_facts"][0]["fact_key"] == "deployment_owner"
+    assert payload["corrections"][0]["target_fact_id"] == FACT_ID
+
+
+def test_interview_answer_submission_uses_the_formal_round_endpoint() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"status": "ready_for_next_round"})
+
+    api = _client(handler)
+    api.submit_interview_answers(
+        PROJECT_ID,
+        1,
+        interview_payload(
+            answers=[
+                {
+                    "question_id": QUESTION_ID,
+                    "answer_status": "unknown",
+                    "answer": None,
+                }
+            ]
+        ),
+    )
+
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("POST", f"/v1/projects/{PROJECT_ID}/versions/1/interview-answers")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_view"),
+    [
+        ("brief_submitted", "understanding_generation"),
+        ("correction_pending", "understanding_generation"),
+        ("awaiting_understanding_confirmation", "understanding_confirmation"),
+        ("ready_for_interview", "next_round"),
+        ("ready_for_next_round", "next_round"),
+        ("awaiting_answers", "interview_answers"),
+        ("ready_for_assessment", "complete"),
+    ],
+)
+def test_api_discovery_status_alone_selects_the_visible_flow_step(
+    status: str, expected_view: str
+) -> None:
+    assert discovery_view_for_status(status) == expected_view
+
+
+def test_question_and_fact_summaries_show_only_user_facing_fields() -> None:
+    details = question_details(
+        {
+            "question": "How many requests arrive daily?",
+            "why_it_matters": "It affects sizing.",
+            "affected_judgement": "Data readiness",
+            "example": "A rough range is enough.",
+            "id": QUESTION_ID,
+        }
+    )
+    summary = facts_summary(
+        [
+            {"fact_key": "owner", "status": "confirmed", "value": "Operations"},
+            {"fact_key": "volume", "status": "unknown", "value": None},
+            {"fact_key": "source", "status": "missing", "value": None},
+        ]
+    )
+
+    assert details == {
+        "question": "How many requests arrive daily?",
+        "why_it_matters": "It affects sizing.",
+        "affected_judgement": "Data readiness",
+        "example": "A rough range is enough.",
+    }
+    assert summary["confirmed"] == [{"fact_key": "owner", "value": "Operations"}]
+    assert summary["unknown_or_missing"] == [
+        {"fact_key": "volume", "status": "unknown"},
+        {"fact_key": "source", "status": "missing"},
+    ]
+
+
+def test_discovery_errors_are_safe_for_provider_and_stale_state_failures() -> None:
+    api = _client(
+        lambda _: httpx.Response(
+            409,
+            json={
+                "error": {
+                    "code": "interview_question_already_answered",
+                    "message": "raw provider detail at http://private.test",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.list_interview_questions(PROJECT_ID, 1)
+
+    assert caught.value.code == "interview_question_already_answered"
+    assert "private.test" not in caught.value.user_message
+
+
+def test_discovery_ui_has_no_supplementary_notes_or_forbidden_imports() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "discovery.py").read_text(encoding="utf-8")
+
+    assert "supplementary" not in source.casefold()
+    assert "ai_poc_planner.application" not in source
+    assert "ai_poc_planner.persistence" not in source
+    assert "ai_poc_planner.providers" not in source

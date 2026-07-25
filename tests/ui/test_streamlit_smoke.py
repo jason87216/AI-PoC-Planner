@@ -9,12 +9,13 @@ def test_home_page_loads_without_a_running_api() -> None:
 
     assert not app.exception
     assert [title.value for title in app.title] == ["AI PoC Planner"]
-    assert [button.label for button in app.button] == ["重新整理"]
+    assert [button.label for button in app.button] == ["開始新規劃", "重新整理"]
 
 
 @pytest.mark.parametrize(
     ("page_path", "title"),
     [
+        ("app_pages/discovery.py", "新建規劃"),
         ("app_pages/history.py", "專案歷史"),
         ("app_pages/model_settings.py", "模型設定"),
     ],

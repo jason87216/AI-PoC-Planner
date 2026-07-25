@@ -30,7 +30,33 @@ def load_provider_status() -> dict[str, Any]:
     return get_api_client().provider_status()
 
 
+@st.cache_data(ttl=10)
+def load_discovery_session(project_id: str, version_number: int) -> dict[str, Any]:
+    return get_api_client().get_discovery_session(project_id, version_number)
+
+
+@st.cache_data(ttl=10)
+def load_visible_messages(project_id: str, version_number: int) -> list[dict[str, Any]]:
+    return get_api_client().list_visible_messages(project_id, version_number)
+
+
+@st.cache_data(ttl=10)
+def load_current_facts(project_id: str, version_number: int) -> list[dict[str, Any]]:
+    return get_api_client().list_current_facts(project_id, version_number)
+
+
+@st.cache_data(ttl=10)
+def load_interview_questions(
+    project_id: str, version_number: int
+) -> list[dict[str, Any]]:
+    return get_api_client().list_interview_questions(project_id, version_number)
+
+
 def refresh_api_data() -> None:
     load_projects.clear()
     load_profiles.clear()
     load_provider_status.clear()
+    load_discovery_session.clear()
+    load_visible_messages.clear()
+    load_current_facts.clear()
+    load_interview_questions.clear()
