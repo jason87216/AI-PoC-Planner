@@ -64,3 +64,5 @@ else:
         for project in projects[:5]
     ]
     st.dataframe(recent_rows, hide_index=True)
+    if st.button("查看評估與報告", icon=":material/insights:"):
+        st.switch_page("app_pages/history.py")

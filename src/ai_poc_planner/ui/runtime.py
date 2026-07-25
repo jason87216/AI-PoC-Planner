@@ -52,6 +52,21 @@ def load_interview_questions(
     return get_api_client().list_interview_questions(project_id, version_number)
 
 
+@st.cache_data(ttl=10)
+def load_project_version(project_id: str, version_number: int) -> dict[str, Any]:
+    return get_api_client().get_project_version(project_id, version_number)
+
+
+@st.cache_data(ttl=10)
+def load_analysis(project_id: str, version_number: int) -> dict[str, Any]:
+    return get_api_client().get_analysis(project_id, version_number)
+
+
+@st.cache_data(ttl=10)
+def load_report(project_id: str, version_number: int) -> dict[str, Any]:
+    return get_api_client().get_report(project_id, version_number)
+
+
 def refresh_api_data() -> None:
     load_projects.clear()
     load_profiles.clear()
@@ -60,3 +75,6 @@ def refresh_api_data() -> None:
     load_visible_messages.clear()
     load_current_facts.clear()
     load_interview_questions.clear()
+    load_project_version.clear()
+    load_analysis.clear()
+    load_report.clear()

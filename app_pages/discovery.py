@@ -400,6 +400,8 @@ def _render_complete(project_id: str, version_number: int) -> None:
     else:
         st.info("沒有仍未知或缺失的資訊。")
     with st.container(horizontal=True):
+        if st.button("查看評估結果", icon=":material/insights:"):
+            st.switch_page("app_pages/results.py")
         if st.button("返回首頁", icon=":material/home:"):
             st.switch_page("app_pages/home.py")
         if st.button("查看歷史", icon=":material/history:"):

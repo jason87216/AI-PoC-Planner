@@ -171,7 +171,10 @@ class PlanningReportService:
             try:
                 self._validate_refs(draft, tokens)
             except PlanningReportError as error:
-                if semantic_attempt or error.code != "provider_output_invalid":
+                if semantic_attempt or error.code not in {
+                    "provider_output_invalid",
+                    "confirmed_evidence_required",
+                }:
                     raise
             else:
                 break
@@ -248,7 +251,8 @@ class PlanningReportService:
             messages[0]["content"] += (
                 " The previous output violated a report safeguard. Do not use any digits "
                 "unless the same digits occur in a referenced fact; never put digits in a "
-                "section mentioning KPI."
+                "section mentioning KPI. Every section must reference at least one "
+                "confirmed fact token."
             )
         for attempt in range(2):
             try:

@@ -9,6 +9,11 @@ from ai_poc_planner.ui.runtime import load_projects, refresh_api_data
 st.title("專案歷史")
 st.caption("只顯示可閱讀的專案進度與已選模型，不顯示內部識別資料。")
 
+
+def _selection_label(project: dict[str, object]) -> str:
+    return f"{project.get('project_name')} · 第 {project.get('version_number')} 版"
+
+
 if st.button("重新整理歷史", icon=":material/refresh:"):
     refresh_api_data()
     st.rerun()
@@ -36,3 +41,10 @@ else:
         for project in projects
     ]
     st.dataframe(rows, hide_index=True)
+    selected = st.selectbox("選擇要查看的規劃", projects, format_func=_selection_label)
+    if st.button("查看評估與報告", icon=":material/insights:"):
+        st.session_state["selected_project"] = {
+            "project_id": selected.get("project_id"),
+            "version_number": selected.get("version_number"),
+        }
+        st.switch_page("app_pages/results.py")
