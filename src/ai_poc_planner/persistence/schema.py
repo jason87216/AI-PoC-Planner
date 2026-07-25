@@ -1,5 +1,7 @@
 """Explicit SQLite schema initialization with additive legacy-safe migrations."""
 
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import sqlite3
@@ -10,7 +12,7 @@ from ai_poc_planner.persistence.errors import (
     UnsupportedSchemaVersionError,
 )
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 _PROJECT_COLUMNS = frozenset(
     {
         "id",
@@ -219,6 +221,9 @@ _ANALYSIS_GATE_COLUMNS = frozenset(
         "payload_json",
     }
 )
+_REPORT_COLUMNS = frozenset(
+    {"id", "version_id", "analysis_id", "report_json", "markdown", "created_at"}
+)
 _CREATE_PLANNING_PROJECTS_TABLE = """
 CREATE TABLE IF NOT EXISTS planning_projects (
     id TEXT PRIMARY KEY NOT NULL,
@@ -394,6 +399,27 @@ CREATE TABLE IF NOT EXISTS planning_analysis_gate_results (
     payload_json TEXT NOT NULL,
     UNIQUE (analysis_id, rule_id)
 )
+"""
+_CREATE_REPORTS_TABLE = """
+CREATE TABLE IF NOT EXISTS planning_reports (
+    id TEXT PRIMARY KEY NOT NULL,
+    version_id TEXT NOT NULL UNIQUE REFERENCES planning_project_versions(id),
+    analysis_id TEXT NOT NULL UNIQUE REFERENCES planning_analysis_results(id),
+    report_json TEXT NOT NULL,
+    markdown TEXT NOT NULL,
+    created_at TEXT NOT NULL
+)
+"""
+_CREATE_REPORT_VERSION_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_planning_reports_version ON planning_reports(version_id)
+"""
+_CREATE_REPORT_IMMUTABILITY_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_report_update
+BEFORE UPDATE ON planning_reports BEGIN SELECT RAISE(ABORT, 'report is immutable'); END
+"""
+_CREATE_REPORT_DELETE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_report_delete
+BEFORE DELETE ON planning_reports BEGIN SELECT RAISE(ABORT, 'report is immutable'); END
 """
 _CREATE_ANALYSIS_VERSION_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_analysis_results_version
@@ -638,6 +664,7 @@ def _validate_current_schema(connection: sqlite3.Connection) -> None:
     _validate_phase_two_tables(connection)
     _validate_phase_three_tables(connection)
     _validate_phase_four_tables(connection)
+    _validate_phase_five_tables(connection)
 
 
 def _validate_columns(
@@ -681,6 +708,10 @@ def _validate_phase_four_tables(connection: sqlite3.Connection) -> None:
     _validate_columns(
         connection, "planning_analysis_gate_results", _ANALYSIS_GATE_COLUMNS
     )
+
+
+def _validate_phase_five_tables(connection: sqlite3.Connection) -> None:
+    _validate_columns(connection, "planning_reports", _REPORT_COLUMNS)
 
 
 def _create_phase_two_schema(connection: sqlite3.Connection) -> None:
@@ -739,6 +770,16 @@ def _create_phase_four_schema(connection: sqlite3.Connection) -> None:
         connection.execute(statement)
 
 
+def _create_phase_five_schema(connection: sqlite3.Connection) -> None:
+    for statement in (
+        _CREATE_REPORTS_TABLE,
+        _CREATE_REPORT_VERSION_INDEX,
+        _CREATE_REPORT_IMMUTABILITY_TRIGGER,
+        _CREATE_REPORT_DELETE_TRIGGER,
+    ):
+        connection.execute(statement)
+
+
 def _phase_two_table_count(connection: sqlite3.Connection) -> int:
     names = {
         "planning_projects",
@@ -763,7 +804,7 @@ def _rollback_quietly(connection: sqlite3.Connection) -> None:
 def initialize_database(connection: sqlite3.Connection) -> None:
     """Create schema v5 or additively upgrade supported legacy databases."""
     version = read_schema_version(connection)
-    if version not in {0, 1, 2, 3, 4, CURRENT_SCHEMA_VERSION}:
+    if version not in {0, 1, 2, 3, 4, 5, CURRENT_SCHEMA_VERSION}:
         raise UnsupportedSchemaVersionError(
             "database schema version is not supported by this application"
         )
@@ -795,6 +836,8 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         _validate_phase_three_tables(connection)
         _create_phase_four_schema(connection)
         _validate_phase_four_tables(connection)
+        _create_phase_five_schema(connection)
+        _validate_phase_five_tables(connection)
         connection.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION}")
         connection.commit()
     except SchemaMismatchError:
