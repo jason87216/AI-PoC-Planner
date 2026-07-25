@@ -44,6 +44,21 @@ class ProviderConnectionState(StrEnum):
     DISABLED = "disabled"
 
 
+class StructuredOutputMode(StrEnum):
+    """Explicit OpenAI-compatible structured-output capability selection."""
+
+    JSON_SCHEMA = "json_schema"
+    JSON_OBJECT = "json_object"
+
+
+class ReasoningEffort(StrEnum):
+    """Provider-supported reasoning budget requested by an enabled profile."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
 class ProviderConnectionMessage(StrEnum):
     UNTESTED = "Connection has not been tested."
     TESTING = "Connection test is in progress."

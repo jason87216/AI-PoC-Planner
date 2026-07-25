@@ -156,6 +156,8 @@ scoring, reports, and the Streamlit product UI remain pending.
 
 - **Purpose:** Add AI/non-AI/hybrid options, six ratings, fact references, gaps,
   risks, and score-improvement conditions.
+- **Status:** implemented (strict provider-owned contracts; program-owned fields
+  are rejected).
 - **Dependencies:** P3.
 - **Acceptance:** Catalog-external candidate is marked `unstandardized_candidate`.
 
@@ -164,16 +166,25 @@ scoring, reports, and the Streamlit product UI remain pending.
 - **Purpose:** Program validates score range/references and calculates totals.
 - **Dependencies:** P4.1.
 - **Acceptance:** No old fixed Boolean rules set a final rating.
+- **Status:** implemented (schema v5 persistence and deterministic normative
+  weights/total; the legacy Boolean scorer is not used for ratings).
 
 ### [Must] P4.3 Apply existing hard gates to AI analysis
 
 - **Purpose:** Enforce safety/governance conflicts after AI proposal generation.
 - **Dependencies:** P4.2.
 - **Acceptance:** AI cannot bypass a triggered gate.
+- **Status:** implemented (existing HG-01 through HG-07 evaluator remains
+  program-owned; unknown critical inputs map conservatively).
 
 ### Checkpoint P4
 
 - Human verifies a real model can recommend non-AI, foundations-first, or hybrid.
+- Offline validation passed. Two real NVIDIA NIM `openai/gpt-oss-20b` UAT runs
+  passed through the production API. A0 selects an option index; the program
+  derives the formal conclusion and generates the stable option key before
+  kind-specific A1 details. Real llama.cpp Phase 4 structured-output
+  compatibility remains pending and does not block this checkpoint.
 
 ## Phase 5 — Cases and report
 

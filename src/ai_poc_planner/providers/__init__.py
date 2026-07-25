@@ -11,6 +11,8 @@ from ai_poc_planner.providers.base import (
     ProviderError,
     ProviderPreparation,
     ProviderRequest,
+    ReasoningEffort,
+    StructuredOutputMode,
 )
 from ai_poc_planner.providers.fake import (
     FakeEmbeddingProvider,
@@ -18,6 +20,7 @@ from ai_poc_planner.providers.fake import (
     FakeProviderError,
 )
 from ai_poc_planner.providers.openai_compatible import (
+    JSONObjectResponseFormat,
     OpenAIChatCompletionRequest,
     OpenAIChatMessage,
     OpenAICompatibleChatAdapter,
@@ -40,6 +43,7 @@ __all__ = [
     "ModelProvider",
     "OpenAIChatCompletionRequest",
     "OpenAIChatMessage",
+    "JSONObjectResponseFormat",
     "OpenAICompatibleChatAdapter",
     "OpenAICompatibleProviderError",
     "ProviderConnectionMessage",
@@ -50,4 +54,6 @@ __all__ = [
     "ProviderError",
     "ProviderPreparation",
     "ProviderRequest",
+    "ReasoningEffort",
+    "StructuredOutputMode",
 ]

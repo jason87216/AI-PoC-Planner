@@ -27,6 +27,10 @@ from ai_poc_planner.application.discovery_interview import (
     DiscoveryError,
     DiscoveryInterviewService,
 )
+from ai_poc_planner.application.evidence_analysis import (
+    EvidenceAnalysisError,
+    EvidenceAnalysisService,
+)
 from ai_poc_planner.application.persisted_planning import (
     PersistedPlanningFlow,
     PersistedPlanningOutcome,
@@ -39,6 +43,7 @@ from ai_poc_planner.application.provider_readiness import (
     ProviderReadinessError,
     ProviderReadinessService,
 )
+from ai_poc_planner.domain.analysis import ValidatedAnalysisResult
 from ai_poc_planner.domain.catalog import (
     DeploymentPostureAssessment,
     OpportunityMatchResult,
@@ -72,6 +77,7 @@ from ai_poc_planner.domain.project_history import (
     VisibleConversationMessage,
 )
 from ai_poc_planner.domain.workflow import Assessment
+from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.connection import database_connection
 from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import (
@@ -110,7 +116,11 @@ from ai_poc_planner.persistence.planning_runs import SQLitePlanningRunRepository
 from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.projects import SQLiteProjectRepository
 from ai_poc_planner.persistence.schema import initialize_database
-from ai_poc_planner.providers.base import ModelProvider
+from ai_poc_planner.providers.base import (
+    ModelProvider,
+    ReasoningEffort,
+    StructuredOutputMode,
+)
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleChatAdapter
 from ai_poc_planner.providers.profiles import (
     ModelProfile,
@@ -159,6 +169,8 @@ class ModelProfileCreateRequest(ContractModel):
     base_url: str
     model_name: NonEmptyStr
     api_key: str | None = None
+    structured_output_mode: StructuredOutputMode | None = None
+    reasoning_effort: ReasoningEffort | None = None
     is_enabled: bool = True
 
 
@@ -167,6 +179,8 @@ class ModelProfileUpdateRequest(ContractModel):
     base_url: str | None = None
     model_name: NonEmptyStr | None = None
     api_key: str | None = None
+    structured_output_mode: StructuredOutputMode | None = None
+    reasoning_effort: ReasoningEffort | None = None
     is_enabled: bool | None = None
 
 
@@ -242,6 +256,9 @@ def create_app(
     interview_adapter_factory: (
         Callable[[ModelProfile], ChatCompletionAdapter] | None
     ) = None,
+    analysis_adapter_factory: (
+        Callable[[ModelProfile], ChatCompletionAdapter] | None
+    ) = None,
 ) -> FastAPI:
     """Compose an API only from the caller-provided LangChain chat model."""
 
@@ -272,6 +289,7 @@ def create_app(
             model_name=profile.model_name,
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
+            reasoning_effort=profile.reasoning_effort,
         )
 
     def default_interview_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
@@ -282,7 +300,18 @@ def create_app(
             model_name=profile.model_name,
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
-            timeout_seconds=180,
+            timeout_seconds=300,
+            reasoning_effort=profile.reasoning_effort,
+        )
+
+    def default_analysis_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
+        return OpenAICompatibleChatAdapter(
+            base_url=str(profile.base_url),
+            model_name=profile.model_name,
+            api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
+            client=app_owned_provider_client(),
+            timeout_seconds=240,
+            reasoning_effort=profile.reasoning_effort,
         )
 
     readiness = ProviderReadinessService(
@@ -343,6 +372,28 @@ def create_app(
                 readiness=readiness,
                 selected_profile_getter=profile_repository.get_selected,
                 adapter_factory=interview_adapter_factory or default_interview_adapter,
+            )
+        finally:
+            connection.close()
+
+    @contextmanager
+    def analysis_flow() -> Iterator[EvidenceAnalysisService]:
+        if database_path is None:
+            raise PersistedPlanningUnavailableError
+        connection = database_connection(database_path)
+        try:
+            initialize_database(connection)
+            history = ProjectHistoryService(
+                SQLiteProjectHistoryRepository(connection),
+                selected_profile_getter=profile_repository.get_selected,
+            )
+            yield EvidenceAnalysisService(
+                history=history,
+                sessions=SQLiteDiscoveryRepository(connection),
+                analyses=SQLiteAnalysisRepository(connection),
+                readiness=readiness,
+                selected_profile_getter=profile_repository.get_selected,
+                adapter_factory=analysis_adapter_factory or default_analysis_adapter,
             )
         finally:
             connection.close()
@@ -436,6 +487,13 @@ def create_app(
             502 if error.code == "provider_output_invalid" else 409, error.code, uuid4()
         )
 
+    @app.exception_handler(EvidenceAnalysisError)
+    async def analysis_error(_: Request, error: EvidenceAnalysisError) -> JSONResponse:
+        status = 502 if error.code == "provider_output_invalid" else 409
+        if error.code == "analysis_not_found":
+            status = 404
+        return _error_response(status, error.code, uuid4())
+
     @app.exception_handler(Exception)
     async def unexpected_error(_: Request, __: Exception) -> JSONResponse:
         return _error_response(500, "internal_error", uuid4())
@@ -459,6 +517,8 @@ def create_app(
             base_url=request.base_url,
             model_name=request.model_name,
             api_key=request.api_key,
+            structured_output_mode=request.structured_output_mode,
+            reasoning_effort=request.reasoning_effort,
             is_enabled=request.is_enabled,
         ).to_public()
 
@@ -790,6 +850,25 @@ def create_app(
     def list_fact_history(project_id: UUID, version_number: int) -> list[FactRevision]:
         with project_history_flow() as history:
             return history.list_fact_history(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/analysis",
+        response_model=ValidatedAnalysisResult,
+        status_code=201,
+    )
+    def create_analysis(
+        project_id: UUID, version_number: int
+    ) -> ValidatedAnalysisResult:
+        with analysis_flow() as analysis:
+            return analysis.create(project_id, version_number)
+
+    @app.get(
+        "/v1/projects/{project_id}/versions/{version_number}/analysis",
+        response_model=ValidatedAnalysisResult,
+    )
+    def get_analysis(project_id: UUID, version_number: int) -> ValidatedAnalysisResult:
+        with analysis_flow() as analysis:
+            return analysis.get(project_id, version_number)
 
     @app.post("/v1/planning/interpret", response_model=PlanningInterpretResponse)
     def interpret(request: PlanningInterpretRequest) -> PlanningInterpretResponse:

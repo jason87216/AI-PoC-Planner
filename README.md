@@ -140,8 +140,29 @@ injection only; no fake runtime fallback exists.
 The real Qwen3 llama.cpp UAT passed with `--reasoning off`, including correction
 and regeneration, confirmation, bounded interview completion, and fresh-app
 reload. Provider connection status remains process-local and is not persisted.
-Phase 4 scoring/hard gates, reports, and the Streamlit product UI are still not
-implemented.
+## Phase 4 evidence-backed assessment
+
+Phase 4 adds one immutable assessment for an assessment-ready project version.
+The real selected/tested profile proposes two to four AI, non-AI,
+foundations-first, or hybrid options and six evidence-backed ratings. The
+application resolves only current `Fxxx` fact tokens, assigns the normative
+weights, calculates the total deterministically, and evaluates the existing
+hard gates. Option generation is staged: the provider selects an option index,
+then receives a kind-specific option-detail schema; the application derives the
+formal conclusion from that selected kind. The provider cannot submit a formal
+conclusion, weights, totals, rule results, or a gate disposition.
+
+SQLite schema v5 persists normalized analysis results, options, scores,
+resolved fact references, and gate results; it does not persist prompts,
+reasoning, raw provider responses, API keys, Authorization headers, or base
+URLs. Assessment stops at `assessed`: Phase 5 cases/reports and the Streamlit
+product UI are still not implemented.
+
+The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
+API using `json_schema`, `reasoning_effort=low`, and temporary local state. The
+test covers Phase 3 discovery through immutable Phase 4 assessment, duplicate
+blocking, and fresh-app reload. Provider reasoning channels and raw responses
+are ignored and never persisted.
 
 ## License
 

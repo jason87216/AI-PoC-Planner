@@ -10,7 +10,7 @@ from ai_poc_planner.persistence.errors import (
     UnsupportedSchemaVersionError,
 )
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 _PROJECT_COLUMNS = frozenset(
     {
         "id",
@@ -155,6 +155,70 @@ _INTERVIEW_QUESTION_COLUMNS = frozenset(
         "answered_at",
     }
 )
+_ANALYSIS_RESULT_COLUMNS = frozenset(
+    {
+        "id",
+        "version_id",
+        "rubric_version",
+        "hard_gate_version",
+        "model_conclusion",
+        "recommended_option_key",
+        "weighted_total",
+        "gate_disposition",
+        "created_at",
+        "requirement_summary",
+        "conclusion_rationale",
+        "overall_risks_json",
+        "unresolved_gaps_json",
+    }
+)
+_ANALYSIS_OPTION_COLUMNS = frozenset(
+    {
+        "id",
+        "analysis_id",
+        "option_key",
+        "position",
+        "option_kind",
+        "title",
+        "payload_json",
+    }
+)
+_ANALYSIS_SCORE_COLUMNS = frozenset(
+    {
+        "id",
+        "analysis_id",
+        "dimension",
+        "rating",
+        "weight",
+        "weighted_points",
+        "rationale",
+        "payload_json",
+    }
+)
+_ANALYSIS_REFERENCE_COLUMNS = frozenset(
+    {
+        "id",
+        "analysis_id",
+        "token",
+        "fact_revision_id",
+        "fact_key",
+        "fact_status",
+        "reference_scope",
+        "option_key",
+        "dimension",
+        "signal_name",
+    }
+)
+_ANALYSIS_GATE_COLUMNS = frozenset(
+    {
+        "id",
+        "analysis_id",
+        "rule_id",
+        "disposition",
+        "reason",
+        "payload_json",
+    }
+)
 _CREATE_PLANNING_PROJECTS_TABLE = """
 CREATE TABLE IF NOT EXISTS planning_projects (
     id TEXT PRIMARY KEY NOT NULL,
@@ -262,6 +326,96 @@ ON planning_interview_sessions(version_id)
 _CREATE_INTERVIEW_QUESTION_ORDER_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_interview_questions_order
 ON planning_interview_questions(session_id, round_number, position)
+"""
+_CREATE_ANALYSIS_RESULTS_TABLE = """
+CREATE TABLE IF NOT EXISTS planning_analysis_results (
+    id TEXT PRIMARY KEY NOT NULL,
+    version_id TEXT NOT NULL UNIQUE REFERENCES planning_project_versions(id),
+    rubric_version TEXT NOT NULL,
+    hard_gate_version TEXT NOT NULL,
+    model_conclusion TEXT NOT NULL,
+    recommended_option_key TEXT NOT NULL,
+    weighted_total INTEGER NOT NULL CHECK (weighted_total BETWEEN 0 AND 100),
+    gate_disposition TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    requirement_summary TEXT NOT NULL,
+    conclusion_rationale TEXT NOT NULL,
+    overall_risks_json TEXT NOT NULL,
+    unresolved_gaps_json TEXT NOT NULL
+)
+"""
+_CREATE_ANALYSIS_OPTIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS planning_analysis_options (
+    id TEXT PRIMARY KEY NOT NULL,
+    analysis_id TEXT NOT NULL REFERENCES planning_analysis_results(id),
+    option_key TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 1),
+    option_kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    UNIQUE (analysis_id, option_key),
+    UNIQUE (analysis_id, position)
+)
+"""
+_CREATE_ANALYSIS_SCORES_TABLE = """
+CREATE TABLE IF NOT EXISTS planning_analysis_scores (
+    id TEXT PRIMARY KEY NOT NULL,
+    analysis_id TEXT NOT NULL REFERENCES planning_analysis_results(id),
+    dimension TEXT NOT NULL,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    weight INTEGER NOT NULL,
+    weighted_points INTEGER NOT NULL,
+    rationale TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    UNIQUE (analysis_id, dimension)
+)
+"""
+_CREATE_ANALYSIS_REFERENCES_TABLE = """
+CREATE TABLE IF NOT EXISTS planning_analysis_fact_references (
+    id TEXT PRIMARY KEY NOT NULL,
+    analysis_id TEXT NOT NULL REFERENCES planning_analysis_results(id),
+    token TEXT NOT NULL,
+    fact_revision_id TEXT NOT NULL REFERENCES project_fact_revisions(id),
+    fact_key TEXT NOT NULL,
+    fact_status TEXT NOT NULL,
+    reference_scope TEXT NOT NULL,
+    option_key TEXT,
+    dimension TEXT,
+    signal_name TEXT
+)
+"""
+_CREATE_ANALYSIS_GATES_TABLE = """
+CREATE TABLE IF NOT EXISTS planning_analysis_gate_results (
+    id TEXT PRIMARY KEY NOT NULL,
+    analysis_id TEXT NOT NULL REFERENCES planning_analysis_results(id),
+    rule_id TEXT NOT NULL,
+    disposition TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    UNIQUE (analysis_id, rule_id)
+)
+"""
+_CREATE_ANALYSIS_VERSION_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_analysis_results_version
+ON planning_analysis_results (version_id)
+"""
+_CREATE_ANALYSIS_REFERENCE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_analysis_fact_references_fact
+ON planning_analysis_fact_references (fact_revision_id, analysis_id)
+"""
+_CREATE_ANALYSIS_IMMUTABILITY_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_analysis_result_update
+BEFORE UPDATE ON planning_analysis_results
+BEGIN
+    SELECT RAISE(ABORT, 'analysis result is immutable');
+END
+"""
+_CREATE_ANALYSIS_DELETE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS prevent_analysis_result_delete
+BEFORE DELETE ON planning_analysis_results
+BEGIN
+    SELECT RAISE(ABORT, 'analysis result is immutable');
+END
 """
 _CREATE_COMPLETED_SESSION_TRIGGER = """
 CREATE TRIGGER IF NOT EXISTS prevent_completed_version_session_write
@@ -483,6 +637,7 @@ def _validate_current_schema(connection: sqlite3.Connection) -> None:
     _validate_planning_run_table(connection)
     _validate_phase_two_tables(connection)
     _validate_phase_three_tables(connection)
+    _validate_phase_four_tables(connection)
 
 
 def _validate_columns(
@@ -513,6 +668,18 @@ def _validate_phase_three_tables(connection: sqlite3.Connection) -> None:
     )
     _validate_columns(
         connection, "planning_interview_questions", _INTERVIEW_QUESTION_COLUMNS
+    )
+
+
+def _validate_phase_four_tables(connection: sqlite3.Connection) -> None:
+    _validate_columns(connection, "planning_analysis_results", _ANALYSIS_RESULT_COLUMNS)
+    _validate_columns(connection, "planning_analysis_options", _ANALYSIS_OPTION_COLUMNS)
+    _validate_columns(connection, "planning_analysis_scores", _ANALYSIS_SCORE_COLUMNS)
+    _validate_columns(
+        connection, "planning_analysis_fact_references", _ANALYSIS_REFERENCE_COLUMNS
+    )
+    _validate_columns(
+        connection, "planning_analysis_gate_results", _ANALYSIS_GATE_COLUMNS
     )
 
 
@@ -557,6 +724,21 @@ def _create_phase_three_schema(connection: sqlite3.Connection) -> None:
         connection.execute(statement)
 
 
+def _create_phase_four_schema(connection: sqlite3.Connection) -> None:
+    for statement in (
+        _CREATE_ANALYSIS_RESULTS_TABLE,
+        _CREATE_ANALYSIS_OPTIONS_TABLE,
+        _CREATE_ANALYSIS_SCORES_TABLE,
+        _CREATE_ANALYSIS_REFERENCES_TABLE,
+        _CREATE_ANALYSIS_GATES_TABLE,
+        _CREATE_ANALYSIS_VERSION_INDEX,
+        _CREATE_ANALYSIS_REFERENCE_INDEX,
+        _CREATE_ANALYSIS_IMMUTABILITY_TRIGGER,
+        _CREATE_ANALYSIS_DELETE_TRIGGER,
+    ):
+        connection.execute(statement)
+
+
 def _phase_two_table_count(connection: sqlite3.Connection) -> int:
     names = {
         "planning_projects",
@@ -579,9 +761,9 @@ def _rollback_quietly(connection: sqlite3.Connection) -> None:
 
 
 def initialize_database(connection: sqlite3.Connection) -> None:
-    """Create schema v4 or additively upgrade supported legacy databases."""
+    """Create schema v5 or additively upgrade supported legacy databases."""
     version = read_schema_version(connection)
-    if version not in {0, 1, 2, 3, CURRENT_SCHEMA_VERSION}:
+    if version not in {0, 1, 2, 3, 4, CURRENT_SCHEMA_VERSION}:
         raise UnsupportedSchemaVersionError(
             "database schema version is not supported by this application"
         )
@@ -611,6 +793,8 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         _validate_phase_two_tables(connection)
         _create_phase_three_schema(connection)
         _validate_phase_three_tables(connection)
+        _create_phase_four_schema(connection)
+        _validate_phase_four_tables(connection)
         connection.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION}")
         connection.commit()
     except SchemaMismatchError:
