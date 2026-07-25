@@ -17,6 +17,7 @@ def test_home_page_loads_without_a_running_api() -> None:
     [
         ("app_pages/discovery.py", "新建規劃"),
         ("app_pages/history.py", "專案歷史"),
+        ("app_pages/results.py", "評估與規劃報告"),
         ("app_pages/model_settings.py", "模型設定"),
     ],
 )
