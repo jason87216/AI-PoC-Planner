@@ -196,12 +196,18 @@ scoring, reports, and the Streamlit product UI remain pending.
 - **Acceptance:** No FAISS and no fabricated company, metric, or source.
 - **Status:** implemented (nine approved, source-backed local cases; strict
   validation and deterministic tag/rule matching only). Offline validation
-  passed. P5.2 has not started.
+  passed.
 
 ### [Must] P5.2 Assemble full Markdown planning report
 
 - **Purpose:** Produce every section in the SPEC report contract.
 - **Dependencies:** P4, P5.1.
+- **Status:** implemented (schema v6 immutable report persistence; eighteen
+  strict report narration fields generated in staged Report Part A/Part B
+  calls; deterministic Markdown rendering with reviewed-case integration; and
+  reloadable report APIs). Numeric/KPI safeguards reject unsupported numeric
+  claims. The report-only NVIDIA UAT passed twice using fresh temporary state;
+  full cross-phase UAT is deferred to Phase 8. Phase 6 has not started.
 - **Acceptance:** Report is business-actionable and preserves fact references.
 
 ### Checkpoint P5

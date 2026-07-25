@@ -2,7 +2,7 @@
 
 ## Current goal
 
-Complete P5.1 reviewed local cases; do not begin P5.2.
+P5.2 Markdown planning reports are complete; do not begin Phase 6.
 
 ## Current status
 
@@ -64,7 +64,16 @@ Complete P5.1 reviewed local cases; do not begin P5.2.
   failure; deterministic matching uses approved status, exact opportunity type,
   applicability/non-applicability tags, evidence grade, and stable case ID.
   It does not call a provider, search online, write SQLite, change assessment
-  scores/gates, or begin P5.2 report assembly.
+  scores/gates.
+- Phase 5.2 is implemented on schema v6 with an immutable `planning_reports`
+  table, validated structured report DTOs, and a fixed-order deterministic
+  Markdown renderer. Eighteen narration fields are generated in staged Report
+  Part A and Report Part B calls; the renderer preserves program-owned
+  conclusion, scoring, hard-gate values, fact references, and reviewed-case
+  attribution. Numeric claims and KPI thresholds are rejected unless
+  fact-backed. Report-only NVIDIA NIM UAT passed twice with fresh temporary
+  state, including POST completion, GET, duplicate blocking, and fresh-app
+  reload. Full cross-phase UAT is deferred to Phase 8. Phase 6 has not started.
 
 ## UAT findings recorded from PR #8
 

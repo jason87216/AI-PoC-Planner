@@ -152,11 +152,15 @@ then receives a kind-specific option-detail schema; the application derives the
 formal conclusion from that selected kind. The provider cannot submit a formal
 conclusion, weights, totals, rule results, or a gate disposition.
 
-SQLite schema v5 persists normalized analysis results, options, scores,
-resolved fact references, and gate results; it does not persist prompts,
-reasoning, raw provider responses, API keys, Authorization headers, or base
-URLs. Assessment stops at `assessed`: Phase 5 cases/reports and the Streamlit
-product UI are still not implemented.
+SQLite schema v6 persists normalized analysis results and one immutable,
+fact-backed Markdown planning report per assessed version. P5.2 generates the
+eighteen report narration fields in two staged real-provider calls (Report Part
+A and Report Part B), then deterministically renders program-owned conclusions,
+scores, gates, resolved fact references, and reviewed-case attribution. Numeric
+claims and KPI thresholds are rejected unless fact-backed. It does not persist
+prompts, reasoning, raw provider responses, API keys, Authorization headers, or
+base URLs. A report completes its version. The Streamlit product UI is still
+not implemented.
 
 The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
 API using `json_schema`, `reasoning_effort=low`, and temporary local state. The
@@ -164,14 +168,21 @@ test covers Phase 3 discovery through immutable Phase 4 assessment, duplicate
 blocking, and fresh-app reload. Provider reasoning channels and raw responses
 are ignored and never persisted.
 
+P5.2 also passed a report-only NVIDIA UAT twice using two fresh temporary
+states. Each run uses production assessed-version repositories, calls Report
+Part A and Report Part B, persists an immutable report, completes the version,
+and verifies GET, duplicate POST blocking, and fresh-app reload. Full
+cross-phase report UAT is deferred to Phase 8.
+
 ## Reviewed local cases
 
 Phase 5.1 provides a small, manually reviewed local case library in
 `data/reviewed_cases.json`. It is read-only, source-backed, Pydantic-validated,
 and matched deterministically by exact opportunity type, applicability tags,
 evidence grade, and stable case ID. It does not use online search, embeddings,
-FAISS, a provider, or case-derived scoring. Phase 5.2 report assembly and the
-Streamlit product UI are still not implemented.
+FAISS, a provider, or case-derived scoring. Phase 5.2 adds a strict structured
+report draft, deterministic Markdown rendering, immutable reloadable storage,
+and report APIs; it does not add a Streamlit product UI.
 
 ## License
 
