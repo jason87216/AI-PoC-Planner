@@ -21,6 +21,13 @@ _USER_MESSAGES = {
     "provider_not_ready": "尚未有可用的已測試模型設定。",
     "provider_profile_mismatch": "目前模型設定不適用於這份規劃，請重新選擇並測試模型。",
     "provider_output_invalid": "模型暫時無法產生可用結果，請稍後再試。",
+    "analysis_not_ready": "訪談尚未完成，暫時無法開始評估。",
+    "analysis_not_found": "尚未找到這份規劃的評估結果。",
+    "analysis_already_exists": "這份規劃已有評估結果，已保留原有內容。",
+    "report_not_ready": "請先完成評估，再產生規劃報告。",
+    "report_not_found": "尚未找到這份規劃的報告。",
+    "report_already_exists": "這份規劃已有報告，已保留原有內容。",
+    "completed_version_immutable": "這份已完成的規劃無法再修改。",
     "model_profile_not_found": "找不到指定的模型設定。",
     "project_not_found": "找不到指定的專案。",
     "project_version_not_found": "找不到這個專案版本。",
@@ -47,8 +54,9 @@ class ApiClient:
     ) -> None:
         self._client = client or httpx.Client(
             base_url=base_url or "http://127.0.0.1:8000",
-            timeout=httpx.Timeout(10.0),
+            timeout=httpx.Timeout(120.0, connect=5.0),
             follow_redirects=False,
+            trust_env=False,
         )
 
     def list_projects(self) -> list[dict[str, Any]]:
@@ -181,9 +189,51 @@ class ApiClient:
             )
         )
 
+    def get_project_version(
+        self, project_id: str, version_number: int
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request("GET", self._version_path(project_id, version_number))
+        )
+
+    def create_analysis(self, project_id: str, version_number: int) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST", self._version_path(project_id, version_number, "analysis")
+            )
+        )
+
+    def get_analysis(self, project_id: str, version_number: int) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "GET", self._version_path(project_id, version_number, "analysis")
+            )
+        )
+
+    def create_report(self, project_id: str, version_number: int) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST", self._version_path(project_id, version_number, "report")
+            )
+        )
+
+    def get_report(self, project_id: str, version_number: int) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "GET", self._version_path(project_id, version_number, "report")
+            )
+        )
+
     @staticmethod
     def _discovery_path(project_id: str, version_number: int, suffix: str) -> str:
-        return f"/v1/projects/{project_id}/versions/{version_number}/{suffix}"
+        return ApiClient._version_path(project_id, version_number, suffix)
+
+    @staticmethod
+    def _version_path(
+        project_id: str, version_number: int, suffix: str | None = None
+    ) -> str:
+        path = f"/v1/projects/{project_id}/versions/{version_number}"
+        return f"{path}/{suffix}" if suffix else path
 
     def _request(
         self,

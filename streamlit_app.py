@@ -14,6 +14,7 @@ page = st.navigation(
             icon=":material/assignment:",
         ),
         st.Page("app_pages/history.py", title="專案歷史", icon=":material/history:"),
+        st.Page("app_pages/results.py", title="評估結果", icon=":material/insights:"),
         st.Page(
             "app_pages/model_settings.py",
             title="模型設定",

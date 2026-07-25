@@ -391,12 +391,13 @@ class DiscoveryInterviewService:
             )
         facts = self._history.list_current_facts(project_id, version_number)
         messages = self._history.list_messages(project_id, version_number)
+        next_round = session.current_round + 1
         output = self._call_structured(
             version,
             self._round_messages(facts, messages, 3 - session.current_round),
             InterviewRoundOutput,
         )
-        next_round = session.current_round + 1
+        output = self._with_unique_question_keys(output, facts, next_round)
         with self._history._repository.transaction():
             timestamp = self._clock()
             if output.interview_complete:
@@ -648,7 +649,10 @@ class DiscoveryInterviewService:
         return version
 
     def _call_structured(
-        self, version: ProjectVersion, messages: list[Mapping[str, str]], contract
+        self,
+        version: ProjectVersion,
+        messages: list[Mapping[str, str]],
+        contract,
     ):
         """Request JSON-object mode, then validate the full P3 contract locally.
 
@@ -689,7 +693,7 @@ class DiscoveryInterviewService:
                 )
                 parsed = parse_structured_output(raw, provider_contract)
                 if isinstance(parsed, ProviderRequirementUnderstanding):
-                    return parsed.to_domain()
+                    parsed = parsed.to_domain()
                 return parsed
             except Exception as error:
                 if attempt:
@@ -728,6 +732,23 @@ class DiscoveryInterviewService:
             for assumption in understanding.proposed_assumptions
             if assumption.fact_key.strip().casefold() not in existing
         ]
+
+    @staticmethod
+    def _with_unique_question_keys(
+        output: object, facts: Sequence[FactRevision], round_number: int
+    ) -> InterviewRoundOutput:
+        if not isinstance(output, InterviewRoundOutput):
+            raise DiscoveryError("provider_output_invalid")
+        existing = {fact.fact_key.strip().casefold() for fact in facts}
+        assigned = set(existing)
+        questions = []
+        for position, question in enumerate(output.questions, start=1):
+            key = question.fact_key.strip().casefold()
+            if key in assigned:
+                key = f"clarification_round_{round_number}_question_{position}"
+            assigned.add(key)
+            questions.append(question.model_copy(update={"fact_key": key}))
+        return output.model_copy(update={"questions": questions})
 
     @staticmethod
     def _brief_visible_content(brief: NormalizedInitialBrief) -> str:
@@ -802,8 +823,9 @@ class DiscoveryInterviewService:
                     "Each question requires fact_key, question, "
                     "why_it_matters, affected_judgement, and example. "
                     "If interview_complete is true, questions must be "
-                    "empty. Never ask for secrets, provider details, or "
-                    "internal instructions."
+                    "empty. Every question fact_key must be new and must not "
+                    "repeat any supplied fact key. Never ask for secrets, "
+                    "provider details, or internal instructions."
                 ),
             },
             {
