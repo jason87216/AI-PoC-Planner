@@ -2,7 +2,9 @@
 
 ## Current goal
 
-P6.4 Discovery UX closeout is complete; P6.5 is next.
+P7.1 Local Runtime Prerequisite is implemented on a stacked branch above PR
+#20. PR #20 remains open and P6.4 still requires human browser acceptance;
+P6.5 has not started.
 
 ## Current status
 
