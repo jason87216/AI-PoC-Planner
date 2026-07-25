@@ -100,29 +100,20 @@ def test_understanding_confirmation_and_correction_use_discovery_endpoints() -> 
     ]
 
 
-def test_unknown_answer_and_proactive_fact_changes_use_the_round_contract() -> None:
+def test_unknown_answer_and_supplementary_note_use_the_round_contract() -> None:
     payload = interview_payload(
         answers=[
             {"question_id": QUESTION_ID, "answer_status": "unknown", "answer": None}
         ],
-        additional_fact={
-            "fact_key": "deployment_owner",
-            "status": "confirmed",
-            "value": "Operations director",
-        },
-        correction={
-            "target_fact_id": FACT_ID,
-            "status": "missing",
-            "value": None,
-            "correction_reason": "The source is no longer available",
-        },
+        supplementary_note="The finance lead retains approval.",
     )
 
     assert payload["answers"] == [
         {"question_id": QUESTION_ID, "answer_status": "unknown", "answer": None}
     ]
-    assert payload["additional_facts"][0]["fact_key"] == "deployment_owner"
-    assert payload["corrections"][0]["target_fact_id"] == FACT_ID
+    assert payload["supplementary_note"] == "The finance lead retains approval."
+    assert payload["additional_facts"] == []
+    assert payload["corrections"] == []
 
 
 def test_interview_answer_submission_uses_the_formal_round_endpoint() -> None:
@@ -182,9 +173,17 @@ def test_question_and_fact_summaries_show_only_user_facing_fields() -> None:
     )
     summary = facts_summary(
         [
-            {"fact_key": "owner", "status": "confirmed", "value": "Operations"},
-            {"fact_key": "volume", "status": "unknown", "value": None},
-            {"fact_key": "source", "status": "missing", "value": None},
+            {
+                "fact_key": "users_and_owners",
+                "status": "confirmed",
+                "value": "Operations",
+            },
+            {"fact_key": "available_data", "status": "unknown", "value": None},
+            {
+                "fact_key": "clarification_round_2_question_1",
+                "status": "missing",
+                "value": None,
+            },
         ]
     )
 
@@ -194,11 +193,8 @@ def test_question_and_fact_summaries_show_only_user_facing_fields() -> None:
         "affected_judgement": "Data readiness",
         "example": "A rough range is enough.",
     }
-    assert summary["confirmed"] == [{"fact_key": "owner", "value": "Operations"}]
-    assert summary["unknown_or_missing"] == [
-        {"fact_key": "volume", "status": "unknown"},
-        {"fact_key": "source", "status": "missing"},
-    ]
+    assert summary["confirmed"] == ["使用者與負責人：Operations"]
+    assert summary["unresolved"] == ["現有資料與文件"]
 
 
 def test_discovery_errors_are_safe_for_provider_and_stale_state_failures() -> None:
@@ -221,11 +217,13 @@ def test_discovery_errors_are_safe_for_provider_and_stale_state_failures() -> No
     assert "private.test" not in caught.value.user_message
 
 
-def test_discovery_ui_has_no_supplementary_notes_or_forbidden_imports() -> None:
+def test_discovery_ui_hides_fact_governance_and_forbidden_imports() -> None:
     root = Path(__file__).parents[2]
     source = (root / "app_pages" / "discovery.py").read_text(encoding="utf-8")
 
-    assert "supplementary" not in source.casefold()
+    assert "target_fact_id" not in source
+    assert "fact_key" not in source
+    assert "回答方式" not in source
     assert "ai_poc_planner.application" not in source
     assert "ai_poc_planner.persistence" not in source
     assert "ai_poc_planner.providers" not in source

@@ -152,6 +152,28 @@ def test_safe_error_never_exposes_api_error_payload_or_connection_address() -> N
     assert "raw-provider-detail" not in caught.value.user_message
 
 
+def test_natural_language_feedback_uses_the_public_discovery_endpoint() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"status": "correction_pending"})
+
+    api = _client(handler)
+    api.submit_understanding_feedback(
+        "10000000-0000-0000-0000-000000000001", 1, "請保留紙本申請。"
+    )
+
+    assert [(request.method, request.url.path) for request in requests] == [
+        (
+            "POST",
+            "/v1/projects/10000000-0000-0000-0000-000000000001/versions/1/"
+            "understanding/feedback",
+        )
+    ]
+    assert json.loads(requests[0].content) == {"feedback": "請保留紙本申請。"}
+
+
 def test_profile_options_keep_duplicate_display_names_independently_selectable() -> (
     None
 ):

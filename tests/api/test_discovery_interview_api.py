@@ -125,6 +125,35 @@ def test_phase_three_initial_brief_understanding_and_bounded_round(
     assert answered.json()["status"] == "ready_for_next_round"
 
 
+def test_requirement_feedback_accepts_natural_language_without_fact_ids(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    _ready_profile(client)
+    created = client.post(
+        "/v1/discovery-projects",
+        json={
+            "project_name": "Discovery",
+            "current_workflow_problem": "Manual routing",
+            "desired_outcome": "Faster routing",
+            "available_data": "Unknown",
+        },
+    )
+    project_id = created.json()["project"]["id"]
+    assert (
+        client.post(f"/v1/projects/{project_id}/versions/1/understanding").status_code
+        == 200
+    )
+
+    response = client.post(
+        f"/v1/projects/{project_id}/versions/1/understanding/feedback",
+        json={"feedback": "The requester needs human review before any decision."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "correction_pending"
+
+
 def test_initial_brief_requires_a_tested_selected_provider_and_safe_errors(
     tmp_path: Path,
 ) -> None:
