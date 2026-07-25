@@ -59,6 +59,7 @@ from ai_poc_planner.domain.discovery import (
     InitialBrief,
     InterviewQuestion,
     InterviewRoundAnswerSubmission,
+    NaturalLanguageFeedback,
     NormalizedInitialBrief,
     UnderstandingCorrectionSubmission,
 )
@@ -669,6 +670,20 @@ def create_app(
     ) -> DiscoverySession:
         with discovery_flow() as discovery:
             return discovery.submit_corrections(project_id, version_number, request)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/understanding/feedback",
+        response_model=DiscoverySession,
+    )
+    def submit_understanding_feedback(
+        project_id: UUID,
+        version_number: int,
+        request: NaturalLanguageFeedback,
+    ) -> DiscoverySession:
+        with discovery_flow() as discovery:
+            return discovery.submit_natural_language_feedback(
+                project_id, version_number, request
+            )
 
     @app.post(
         "/v1/projects/{project_id}/versions/{version_number}/interview-rounds",

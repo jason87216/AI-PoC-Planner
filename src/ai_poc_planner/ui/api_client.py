@@ -140,6 +140,19 @@ class ApiClient:
             )
         )
 
+    def submit_understanding_feedback(
+        self, project_id: str, version_number: int, feedback: str
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST",
+                self._discovery_path(
+                    project_id, version_number, "understanding/feedback"
+                ),
+                {"feedback": feedback},
+            )
+        )
+
     def generate_interview_round(
         self, project_id: str, version_number: int
     ) -> list[dict[str, Any]]:

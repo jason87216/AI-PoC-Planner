@@ -1,5 +1,7 @@
 """Phase 3 real-provider discovery workflow with durable visible evidence only."""
 
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import json
@@ -20,6 +22,7 @@ from ai_poc_planner.domain.discovery import (
     InterviewQuestion,
     InterviewRoundAnswerSubmission,
     InterviewRoundOutput,
+    NaturalLanguageFeedback,
     NormalizedInitialBrief,
     RequirementUnderstanding,
     UnderstandingCorrectionSubmission,
@@ -373,6 +376,63 @@ class DiscoveryInterviewService:
             self._sessions.update_session(session)
         return session
 
+    def submit_natural_language_feedback(
+        self,
+        project_id: UUID,
+        version_number: int,
+        feedback: NaturalLanguageFeedback,
+    ) -> DiscoverySession:
+        """Persist one authoritative user correction without a UI fact editor."""
+
+        version = self._history.get_version(project_id, version_number)
+        session = self._sessions.get_session_for_version(version.id)
+        if (
+            session.status
+            is not DiscoverySessionStatus.AWAITING_UNDERSTANDING_CONFIRMATION
+        ):
+            raise InvalidInterviewTransitionError(
+                "feedback requires pending understanding"
+            )
+        with self._history._repository.transaction():
+            message = self._history.append_message(
+                project_id,
+                version_number,
+                role=InterviewRole.USER,
+                message_kind=VisibleMessageKind.CORRECTION.value,
+                content=feedback.feedback,
+            )
+            current = {
+                fact.fact_key: fact
+                for fact in self._history.list_current_facts(project_id, version_number)
+            }
+            existing = current.get("user_requirement_feedback")
+            if existing is None:
+                self._history.record_user_confirmed_fact(
+                    project_id,
+                    version_number,
+                    fact_key="user_requirement_feedback",
+                    value=feedback.feedback,
+                    reference_message_ids=[message.id],
+                )
+            else:
+                self._history.correct_fact(
+                    project_id,
+                    version_number,
+                    existing.id,
+                    status=FactStatus.CONFIRMED,
+                    value=feedback.feedback,
+                    correction_reason="使用者以自然語言修正需求理解。",
+                    reference_message_ids=[message.id],
+                )
+            updated = session.model_copy(
+                update={
+                    "status": DiscoverySessionStatus.CORRECTION_PENDING,
+                    "updated_at": self._clock(),
+                }
+            )
+            self._sessions.update_session(updated)
+        return updated
+
     def generate_round(
         self, project_id: UUID, version_number: int
     ) -> tuple[DiscoverySession, list[InterviewQuestion]]:
@@ -541,8 +601,23 @@ class DiscoveryInterviewService:
                     correction_reason=correction.correction_reason,
                     reference_message_ids=[correction_message.id],
                 )
+            if submission.supplementary_note:
+                note_message = self._history.append_message(
+                    project_id,
+                    version_number,
+                    role=InterviewRole.USER,
+                    message_kind=VisibleMessageKind.USER_INPUT.value,
+                    content=submission.supplementary_note,
+                )
+                self._history.record_user_confirmed_fact(
+                    project_id,
+                    version_number,
+                    fact_key=f"supplementary_note_round_{session.current_round}",
+                    value=submission.supplementary_note,
+                    reference_message_ids=[note_message.id],
+                )
             timestamp = self._clock()
-            final = session.current_round == 3
+            final = session.current_round >= 2
             session = DiscoverySession(
                 **{
                     **session.model_dump(),
@@ -798,6 +873,9 @@ class DiscoveryInterviewService:
                     "fact id values in source_fact_ids and related_fact_ids. Each "
                     "ambiguity requires description and related_fact_ids; output [] "
                     "when there are no ambiguities."
+                    " All user-visible JSON values must be concise Traditional "
+                    "Chinese. Keep only unavoidable proper names such as Microsoft 365 "
+                    "or API in English; do not translate JSON keys."
                 ),
             },
             {
@@ -825,7 +903,14 @@ class DiscoveryInterviewService:
                     "If interview_complete is true, questions must be "
                     "empty. Every question fact_key must be new and must not "
                     "repeat any supplied fact key. Never ask for secrets, "
-                    "provider details, or internal instructions."
+                    "provider details, or internal instructions. Ask only questions "
+                    "that could change the AI/non-AI direction, a hard gate, PoC scope, "
+                    "deployment posture, or human-review boundary. Default to one round;"
+                    " a second round is allowed only when one of those decisions remains"
+                    " materially uncertain. Accept qualitative answers and do not require"
+                    " precise percentages or budgets unless they change the direction. All"
+                    " user-visible JSON values must be concise Traditional Chinese; do not"
+                    " translate JSON keys."
                 ),
             },
             {
