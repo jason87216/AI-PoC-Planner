@@ -22,14 +22,17 @@ _MODEL_NAME = "openai/gpt-oss-20b"
 
 
 def _api_key() -> str:
-    if os.environ.get("AI_POC_PLANNER_NVIDIA_TEST") != "1":
+    if not {
+        os.environ.get("AI_POC_PLANNER_NVIDIA_TEST"),
+        os.environ.get("AI_POC_PLANNER_NVIDIA_REPORT_TEST"),
+    }.intersection({"1"}):
         pytest.skip("set AI_POC_PLANNER_NVIDIA_TEST=1 to run NVIDIA analysis UAT")
     if "NVIDIA_API_KEY" not in os.environ:
         pytest.skip("NVIDIA_API_KEY is required for NVIDIA analysis UAT")
     return os.environ["NVIDIA_API_KEY"]
 
 
-def test_nvidia_completes_discovery_and_evidence_backed_analysis(
+def run_nvidia_discovery_and_analysis(
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "nvidia-phase-four-uat.sqlite3"
@@ -210,3 +213,11 @@ def test_nvidia_completes_discovery_and_evidence_backed_analysis(
             "bearer ",
         ):
             assert forbidden not in dump
+
+    return database_path, profile_path, project_id, public_profile["id"], result
+
+
+def test_nvidia_completes_discovery_and_evidence_backed_analysis(
+    tmp_path: Path,
+) -> None:
+    run_nvidia_discovery_and_analysis(tmp_path)
