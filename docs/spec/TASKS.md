@@ -246,11 +246,21 @@ scoring, reports, and the Streamlit product UI remain pending.
 - **Purpose:** Render Phase 4–5 results and Markdown export without raw JSON,
   UUIDs, API URLs, or technical warnings.
 - **Dependencies:** P4, P5, P6.2.
-- **Status:** not started.
+- **Status:** implemented. A Streamlit results page uses only the public FastAPI
+  HTTP API to restore the durable project status, create analysis or report from
+  explicit user actions, and render persisted Phase 4 options, six scores,
+  hard-gate results, risks, gaps, all eighteen Phase 5 sections, and saved
+  reviewed-case sources. It downloads the persisted UTF-8 Markdown without
+  regenerating it and hides UUIDs, fact tokens, raw JSON, API URLs, SQLite paths,
+  prompts, and technical diagnostics. Offline UI/client tests and a real NVIDIA
+  NIM browser UAT passed for assessment, Report Part A/Part B, refresh recovery,
+  and Markdown download.
 
 ### Checkpoint P6
 
-- Human completes a real-model planning flow without internal identifiers.
+- Complete. Human can complete a real-model planning flow through assessment and
+  persisted Markdown report views without internal identifiers. Full cross-phase
+  UAT remains deferred to Phase 8.
 
 ## Phase 7 — Local launcher
 

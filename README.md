@@ -168,7 +168,15 @@ shows only readable facts at completion, and keeps UUIDs, raw JSON, prompts,
 API URLs, SQLite paths, and technical diagnostics out of the UI. A real NVIDIA
 NIM browser UAT covered profile readiness, brief, correction, confirmation,
 unknown answer, proactive fact addition, bounded completion, and refresh
-recovery. Analysis and report views remain future Phase 6 work.
+ recovery. Phase 6.3 adds readable Phase 4 assessment and Phase 5 report views:
+ it follows the persisted version status, renders the six scores, hard gates,
+ options, risks, gaps, all eighteen report sections, and saved reviewed-case
+ sources through FastAPI HTTP only. It downloads the persisted UTF-8 Markdown
+ without re-rendering it, restores the latest result-capable project after a
+ refresh, and keeps fact tokens, UUIDs, raw JSON, API URLs, SQLite paths, and
+ technical diagnostics out of the UI. A real NVIDIA browser UAT covered
+ assessment creation, Report Part A/Part B, completed-state refresh, and
+ Markdown download. Phase 6 is complete; Phase 7 has not started.
 
 The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
 API using `json_schema`, `reasoning_effort=low`, and temporary local state. The

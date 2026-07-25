@@ -2,8 +2,7 @@
 
 ## Current goal
 
-P6.2 Streamlit brief, confirmation, and bounded-interview views are complete;
-P6.3 is next.
+P6.3 Streamlit analysis and readable report views are complete; Phase 7 is next.
 
 ## Current status
 
@@ -90,8 +89,19 @@ P6.3 is next.
   provider layers. Real NVIDIA NIM `openai/gpt-oss-20b` browser UAT passed with
   `json_schema`, `reasoning_effort=low`, a tested selected temporary profile,
   a correction, an unknown answer, a proactive fact addition, three bounded
-  rounds, ready-for-assessment, and page-refresh recovery. P6.3 remains
-  unstarted.
+  rounds, ready-for-assessment, and page-refresh recovery.
+- Phase 6.3 adds a read-only results surface for persisted Phase 4 analysis and
+  Phase 5 reports. It uses only public FastAPI HTTP endpoints, follows durable
+  project status, creates writes only from explicit buttons, and recovers the
+  latest result-capable project after refresh. It renders options, six scores,
+  hard gates, risks, gaps, all eighteen report sections, and saved reviewed-case
+  sources without UUIDs, fact tokens, raw JSON, API URLs, SQLite paths, prompts,
+  or technical diagnostics. The Markdown download is the persisted UTF-8 report,
+  not a UI re-render. Real NVIDIA NIM `openai/gpt-oss-20b` browser UAT passed
+  with `json_schema`, `reasoning_effort=low`, temporary state, assessment,
+  Report Part A/Part B, completed refresh, and Markdown download. Phase 6 is
+  complete; full cross-phase UAT remains deferred to Phase 8 and Phase 7 has not
+  started.
 
 ## UAT findings recorded from PR #8
 
