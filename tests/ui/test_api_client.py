@@ -1,0 +1,194 @@
+from __future__ import annotations
+
+import json
+from collections.abc import Callable
+
+import httpx
+import pytest
+
+from ai_poc_planner.ui.api_client import ApiClient, ApiClientError
+from ai_poc_planner.ui.presentation import profile_options
+
+
+def _client(handler: Callable[[httpx.Request], httpx.Response]) -> ApiClient:
+    return ApiClient(
+        client=httpx.Client(
+            base_url="http://planner.test",
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+
+def test_history_and_status_use_only_the_public_http_api() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/v1/projects":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "project_id": "10000000-0000-0000-0000-000000000001",
+                        "project_name": "Invoice triage",
+                        "version_number": 2,
+                        "status": "assessed",
+                        "created_at": "2026-07-25T00:00:00Z",
+                        "updated_at": "2026-07-25T01:00:00Z",
+                        "completed_at": None,
+                        "profile_name": "NVIDIA",
+                        "model_name": "openai/gpt-oss-20b",
+                    }
+                ],
+            )
+        if request.url.path == "/v1/provider-status":
+            return httpx.Response(
+                200,
+                json={
+                    "profile_id": "10000000-0000-0000-0000-000000000002",
+                    "connection_state": "connected",
+                    "tested_at": "2026-07-25T01:00:00Z",
+                    "user_message": "Connection succeeded.",
+                    "model_name": "openai/gpt-oss-20b",
+                    "formal_analysis_allowed": True,
+                },
+            )
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
+    api = _client(handler)
+
+    assert api.list_projects()[0]["project_name"] == "Invoice triage"
+    assert api.provider_status()["connection_state"] == "connected"
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("GET", "/v1/projects"),
+        ("GET", "/v1/provider-status"),
+    ]
+
+
+def test_profile_actions_send_safe_public_requests() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(200, json=[])
+        if request.url.path.endswith("/test"):
+            return httpx.Response(
+                200,
+                json={
+                    "profile_id": "10000000-0000-0000-0000-000000000002",
+                    "connection_state": "connected",
+                    "tested_at": "2026-07-25T01:00:00Z",
+                    "user_message": "Connection succeeded.",
+                    "model_name": "openai/gpt-oss-20b",
+                    "formal_analysis_allowed": True,
+                },
+            )
+        return httpx.Response(
+            200 if request.method != "POST" else 201,
+            json={
+                "id": "10000000-0000-0000-0000-000000000002",
+                "profile_name": "NVIDIA",
+                "base_url": "https://integrate.api.nvidia.com/v1",
+                "model_name": "openai/gpt-oss-20b",
+                "structured_output_mode": "json_schema",
+                "reasoning_effort": "low",
+                "is_selected": True,
+                "is_enabled": True,
+                "created_at": "2026-07-25T00:00:00Z",
+                "updated_at": "2026-07-25T01:00:00Z",
+            },
+        )
+
+    api = _client(handler)
+
+    api.list_profiles()
+    api.create_profile(
+        {
+            "profile_name": "NVIDIA",
+            "base_url": "https://integrate.api.nvidia.com/v1",
+            "model_name": "openai/gpt-oss-20b",
+            "api_key": "entered-only-for-request",
+            "is_enabled": True,
+        }
+    )
+    api.update_profile("10000000-0000-0000-0000-000000000002", {"is_enabled": True})
+    api.select_profile("10000000-0000-0000-0000-000000000002")
+    assert (
+        api.test_profile("10000000-0000-0000-0000-000000000002")[
+            "formal_analysis_allowed"
+        ]
+        is True
+    )
+
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("GET", "/v1/model-profiles"),
+        ("POST", "/v1/model-profiles"),
+        ("PATCH", "/v1/model-profiles/10000000-0000-0000-0000-000000000002"),
+        ("POST", "/v1/model-profiles/10000000-0000-0000-0000-000000000002/select"),
+        ("POST", "/v1/model-profiles/10000000-0000-0000-0000-000000000002/test"),
+    ]
+    assert json.loads(requests[1].content)["api_key"] == "entered-only-for-request"
+
+
+def test_safe_error_never_exposes_api_error_payload_or_connection_address() -> None:
+    api = _client(
+        lambda _: httpx.Response(
+            409,
+            json={
+                "error": {
+                    "code": "provider_not_ready",
+                    "message": "http://internal.example.test/raw-provider-detail",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.provider_status()
+
+    assert caught.value.code == "provider_not_ready"
+    assert "internal.example.test" not in caught.value.user_message
+    assert "raw-provider-detail" not in caught.value.user_message
+
+
+def test_profile_options_keep_duplicate_display_names_independently_selectable() -> (
+    None
+):
+    profiles = [
+        {
+            "id": "10000000-0000-0000-0000-000000000002",
+            "profile_name": "NVIDIA",
+            "model_name": "openai/gpt-oss-20b",
+        },
+        {
+            "id": "10000000-0000-0000-0000-000000000003",
+            "profile_name": "NVIDIA",
+            "model_name": "openai/gpt-oss-20b",
+        },
+    ]
+
+    options = profile_options(profiles)
+
+    assert list(options) == [
+        "10000000-0000-0000-0000-000000000002",
+        "10000000-0000-0000-0000-000000000003",
+    ]
+
+
+def test_ui_package_does_not_import_application_persistence_or_provider_layers() -> (
+    None
+):
+    from pathlib import Path
+
+    root = Path(__file__).parents[2]
+    source_paths = [
+        *(root / "src" / "ai_poc_planner" / "ui").rglob("*.py"),
+        *(root / "app_pages").rglob("*.py"),
+        root / "streamlit_app.py",
+    ]
+    source = "\n".join(path.read_text(encoding="utf-8") for path in source_paths)
+
+    assert "ai_poc_planner.application" not in source
+    assert "ai_poc_planner.persistence" not in source
+    assert "ai_poc_planner.providers" not in source
