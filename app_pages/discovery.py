@@ -1,4 +1,4 @@
-"""Phase 3 discovery UI backed exclusively by the public FastAPI boundary."""
+"""Product-friendly discovery flow backed exclusively by public FastAPI HTTP."""
 
 from __future__ import annotations
 
@@ -13,13 +13,15 @@ from ai_poc_planner.ui.discovery import (
     interview_payload,
     question_details,
 )
-from ai_poc_planner.ui.presentation import show_api_error
+from ai_poc_planner.ui.presentation import profile_label, show_api_error
 from ai_poc_planner.ui.runtime import (
     get_api_client,
     load_current_facts,
     load_discovery_session,
     load_interview_questions,
+    load_profiles,
     load_projects,
+    load_provider_status,
     load_visible_messages,
     refresh_api_data,
 )
@@ -32,373 +34,290 @@ def _select_target(project_id: str, version_number: int) -> None:
     }
 
 
-def _current_target() -> tuple[str, int] | None:
-    selected = st.session_state.get("selected_project")
-    if isinstance(selected, dict):
-        project_id = selected.get("project_id")
-        version_number = selected.get("version_number")
-        if isinstance(project_id, str) and isinstance(version_number, int):
-            return project_id, version_number
-    return _restore_latest_discovery_target()
-
-
-def _restore_latest_discovery_target() -> tuple[str, int] | None:
-    """Restore the newest resumable discovery item after a browser refresh."""
-
+def _target() -> tuple[str, int] | None:
+    target = st.session_state.get("selected_project")
+    if (
+        isinstance(target, dict)
+        and isinstance(target.get("project_id"), str)
+        and isinstance(target.get("version_number"), int)
+    ):
+        return target["project_id"], target["version_number"]
     try:
-        projects = load_projects()
+        for project in load_projects():
+            project_id, number = (
+                project.get("project_id"),
+                project.get("version_number"),
+            )
+            if isinstance(project_id, str) and isinstance(number, int):
+                load_discovery_session(project_id, number)
+                _select_target(project_id, number)
+                return project_id, number
     except ApiClientError:
         return None
-    for project in projects:
-        project_id = project.get("project_id")
-        version_number = project.get("version_number")
-        if not isinstance(project_id, str) or not isinstance(version_number, int):
-            continue
-        try:
-            load_discovery_session(project_id, version_number)
-        except ApiClientError:
-            continue
-        _select_target(project_id, version_number)
-        return project_id, version_number
     return None
 
 
-def _refresh_after_write() -> None:
+def _refresh(*keys: str) -> None:
+    for key in keys:
+        st.session_state.pop(key, None)
     refresh_api_data()
     st.rerun()
 
 
-def _fact_options(facts: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {str(fact["id"]): fact for fact in facts}
-
-
-def _fact_label(fact: dict[str, Any]) -> str:
-    return str(fact.get("fact_key", "未命名資訊"))
-
-
-def _value_for_status(status: str, value: str) -> object:
-    return value if status == "confirmed" else None
-
-
-def _display_understanding(
+def _understanding(
     session: dict[str, Any], project_id: str, version_number: int
-) -> None:
-    try:
-        messages = load_visible_messages(project_id, version_number)
-    except ApiClientError as error:
-        show_api_error(error)
-        return
+) -> str | None:
     message_id = str(session.get("latest_understanding_message_id") or "")
-    understanding = next(
-        (message for message in messages if str(message.get("id")) == message_id),
-        None,
+    for message in load_visible_messages(project_id, version_number):
+        if str(message.get("id")) == message_id:
+            return str(message.get("content", ""))
+    return None
+
+
+def _provider_ready() -> tuple[bool, str]:
+    try:
+        status, profiles = load_provider_status(), load_profiles()
+    except ApiClientError as error:
+        show_api_error(error)
+        return False, ""
+    if not status.get("formal_analysis_allowed"):
+        return False, ""
+    selected = next(
+        (profile for profile in profiles if profile.get("is_selected")), None
     )
-    if understanding is None:
-        st.info("需求理解正在準備中，請稍後重新整理。")
-        return
-    with st.container(border=True):
-        st.subheader("AI 的需求理解")
-        st.write(str(understanding.get("content", "")))
+    return selected is not None, profile_label(selected) if selected else ""
 
 
-def _render_brief() -> None:
-    st.subheader("建立初始 brief")
-    st.caption("請先選擇並測試模型設定；提交後會立即產生需求理解。")
-    with st.form("initial_brief"):
-        project_name = st.text_input("專案名稱")
-        current_workflow_problem = st.text_area("目前問題或工作流程")
-        desired_outcome = st.text_area("期望成果")
-        available_data = st.selectbox(
-            "可用資料",
-            options=["不知道", "目前沒有"],
-            accept_new_options=True,
-            placeholder="選擇或輸入現有資料描述",
-        )
-        users_and_owners = st.text_input("使用者與負責人（選填）")
-        known_constraints = st.text_area("已知限制（選填）")
-        submitted = st.form_submit_button("提交 brief", icon=":material/send:")
-
-    if not submitted:
-        return
-    payload: dict[str, Any] = {
-        "project_name": project_name,
-        "current_workflow_problem": current_workflow_problem,
-        "desired_outcome": desired_outcome,
-        "available_data": available_data,
-    }
-    if users_and_owners:
-        payload["users_and_owners"] = users_and_owners
-    if known_constraints:
-        payload["known_constraints"] = known_constraints
-    try:
-        created = get_api_client().create_discovery_project(payload)
-        project = created["project"]
-        version = created["version"]
-        project_id = str(project["id"])
-        version_number = int(version["version_number"])
-        _select_target(project_id, version_number)
-        get_api_client().generate_understanding(project_id, version_number)
-    except ApiClientError as error:
-        show_api_error(error)
+def _brief() -> None:
+    st.subheader("建立新專案")
+    ready, model = _provider_ready()
+    if ready:
+        st.success(f"目前使用模型：{model}（已通過本次啟動的連線測試）")
     else:
-        _refresh_after_write()
-
-
-def _render_understanding_generation(project_id: str, version_number: int) -> None:
-    st.info("brief 已儲存，尚待產生需求理解。")
-    if st.button("產生需求理解", icon=":material/auto_awesome:"):
+        st.warning("請先在模型設定建立、選擇並測試可用模型，才能整理需求。")
+        if st.button("前往模型設定", icon=":material/tune:"):
+            st.switch_page("app_pages/model_settings.py")
+    with st.form("create_project"):
+        project_name = st.text_input(
+            "專案名稱", placeholder="例如：內部請購與費用核准流程改善"
+        )
+        current = st.text_area(
+            "目前流程與問題",
+            help="說明目前怎麼做、卡在哪裡。",
+            placeholder="例如：Excel、紙本與 Email 分散，附件與進度難以追蹤。",
+            height=140,
+        )
+        outcome = st.text_area(
+            "希望改善的成果",
+            help="描述希望改變的工作成果。",
+            placeholder="例如：先統一流程與規則檢查，再評估 AI 是否有幫助。",
+            height=120,
+        )
+        data = st.text_area(
+            "現有資料與文件",
+            help="可描述文件、歷史紀錄、Excel、資料庫、品質與限制；也可填目前不清楚。",
+            placeholder="例如：有紙本、Excel 和 Email，但格式不一致。",
+            height=120,
+        )
+        owners = st.text_area(
+            "使用者與負責人", placeholder="例如：申請人、部門主管、財務人員與資訊部門。"
+        )
+        constraints = st.text_area(
+            "已知限制",
+            placeholder="例如：正式核准必須由授權主管決定，優先使用 Microsoft 365。",
+        )
+        submitted = st.form_submit_button(
+            "建立專案並整理需求", type="primary", disabled=not ready
+        )
+    if submitted:
         try:
-            get_api_client().generate_understanding(project_id, version_number)
-        except ApiClientError as error:
-            show_api_error(error)
-        else:
-            _refresh_after_write()
-
-
-def _render_understanding_confirmation(
-    session: dict[str, Any], project_id: str, version_number: int
-) -> None:
-    _display_understanding(session, project_id, version_number)
-    try:
-        facts = load_current_facts(project_id, version_number)
-    except ApiClientError as error:
-        show_api_error(error)
-        return
-
-    with st.container(horizontal=True):
-        if st.button("確認理解正確", icon=":material/check_circle:"):
+            created = get_api_client().create_discovery_project(
+                {
+                    "project_name": project_name,
+                    "current_workflow_problem": current,
+                    "desired_outcome": outcome,
+                    "available_data": data,
+                    "users_and_owners": owners or None,
+                    "known_constraints": constraints or None,
+                }
+            )
+            project, version = created["project"], created["version"]
+            _select_target(str(project["id"]), int(version["version_number"]))
             try:
-                get_api_client().confirm_understanding(project_id, version_number)
-            except ApiClientError as error:
-                show_api_error(error)
+                get_api_client().generate_understanding(
+                    str(project["id"]), int(version["version_number"])
+                )
+            except ApiClientError:
+                st.warning(
+                    "專案已建立，但需求理解尚未生成。請使用下方按鈕重新整理需求。"
+                )
+                refresh_api_data()
             else:
-                _refresh_after_write()
-
-    fact_by_id = _fact_options(facts)
-    st.subheader("修正需求理解")
-    with st.form("understanding_correction"):
-        target_fact_id = st.selectbox(
-            "要修正的資訊",
-            options=list(fact_by_id),
-            format_func=lambda item: _fact_label(fact_by_id[item]),
-        )
-        correction_status = st.selectbox(
-            "修正後狀態",
-            options=["confirmed", "unknown", "missing"],
-            format_func=lambda item: {
-                "confirmed": "已確認",
-                "unknown": "不知道",
-                "missing": "目前沒有",
-            }[item],
-        )
-        correction_value = st.text_area("修正內容")
-        correction_reason = st.text_input("修正原因")
-        correction_submitted = st.form_submit_button("提交修正並重新產生理解")
-
-    if not correction_submitted:
-        return
-    if correction_status == "confirmed" and not correction_value.strip():
-        st.warning("已確認的修正需要填寫內容。")
-        return
-    if not correction_reason.strip():
-        st.warning("請說明修正原因。")
-        return
-    payload = {
-        "corrections": [
-            {
-                "target_fact_id": target_fact_id,
-                "status": correction_status,
-                "value": _value_for_status(correction_status, correction_value),
-                "correction_reason": correction_reason,
-            }
-        ],
-        "additional_facts": [],
-    }
-    try:
-        get_api_client().submit_understanding_corrections(
-            project_id, version_number, payload
-        )
-        get_api_client().generate_understanding(project_id, version_number)
-    except ApiClientError as error:
-        show_api_error(error)
-    else:
-        _refresh_after_write()
+                _refresh()
+        except ApiClientError as error:
+            show_api_error(error)
 
 
-def _render_next_round(project_id: str, version_number: int) -> None:
-    st.info("需求理解已確認，可繼續訪談。")
-    if st.button("開始下一輪訪談", icon=":material/forum:"):
+def _generation(project_id: str, number: int) -> None:
+    st.info("專案已建立，現在可以整理 AI 對需求的理解。")
+    if st.button("整理需求", type="primary", icon=":material/auto_awesome:"):
         try:
-            get_api_client().generate_interview_round(project_id, version_number)
+            get_api_client().generate_understanding(project_id, number)
         except ApiClientError as error:
             show_api_error(error)
         else:
-            _refresh_after_write()
+            _refresh("feedback_text")
 
 
-def _render_answers(
-    session: dict[str, Any], project_id: str, version_number: int
-) -> None:
+def _confirmation(session: dict[str, Any], project_id: str, number: int) -> None:
     try:
-        questions = load_interview_questions(project_id, version_number)
-        facts = load_current_facts(project_id, version_number)
+        summary = _understanding(session, project_id, number)
     except ApiClientError as error:
         show_api_error(error)
         return
-    current_questions = [
-        question
-        for question in questions
-        if question.get("round_number") == session.get("current_round")
-        and question.get("answer_message_id") is None
-    ]
-    if not current_questions:
-        st.info("這一輪沒有待回答問題，請重新整理。")
-        return
+    st.subheader("AI 對需求的理解")
+    st.write(summary or "需求理解暫時無法顯示。")
+    if st.button("理解正確，繼續", type="primary", icon=":material/check_circle:"):
+        try:
+            get_api_client().confirm_understanding(project_id, number)
+        except ApiClientError as error:
+            show_api_error(error)
+        else:
+            _refresh("feedback_text")
+    if st.button("需要修改", icon=":material/edit:"):
+        st.session_state["show_feedback"] = True
+    if st.session_state.get("show_feedback"):
+        feedback = st.text_area(
+            "請直接說明哪裡不正確，以及正確情況是什麼",
+            key="feedback_text",
+            placeholder=(
+                "例如：第一階段仍必須保留紙本申請，但要把狀態和核准紀錄"
+                "統一登記在 Microsoft 365。"
+            ),
+            height=160,
+        )
+        if st.button("提交修改並重新整理需求", type="primary"):
+            if not feedback.strip():
+                st.warning("請先輸入修改內容。")
+            else:
+                try:
+                    get_api_client().submit_understanding_feedback(
+                        project_id, number, feedback
+                    )
+                    get_api_client().generate_understanding(project_id, number)
+                except ApiClientError as error:
+                    show_api_error(error)
+                else:
+                    st.session_state.pop("show_feedback", None)
+                    _refresh("feedback_text", "show_feedback")
 
-    st.subheader("本輪問題")
-    with st.form("interview_answers"):
-        answers: list[dict[str, Any]] = []
-        for question in current_questions:
+
+def _next_round(project_id: str, number: int) -> None:
+    st.info("AI 只會詢問可能影響方向判斷的少量關鍵問題。")
+    if st.button("查看關鍵問題", type="primary", icon=":material/forum:"):
+        try:
+            get_api_client().generate_interview_round(project_id, number)
+        except ApiClientError as error:
+            show_api_error(error)
+        else:
+            _refresh()
+
+
+def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
+    try:
+        questions = [
+            q
+            for q in load_interview_questions(project_id, number)
+            if q.get("round_number") == session.get("current_round")
+            and q.get("answer_message_id") is None
+        ]
+    except ApiClientError as error:
+        show_api_error(error)
+        return
+    with st.form("key_questions"):
+        answers = []
+        for index, question in enumerate(questions):
             detail = question_details(question)
             with st.container(border=True):
-                st.write(detail["question"])
-                st.caption(f"為什麼重要：{detail['why_it_matters']}")
-                st.caption(f"影響判斷：{detail['affected_judgement']}")
-                st.caption(f"例子：{detail['example']}")
-                answer_status = st.selectbox(
-                    "回答方式",
-                    options=["", "answered", "unknown", "missing"],
-                    format_func=lambda item: {
-                        "": "請選擇",
-                        "answered": "輸入答案",
-                        "unknown": "不知道",
-                        "missing": "目前沒有",
-                    }[item],
-                    key=f"answer_status_{question['id']}",
+                st.subheader(detail["question"])
+                st.caption(f"為什麼需要確認：{detail['why_it_matters']}")
+                answer = st.text_area(
+                    "回答",
+                    key=f"question_{index}",
+                    placeholder="可提供粗略範圍或質性描述。",
+                    height=100,
                 )
-                answer_text = st.text_area(
-                    "答案",
-                    key=f"answer_text_{question['id']}",
+                unknown, missing = st.columns(2)
+                unknown_choice = unknown.checkbox("目前不清楚", key=f"unknown_{index}")
+                missing_choice = missing.checkbox(
+                    "目前沒有相關資料", key=f"missing_{index}"
+                )
+                status = (
+                    "answered"
+                    if answer.strip()
+                    else (
+                        "unknown"
+                        if unknown_choice
+                        else ("missing" if missing_choice else "")
+                    )
                 )
                 answers.append(
                     {
                         "question_id": str(question["id"]),
-                        "answer_status": answer_status,
-                        "answer": answer_text if answer_status == "answered" else None,
+                        "answer_status": status,
+                        "answer": answer if answer.strip() else None,
                     }
                 )
-
-        fact_by_id = _fact_options(facts)
-        with st.expander("主動補充或修正事實"):
-            additional_fact_key = st.text_input("新增事實名稱（選填）")
-            additional_status = st.selectbox(
-                "新增事實狀態",
-                options=["confirmed", "unknown", "missing"],
-                format_func=lambda item: {
-                    "confirmed": "已確認",
-                    "unknown": "不知道",
-                    "missing": "目前沒有",
-                }[item],
-            )
-            additional_value = st.text_input("新增事實內容")
-            correction_target = st.selectbox(
-                "修正既有事實（選填）",
-                options=["", *fact_by_id],
-                format_func=lambda item: (
-                    "不修正" if not item else _fact_label(fact_by_id[item])
-                ),
-            )
-            correction_status = st.selectbox(
-                "既有事實的新狀態",
-                options=["confirmed", "unknown", "missing"],
-                format_func=lambda item: {
-                    "confirmed": "已確認",
-                    "unknown": "不知道",
-                    "missing": "目前沒有",
-                }[item],
-            )
-            correction_value = st.text_input("既有事實的新內容")
-            correction_reason = st.text_input("既有事實的修正原因")
-        answers_submitted = st.form_submit_button(
-            "提交本輪答案", icon=":material/send:"
+        note = st.text_area(
+            "還有其他想補充或更正的內容嗎？（選填）",
+            key="supplementary_note",
+            placeholder="例如：最終核准必須由部門主管完成；第一階段不能傳送個人資料到未核准的外部服務。",
+            height=120,
         )
+        submitted = st.form_submit_button("送出回答並繼續", type="primary")
+    if submitted:
+        if any(not answer["answer_status"] for answer in answers):
+            st.warning("請回答每一題，或選擇目前不清楚／目前沒有相關資料。")
+            return
+        try:
+            get_api_client().submit_interview_answers(
+                project_id,
+                number,
+                interview_payload(answers=answers, supplementary_note=note),
+            )
+        except ApiClientError as error:
+            show_api_error(error)
+        else:
+            keys = ["supplementary_note"] + [
+                f"{part}_{i}"
+                for i in range(len(questions))
+                for part in ("question", "unknown", "missing")
+            ]
+            _refresh(*keys)
 
-    if not answers_submitted:
-        return
-    if any(answer["answer_status"] == "" for answer in answers):
-        st.warning("請完成本輪每一題，或選擇不知道／目前沒有。")
-        return
-    if any(
-        answer["answer_status"] == "answered" and not str(answer["answer"]).strip()
-        for answer in answers
-    ):
-        st.warning("選擇輸入答案的問題不能留白。")
-        return
-    if (
-        additional_fact_key
-        and additional_status == "confirmed"
-        and not additional_value
-    ):
-        st.warning("已確認的新增事實需要填寫內容。")
-        return
-    if correction_target and correction_status == "confirmed" and not correction_value:
-        st.warning("已確認的修正需要填寫內容。")
-        return
-    if correction_target and not correction_reason:
-        st.warning("請說明既有事實的修正原因。")
-        return
-    additional_fact = (
-        {
-            "fact_key": additional_fact_key,
-            "status": additional_status,
-            "value": _value_for_status(additional_status, additional_value),
-        }
-        if additional_fact_key
-        else None
-    )
-    correction = (
-        {
-            "target_fact_id": correction_target,
-            "status": correction_status,
-            "value": _value_for_status(correction_status, correction_value),
-            "correction_reason": correction_reason,
-        }
-        if correction_target
-        else None
-    )
+
+def _complete(project_id: str, number: int) -> None:
     try:
-        get_api_client().submit_interview_answers(
-            project_id,
-            version_number,
-            interview_payload(
-                answers=answers,
-                additional_fact=additional_fact,
-                correction=correction,
-            ),
-        )
-    except ApiClientError as error:
-        show_api_error(error)
-    else:
-        _refresh_after_write()
-
-
-def _render_complete(project_id: str, version_number: int) -> None:
-    try:
-        summary = facts_summary(load_current_facts(project_id, version_number))
+        summary = facts_summary(load_current_facts(project_id, number))
     except ApiClientError as error:
         show_api_error(error)
         return
-    st.success("訪談已完成，規劃已可進入下一個階段。")
-    st.subheader("已確認資訊")
-    if summary["confirmed"]:
-        st.table(summary["confirmed"])
-    else:
-        st.info("目前沒有已確認資訊。")
-    st.subheader("仍未知或缺失的資訊")
-    if summary["unknown_or_missing"]:
-        st.table(summary["unknown_or_missing"])
-    else:
-        st.info("沒有仍未知或缺失的資訊。")
+    project_name = next(
+        (
+            str(project.get("project_name", ""))
+            for project in load_projects()
+            if project.get("id") == project_id
+        ),
+        "",
+    )
+    st.success("需求訪談已完成，可以進入評估階段。")
+    st.caption(f"目前專案：{project_name or '已選專案'}｜版本 {number}")
+    st.subheader("已確認的需求")
+    for item in summary["confirmed"]:
+        st.write(f"• {item}")
+    st.subheader("目前仍待確認")
+    for item in summary["unresolved"]:
+        st.write(f"• {item}")
     with st.container(horizontal=True):
         if st.button("查看評估結果", icon=":material/insights:"):
             st.switch_page("app_pages/results.py")
@@ -408,35 +327,27 @@ def _render_complete(project_id: str, version_number: int) -> None:
             st.switch_page("app_pages/history.py")
 
 
-st.title("新建規劃")
-target = _current_target()
+st.title("新建專案")
+target = _target()
 if target is None:
-    _render_brief()
+    _brief()
     st.stop()
-
 project_id, version_number = target
-if st.button("開始另一份規劃", icon=":material/add:"):
-    st.session_state["selected_project"] = None
-    st.rerun()
-
-session_slot = st.container()
-with session_slot.skeleton():
-    try:
-        session = load_discovery_session(project_id, version_number)
-    except ApiClientError as error:
-        show_api_error(error)
-        st.stop()
-
+try:
+    session = load_discovery_session(project_id, version_number)
+except ApiClientError as error:
+    show_api_error(error)
+    st.stop()
 view = discovery_view_for_status(session.get("status"))
 if view == "understanding_generation":
-    _render_understanding_generation(project_id, version_number)
+    _generation(project_id, version_number)
 elif view == "understanding_confirmation":
-    _render_understanding_confirmation(session, project_id, version_number)
+    _confirmation(session, project_id, version_number)
 elif view == "next_round":
-    _render_next_round(project_id, version_number)
+    _next_round(project_id, version_number)
 elif view == "interview_answers":
-    _render_answers(session, project_id, version_number)
+    _answers(session, project_id, version_number)
 elif view == "complete":
-    _render_complete(project_id, version_number)
+    _complete(project_id, version_number)
 else:
-    st.info("這份規劃目前無法在此頁繼續，請返回專案歷史。")
+    st.info("此專案目前無法在此頁繼續，請查看專案歷史。")

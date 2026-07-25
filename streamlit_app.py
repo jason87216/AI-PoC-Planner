@@ -2,7 +2,9 @@
 
 import streamlit as st
 
-st.set_page_config(page_title="AI PoC Planner", page_icon=":material/insights:")
+st.set_page_config(
+    page_title="AI PoC Planner", page_icon=":material/insights:", layout="wide"
+)
 st.session_state.setdefault("selected_project", None)
 
 page = st.navigation(
@@ -10,7 +12,7 @@ page = st.navigation(
         st.Page("app_pages/home.py", title="首頁", icon=":material/home:"),
         st.Page(
             "app_pages/discovery.py",
-            title="新建規劃",
+            title="新建專案",
             icon=":material/assignment:",
         ),
         st.Page("app_pages/history.py", title="專案歷史", icon=":material/history:"),

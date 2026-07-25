@@ -1,4 +1,4 @@
-"""Presentation-only helpers for the Phase 3 discovery HTTP flow."""
+"""Presentation-only helpers for the product discovery HTTP flow."""
 
 from __future__ import annotations
 
@@ -15,55 +15,49 @@ _DISCOVERY_VIEWS = {
     "ready_for_assessment": "complete",
 }
 
+_FACT_LABELS = {
+    "current_workflow_problem": "目前流程與問題",
+    "desired_outcome": "希望改善的成果",
+    "available_data": "現有資料與文件",
+    "users_and_owners": "使用者與負責人",
+    "known_constraints": "已知限制",
+}
+
 
 def discovery_view_for_status(status: object) -> str:
-    """Map only the API's durable session status to a presentation step."""
-
     return _DISCOVERY_VIEWS.get(str(status), "unavailable")
 
 
 def question_details(question: Mapping[str, Any]) -> dict[str, str]:
-    """Keep identifiers and provider metadata out of question presentation."""
-
     return {
         field: str(question[field])
-        for field in (
-            "question",
-            "why_it_matters",
-            "affected_judgement",
-            "example",
-        )
+        for field in ("question", "why_it_matters", "affected_judgement", "example")
     }
 
 
 def interview_payload(
-    *,
-    answers: Sequence[Mapping[str, Any]],
-    additional_fact: Mapping[str, Any] | None = None,
-    correction: Mapping[str, Any] | None = None,
-) -> dict[str, list[dict[str, Any]]]:
-    """Shape user-entered choices for the existing round-answer contract."""
-
+    *, answers: Sequence[Mapping[str, Any]], supplementary_note: str | None = None
+) -> dict[str, Any]:
     return {
         "answers": [dict(answer) for answer in answers],
-        "additional_facts": [dict(additional_fact)] if additional_fact else [],
-        "corrections": [dict(correction)] if correction else [],
+        "additional_facts": [],
+        "corrections": [],
+        "supplementary_note": supplementary_note or None,
     }
 
 
-def facts_summary(
-    facts: Sequence[Mapping[str, Any]],
-) -> dict[str, list[dict[str, Any]]]:
-    """Present only readable confirmed and unresolved fact summaries."""
-
-    confirmed = [
-        {"fact_key": str(fact["fact_key"]), "value": fact.get("value")}
-        for fact in facts
-        if fact.get("status") == "confirmed"
-    ]
-    unknown_or_missing = [
-        {"fact_key": str(fact["fact_key"]), "status": str(fact["status"])}
-        for fact in facts
-        if fact.get("status") in {"unknown", "missing"}
-    ]
-    return {"confirmed": confirmed, "unknown_or_missing": unknown_or_missing}
+def facts_summary(facts: Sequence[Mapping[str, Any]]) -> dict[str, list[str]]:
+    confirmed: list[str] = []
+    unresolved: list[str] = []
+    for fact in facts:
+        key, status = str(fact.get("fact_key", "")), str(fact.get("status", ""))
+        if key.startswith(("clarification_", "supplementary_", "user_")):
+            continue
+        label = _FACT_LABELS.get(key)
+        if label is None:
+            continue
+        if status == "confirmed" and fact.get("value"):
+            confirmed.append(f"{label}：{fact['value']}")
+        elif status in {"unknown", "missing"}:
+            unresolved.append(label)
+    return {"confirmed": confirmed, "unresolved": unresolved[:3]}
