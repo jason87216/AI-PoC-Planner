@@ -164,6 +164,15 @@ test covers Phase 3 discovery through immutable Phase 4 assessment, duplicate
 blocking, and fresh-app reload. Provider reasoning channels and raw responses
 are ignored and never persisted.
 
+## Reviewed local cases
+
+Phase 5.1 provides a small, manually reviewed local case library in
+`data/reviewed_cases.json`. It is read-only, source-backed, Pydantic-validated,
+and matched deterministically by exact opportunity type, applicability tags,
+evidence grade, and stable case ID. It does not use online search, embeddings,
+FAISS, a provider, or case-derived scoring. Phase 5.2 report assembly and the
+Streamlit product UI are still not implemented.
+
 ## License
 
 MIT License. See [LICENSE](LICENSE).
