@@ -1,5 +1,7 @@
 """Minimal FastAPI boundary for the LangChain planning slice."""
 
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -35,6 +37,10 @@ from ai_poc_planner.application.persisted_planning import (
     PersistedPlanningFlow,
     PersistedPlanningOutcome,
 )
+from ai_poc_planner.application.planning_report import (
+    PlanningReportError,
+    PlanningReportService,
+)
 from ai_poc_planner.application.planning_runs import PlanningRunService
 from ai_poc_planner.application.project_history import ProjectHistoryService
 from ai_poc_planner.application.projects import AnalysisProjectService
@@ -69,6 +75,7 @@ from ai_poc_planner.domain.models import (
     NonEmptyStr,
     PocProposal,
 )
+from ai_poc_planner.domain.planning_report import PersistedPlanningReport
 from ai_poc_planner.domain.project_history import (
     FactRevision,
     PlanningProject,
@@ -115,6 +122,7 @@ from ai_poc_planner.persistence.model_profiles import (
 from ai_poc_planner.persistence.planning_runs import SQLitePlanningRunRepository
 from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.projects import SQLiteProjectRepository
+from ai_poc_planner.persistence.report import SQLitePlanningReportRepository
 from ai_poc_planner.persistence.schema import initialize_database
 from ai_poc_planner.providers.base import (
     ModelProvider,
@@ -398,6 +406,30 @@ def create_app(
         finally:
             connection.close()
 
+    @contextmanager
+    def report_flow() -> Iterator[PlanningReportService]:
+        if database_path is None:
+            raise PersistedPlanningUnavailableError
+        connection = database_connection(database_path)
+        try:
+            initialize_database(connection)
+            yield PlanningReportService(
+                history=ProjectHistoryService(
+                    SQLiteProjectHistoryRepository(connection),
+                    selected_profile_getter=profile_repository.get_selected,
+                ),
+                analyses=SQLiteAnalysisRepository(connection),
+                reports=SQLitePlanningReportRepository(connection),
+                readiness=readiness,
+                selected_profile_getter=profile_repository.get_selected,
+                adapter_factory=analysis_adapter_factory or default_analysis_adapter,
+                cases_path=Path(__file__).resolve().parents[3]
+                / "data"
+                / "reviewed_cases.json",
+            )
+        finally:
+            connection.close()
+
     @app.exception_handler(RequestValidationError)
     async def request_validation_error(
         _: Request,
@@ -491,6 +523,13 @@ def create_app(
     async def analysis_error(_: Request, error: EvidenceAnalysisError) -> JSONResponse:
         status = 502 if error.code == "provider_output_invalid" else 409
         if error.code == "analysis_not_found":
+            status = 404
+        return _error_response(status, error.code, uuid4())
+
+    @app.exception_handler(PlanningReportError)
+    async def report_error(_: Request, error: PlanningReportError) -> JSONResponse:
+        status = 502 if error.code == "provider_output_invalid" else 409
+        if error.code in {"report_not_found", "analysis_not_found"}:
             status = 404
         return _error_response(status, error.code, uuid4())
 
@@ -869,6 +908,23 @@ def create_app(
     def get_analysis(project_id: UUID, version_number: int) -> ValidatedAnalysisResult:
         with analysis_flow() as analysis:
             return analysis.get(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/report",
+        response_model=PersistedPlanningReport,
+        status_code=201,
+    )
+    def create_report(project_id: UUID, version_number: int) -> PersistedPlanningReport:
+        with report_flow() as report:
+            return report.create(project_id, version_number)
+
+    @app.get(
+        "/v1/projects/{project_id}/versions/{version_number}/report",
+        response_model=PersistedPlanningReport,
+    )
+    def get_report(project_id: UUID, version_number: int) -> PersistedPlanningReport:
+        with report_flow() as report:
+            return report.get(project_id, version_number)
 
     @app.post("/v1/planning/interpret", response_model=PlanningInterpretResponse)
     def interpret(request: PlanningInterpretRequest) -> PlanningInterpretResponse:

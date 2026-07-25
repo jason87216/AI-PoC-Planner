@@ -38,7 +38,7 @@ def test_fresh_schema_contains_phase_two_tables_and_preserves_foreign_keys(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
-        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 5
+        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 6
         assert {
             "analysis_projects",
             "planning_runs",
@@ -142,12 +142,12 @@ def test_v1_and_v2_legacy_data_survive_additive_upgrade(tmp_path: Path) -> None:
                     ]
                     == 1
                 )
-            assert read_schema_version(connection) == 5
+            assert read_schema_version(connection) == 6
         finally:
             connection.close()
 
 
-def test_v3_schema_additively_upgrades_to_v5(tmp_path: Path) -> None:
+def test_v3_schema_additively_upgrades_to_v6(tmp_path: Path) -> None:
     connection = database_connection(tmp_path / "v3.sqlite3")
     try:
         initialize_database(connection)
@@ -158,7 +158,7 @@ def test_v3_schema_additively_upgrades_to_v5(tmp_path: Path) -> None:
 
         initialize_database(connection)
 
-        assert read_schema_version(connection) == 5
+        assert read_schema_version(connection) == 6
         assert connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' "
             "AND name='planning_interview_sessions'"
