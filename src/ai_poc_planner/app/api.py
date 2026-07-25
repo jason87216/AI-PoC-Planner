@@ -287,7 +287,9 @@ def create_app(
         client = getattr(app.state, "provider_http_client", None)
         if isinstance(client, httpx.Client) and not client.is_closed:
             return client
-        client = httpx.Client()
+        # Provider profiles are explicit endpoints; ambient proxy settings must not
+        # silently redirect a local app's credential-bearing provider request.
+        client = httpx.Client(trust_env=False)
         app.state.provider_http_client = client
         return client
 

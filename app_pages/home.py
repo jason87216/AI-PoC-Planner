@@ -17,6 +17,10 @@ from ai_poc_planner.ui.runtime import (
 st.title("AI PoC Planner")
 st.write("將需求訪談、可驗證評估與規劃報告整理為可持續追蹤的 PoC。")
 
+if st.button("開始新規劃", icon=":material/add:", type="primary"):
+    st.session_state["selected_project"] = None
+    st.switch_page("app_pages/discovery.py")
+
 if st.button("重新整理", icon=":material/refresh:"):
     refresh_api_data()
     st.rerun()
