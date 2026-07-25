@@ -49,7 +49,13 @@ class SQLiteAnalysisRepository:
                 for item in self._connection.execute(
                     "SELECT payload_json, weight, weighted_points "
                     "FROM planning_analysis_scores WHERE analysis_id = ? "
-                    "ORDER BY dimension",
+                    "ORDER BY CASE dimension "
+                    "WHEN 'business_value' THEN 1 "
+                    "WHEN 'data_readiness' THEN 2 "
+                    "WHEN 'technical_fit' THEN 3 "
+                    "WHEN 'architecture_controllability' THEN 4 "
+                    "WHEN 'governance_readiness' THEN 5 "
+                    "WHEN 'user_adoption' THEN 6 END",
                     (row["id"],),
                 ).fetchall()
             ]
@@ -65,7 +71,8 @@ class SQLiteAnalysisRepository:
                 item[0]
                 for item in self._connection.execute(
                     "SELECT token FROM planning_analysis_fact_references "
-                    "WHERE analysis_id = ? ORDER BY token",
+                    "WHERE analysis_id = ? AND reference_scope = 'conclusion' "
+                    "ORDER BY token",
                     (row["id"],),
                 ).fetchall()
             ]
@@ -177,6 +184,20 @@ class SQLiteAnalysisRepository:
                         str(result.id),
                         token,
                         "catalog",
+                        str(revision_id),
+                    ),
+                )
+            for token in result.conclusion_fact_refs:
+                revision_id = references[str(token)]
+                self._connection.execute(
+                    "INSERT INTO planning_analysis_fact_references "
+                    "(id, analysis_id, token, fact_revision_id, fact_key, fact_status, reference_scope) "
+                    "SELECT ?, ?, ?, id, fact_key, status, ? FROM project_fact_revisions WHERE id = ?",
+                    (
+                        f"{result.id}:ref:conclusion:{token}",
+                        str(result.id),
+                        str(token),
+                        "conclusion",
                         str(revision_id),
                     ),
                 )

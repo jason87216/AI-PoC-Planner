@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
+from ai_poc_planner.providers.base import ReasoningEffort, StructuredOutputMode
 from ai_poc_planner.providers.profiles import ModelProfile
 
 _SCHEMA_VERSION = "1.0"
@@ -113,6 +114,8 @@ class LocalModelProfileRepository:
         base_url: str,
         model_name: str,
         api_key: str | None = None,
+        structured_output_mode: StructuredOutputMode | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         is_enabled: bool = True,
     ) -> ModelProfile:
         with self._lock:
@@ -125,6 +128,8 @@ class LocalModelProfileRepository:
                     base_url=base_url,
                     model_name=model_name,
                     api_key=_normalized_api_key(api_key),
+                    structured_output_mode=structured_output_mode,
+                    reasoning_effort=reasoning_effort,
                     is_selected=False,
                     is_enabled=is_enabled,
                     created_at=timestamp,
@@ -146,6 +151,8 @@ class LocalModelProfileRepository:
         base_url: str | None = None,
         model_name: str | None = None,
         api_key: str | None | object = _UNSET,
+        structured_output_mode: StructuredOutputMode | None | object = _UNSET,
+        reasoning_effort: ReasoningEffort | None | object = _UNSET,
         is_enabled: bool | None = None,
     ) -> ModelProfile:
         with self._lock:
@@ -165,6 +172,16 @@ class LocalModelProfileRepository:
                     base_url=current.base_url if base_url is None else base_url,
                     model_name=current.model_name if model_name is None else model_name,
                     api_key=key_value,
+                    structured_output_mode=(
+                        current.structured_output_mode
+                        if structured_output_mode is _UNSET
+                        else structured_output_mode
+                    ),
+                    reasoning_effort=(
+                        current.reasoning_effort
+                        if reasoning_effort is _UNSET
+                        else reasoning_effort
+                    ),
                     is_selected=(
                         current.is_selected if is_enabled is not False else False
                     ),

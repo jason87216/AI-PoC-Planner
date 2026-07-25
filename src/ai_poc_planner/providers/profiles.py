@@ -19,6 +19,8 @@ from ai_poc_planner.domain.models import ContractModel, NonEmptyStr, UtcDateTime
 from ai_poc_planner.providers.base import (
     ProviderConnectionMessage,
     ProviderConnectionState,
+    ReasoningEffort,
+    StructuredOutputMode,
 )
 
 
@@ -30,6 +32,8 @@ class ModelProfilePublic(ContractModel):
     profile_name: NonEmptyStr
     base_url: AnyHttpUrl
     model_name: NonEmptyStr
+    structured_output_mode: StructuredOutputMode | None = None
+    reasoning_effort: ReasoningEffort | None = None
     is_selected: bool
     is_enabled: bool
     created_at: UtcDateTime

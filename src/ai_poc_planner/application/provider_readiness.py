@@ -13,6 +13,7 @@ from ai_poc_planner.providers.base import (
     ProviderConnectionState,
     ProviderError,
 )
+from ai_poc_planner.providers.openai_compatible import JSONSchemaResponseFormat
 from ai_poc_planner.providers.profiles import ModelProfile, ProviderConnectionStatus
 
 
@@ -78,7 +79,21 @@ class ProviderReadinessService:
                     {"role": "user", "content": "Reply with a short confirmation."},
                 ],
                 temperature=0,
-                max_tokens=8,
+                # Some OpenAI-compatible models cannot return visible content
+                # within a tiny completion budget. A bounded 256-token probe
+                # still tests the real configured model without weakening
+                # the readiness requirement.
+                max_tokens=256,
+                reasoning_effort=profile.reasoning_effort,
+                response_format=JSONSchemaResponseFormat(
+                    name="connection_probe",
+                    schema={
+                        "type": "object",
+                        "properties": {"status": {"type": "string", "enum": ["ok"]}},
+                        "required": ["status"],
+                        "additionalProperties": False,
+                    },
+                ),
             )
             if not isinstance(content, str) or not content.strip():
                 raise ProviderError("empty provider response")

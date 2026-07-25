@@ -180,7 +180,11 @@ scoring, reports, and the Streamlit product UI remain pending.
 ### Checkpoint P4
 
 - Human verifies a real model can recommend non-AI, foundations-first, or hybrid.
-- Offline validation passed. Real llama.cpp Phase 4 UAT is pending.
+- Offline validation passed. Two real NVIDIA NIM `openai/gpt-oss-20b` UAT runs
+  passed through the production API. A0 selects an option index; the program
+  derives the formal conclusion and generates the stable option key before
+  kind-specific A1 details. Real llama.cpp Phase 4 structured-output
+  compatibility remains pending and does not block this checkpoint.
 
 ## Phase 5 — Cases and report
 

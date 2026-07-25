@@ -51,9 +51,13 @@ Complete Phase 4 evidence-backed assessment; do not begin Phase 5.
   validates current `Fxxx` fact references, assigns the six normative weights,
   calculates the weighted total, and applies existing HG-01 through HG-07 with
   conservative handling for unknown gate inputs. No prompt, reasoning, raw
-  response, API key, Authorization header, or base URL is persisted. Offline
-  tests pass; real llama.cpp Phase 4 UAT is pending. Phase 5 cases/reports and
-  the Streamlit rebuild have not started.
+  response, API key, Authorization header, or base URL is persisted. Options
+  are generated through an A0 recommendation index followed by kind-specific
+  A1 details; the application derives the formal conclusion from the selected
+  kind. Offline validation and two real NVIDIA NIM `openai/gpt-oss-20b` UAT
+  runs passed with `json_schema`, `reasoning_effort=low`, temporary state, and
+  production APIs. Phase 5 cases/reports and the Streamlit rebuild have not
+  started.
 
 ## UAT findings recorded from PR #8
 

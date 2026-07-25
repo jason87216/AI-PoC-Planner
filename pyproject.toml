@@ -31,7 +31,9 @@ where = ["src"]
 testpaths = ["tests"]
 addopts = "-ra"
 markers = [
+    "gemini: opt-in validation against a user-configured Gemini OpenAI-compatible provider",
     "llama_cpp: opt-in validation against a user-started llama.cpp server",
+    "nvidia: opt-in validation against a user-configured NVIDIA NIM provider",
 ]
 
 [tool.ruff]

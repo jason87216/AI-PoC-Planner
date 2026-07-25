@@ -116,7 +116,11 @@ from ai_poc_planner.persistence.planning_runs import SQLitePlanningRunRepository
 from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.projects import SQLiteProjectRepository
 from ai_poc_planner.persistence.schema import initialize_database
-from ai_poc_planner.providers.base import ModelProvider
+from ai_poc_planner.providers.base import (
+    ModelProvider,
+    ReasoningEffort,
+    StructuredOutputMode,
+)
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleChatAdapter
 from ai_poc_planner.providers.profiles import (
     ModelProfile,
@@ -165,6 +169,8 @@ class ModelProfileCreateRequest(ContractModel):
     base_url: str
     model_name: NonEmptyStr
     api_key: str | None = None
+    structured_output_mode: StructuredOutputMode | None = None
+    reasoning_effort: ReasoningEffort | None = None
     is_enabled: bool = True
 
 
@@ -173,6 +179,8 @@ class ModelProfileUpdateRequest(ContractModel):
     base_url: str | None = None
     model_name: NonEmptyStr | None = None
     api_key: str | None = None
+    structured_output_mode: StructuredOutputMode | None = None
+    reasoning_effort: ReasoningEffort | None = None
     is_enabled: bool | None = None
 
 
@@ -281,6 +289,7 @@ def create_app(
             model_name=profile.model_name,
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
+            reasoning_effort=profile.reasoning_effort,
         )
 
     def default_interview_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
@@ -292,6 +301,7 @@ def create_app(
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
             timeout_seconds=300,
+            reasoning_effort=profile.reasoning_effort,
         )
 
     def default_analysis_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
@@ -301,6 +311,7 @@ def create_app(
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
             timeout_seconds=240,
+            reasoning_effort=profile.reasoning_effort,
         )
 
     readiness = ProviderReadinessService(
@@ -506,6 +517,8 @@ def create_app(
             base_url=request.base_url,
             model_name=request.model_name,
             api_key=request.api_key,
+            structured_output_mode=request.structured_output_mode,
+            reasoning_effort=request.reasoning_effort,
             is_enabled=request.is_enabled,
         ).to_public()
 

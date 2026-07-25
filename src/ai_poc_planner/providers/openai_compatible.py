@@ -10,7 +10,7 @@ import httpx
 from pydantic import AnyHttpUrl, Field, SecretStr, TypeAdapter, ValidationError
 
 from ai_poc_planner.domain.models import ContractModel, JSONValue, NonEmptyStr
-from ai_poc_planner.providers.base import ProviderError
+from ai_poc_planner.providers.base import ProviderError, ReasoningEffort
 
 _HTTP_URL = TypeAdapter(AnyHttpUrl)
 
@@ -30,6 +30,7 @@ class OpenAIChatCompletionRequest(ContractModel):
     temperature: float = Field(ge=0, le=2)
     max_tokens: int = Field(ge=1, le=4096)
     response_format: dict[str, JSONValue] | None = None
+    reasoning_effort: ReasoningEffort | None = None
 
 
 class JSONSchemaResponseFormat(ContractModel):
@@ -50,6 +51,17 @@ class JSONSchemaResponseFormat(ContractModel):
         }
 
 
+class JSONObjectResponseFormat(ContractModel):
+    """OpenAI-compatible JSON-object mode for contracts with nullable fields.
+
+    The caller still owns complete JSON parsing and Pydantic validation.  This
+    mode is an explicit request capability, not a provider-name heuristic.
+    """
+
+    def as_request_value(self) -> dict[str, JSONValue]:
+        return {"type": "json_object"}
+
+
 class OpenAICompatibleProviderError(ProviderError):
     """A stable provider code with a safe message and no raw response details."""
 
@@ -64,6 +76,7 @@ class OpenAICompatibleProviderError(ProviderError):
         "provider_unavailable": "The provider is temporarily unavailable.",
         "provider_http_error": "The provider request failed.",
         "provider_invalid_response": "The provider returned an invalid response.",
+        "provider_output_truncated": "The provider response was truncated.",
     }
 
     def __init__(self, code: str) -> None:
@@ -82,6 +95,7 @@ class OpenAICompatibleChatAdapter:
         api_key: str | None,
         client: httpx.Client,
         timeout_seconds: float = 10,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> None:
         try:
             self._base_url = str(_HTTP_URL.validate_python(base_url)).rstrip("/")
@@ -102,6 +116,7 @@ class OpenAICompatibleChatAdapter:
         self._api_key = SecretStr(api_key) if api_key and api_key.strip() else None
         self._client = client
         self._timeout_seconds = timeout_seconds
+        self._reasoning_effort = reasoning_effort
 
     def __repr__(self) -> str:
         key_configured = self._api_key is not None
@@ -117,7 +132,10 @@ class OpenAICompatibleChatAdapter:
         messages: Sequence[Mapping[str, str]],
         temperature: float,
         max_tokens: int,
-        response_format: JSONSchemaResponseFormat | None = None,
+        response_format: JSONSchemaResponseFormat
+        | JSONObjectResponseFormat
+        | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> str:
         try:
             payload = {
@@ -126,6 +144,9 @@ class OpenAICompatibleChatAdapter:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             }
+            selected_reasoning_effort = reasoning_effort or self._reasoning_effort
+            if selected_reasoning_effort is not None:
+                payload["reasoning_effort"] = selected_reasoning_effort
             if response_format is not None:
                 payload["response_format"] = response_format.as_request_value()
             request_payload = OpenAIChatCompletionRequest.model_validate(payload)
@@ -155,7 +176,7 @@ class OpenAICompatibleChatAdapter:
     def _endpoint_url(self) -> str:
         suffix = (
             "/chat/completions"
-            if self._base_url.endswith("/v1")
+            if self._base_url.endswith(("/v1", "/openai"))
             else "/v1/chat/completions"
         )
         return f"{self._base_url}{suffix}"
@@ -184,6 +205,8 @@ class OpenAICompatibleChatAdapter:
         first = choices[0]
         if not isinstance(first, dict):
             raise OpenAICompatibleProviderError("provider_invalid_response")
+        if first.get("finish_reason") == "length":
+            raise OpenAICompatibleProviderError("provider_output_truncated")
         message = first.get("message")
         if not isinstance(message, dict):
             raise OpenAICompatibleProviderError("provider_invalid_response")

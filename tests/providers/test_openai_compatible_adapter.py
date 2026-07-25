@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from ai_poc_planner.providers.openai_compatible import (
+    JSONObjectResponseFormat,
     JSONSchemaResponseFormat,
     OpenAICompatibleChatAdapter,
     OpenAICompatibleProviderError,
@@ -41,6 +42,10 @@ def _success(_: httpx.Request) -> httpx.Response:
     [
         ("http://localhost:8080", "/v1/chat/completions"),
         ("http://localhost:8080/v1", "/v1/chat/completions"),
+        (
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "/v1beta/openai/chat/completions",
+        ),
     ],
 )
 def test_adapter_joins_openai_endpoint_once(
@@ -106,6 +111,23 @@ def test_adapter_sends_structured_response_format_only_when_requested() -> None:
         },
     }
     assert seen[0].headers["Authorization"] == f"Bearer {SECRET_MARKER}"
+
+
+def test_adapter_sends_explicit_json_object_mode() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return _success(request)
+
+    _adapter(handler).complete(
+        messages=[{"role": "user", "content": "hello"}],
+        temperature=0,
+        max_tokens=12,
+        response_format=JSONObjectResponseFormat(),
+    )
+
+    assert json.loads(seen[0].content)["response_format"] == {"type": "json_object"}
 
 
 @pytest.mark.parametrize("api_key", [None, "", "   "])
