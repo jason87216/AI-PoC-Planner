@@ -262,7 +262,25 @@ scoring, reports, and the Streamlit product UI remain pending.
   persisted Markdown report views without internal identifiers. Full cross-phase
   UAT remains deferred to Phase 8.
 
+### [Must] P6.4 Discovery UX Closeout
+
+- **Status:** implemented. Product Discovery UI no longer exposes fact-level
+  governance. It accepts natural-language correction and free supplementary
+  input, asks bounded material questions, renders a human-readable summary, and
+  explicitly requests Traditional Chinese output.
+
+### [Must] P6.5 Navigation, Results and Error-State Closeout
+
+- **Status:** not started. Remaining work includes independent model-settings
+  editing, history empty/error states, durable result selection, readable option
+  kinds and hard-gate names, reviewed-case details, specific safe errors, and
+  global navigation/layout cleanup.
+
 ## Phase 7 — Local launcher
+
+- **Status:** not started. Future work includes a unified Windows launcher,
+  project `.venv` ownership, port ownership, API identity, persistent local data,
+  process monitoring, and restart recovery.
 
 ### [Must] P7.1 Add install batch entry point
 

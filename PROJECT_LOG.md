@@ -2,7 +2,7 @@
 
 ## Current goal
 
-P6.3 Streamlit analysis and readable report views are complete; Phase 7 is next.
+P6.4 Discovery UX closeout is complete; P6.5 is next.
 
 ## Current status
 
@@ -102,6 +102,12 @@ P6.3 Streamlit analysis and readable report views are complete; Phase 7 is next.
   Report Part A/Part B, completed refresh, and Markdown download. Phase 6 is
   complete; full cross-phase UAT remains deferred to Phase 8 and Phase 7 has not
   started.
+- Phase 6.4 removes fact-level governance controls from the product Discovery
+  UI. Natural-language feedback and a free supplementary note preserve revisions
+  at the FastAPI boundary without exposing fact IDs or keys. Prompts require
+  Traditional Chinese and limit questions to material direction, gate, scope,
+  deployment, and human-review decisions. P6.5 navigation, results, and
+  error-state closeout remains pending; Phase 7 has not started.
 
 ## UAT findings recorded from PR #8
 

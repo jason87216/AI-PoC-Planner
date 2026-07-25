@@ -176,7 +176,10 @@ unknown answer, proactive fact addition, bounded completion, and refresh
  refresh, and keeps fact tokens, UUIDs, raw JSON, API URLs, SQLite paths, and
  technical diagnostics out of the UI. A real NVIDIA browser UAT covered
  assessment creation, Report Part A/Part B, completed-state refresh, and
- Markdown download. Phase 6 is complete; Phase 7 has not started.
+ Markdown download. Phase 6.4 closes out the Discovery experience with natural-
+ language correction, free supplementary input, bounded material questions,
+ human-readable summaries, and explicit Traditional Chinese output. P6.5
+ navigation/results/error-state closeout and Phase 7 have not started.
 
 The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
 API using `json_schema`, `reasoning_effort=low`, and temporary local state. The
