@@ -5,6 +5,7 @@
 *.pem
 *.key
 auth.json
+.streamlit/secrets.toml
 
 # Python
 __pycache__/

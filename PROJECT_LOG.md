@@ -2,11 +2,13 @@
 
 ## Current goal
 
-P5.2 Markdown planning reports are complete; do not begin Phase 6.
+P6.1 Streamlit home, project-history, and model-settings views are complete;
+P6.2 is next.
 
 ## Current status
 
-- `main` is a technical foundation, not a viable end-user product.
+- `main` has the first Streamlit product surface, but is not yet a complete
+  viable end-user product.
 - PR #8 passed automated validation but failed manual product UAT.
 - The failure is not a single implementation bug: the previous MVP acceptance
   standard incorrectly treated a repeatable fake-model vertical slice as product
@@ -73,7 +75,13 @@ P5.2 Markdown planning reports are complete; do not begin Phase 6.
   attribution. Numeric claims and KPI thresholds are rejected unless
   fact-backed. Report-only NVIDIA NIM UAT passed twice with fresh temporary
   state, including POST completion, GET, duplicate blocking, and fresh-app
-  reload. Full cross-phase UAT is deferred to Phase 8. Phase 6 has not started.
+  reload. Full cross-phase UAT is deferred to Phase 8.
+- Phase 6.1 adds a Streamlit entry point with home, project-history, and
+  model-settings pages. Every read and mutation uses a thin HTTP client over
+  the public FastAPI boundary; the UI imports no application, persistence, or
+  provider layers. It shows human-readable project/model state, keeps API keys
+  password-masked and non-retrievable, and avoids UUIDs, raw JSON, API URLs,
+  and developer diagnostics. P6.2 and P6.3 remain pending.
 
 ## UAT findings recorded from PR #8
 
