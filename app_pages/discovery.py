@@ -64,6 +64,37 @@ def _refresh(*keys: str) -> None:
     st.rerun()
 
 
+def _project_heading(
+    project_id: str, version_number: int, session: dict[str, Any]
+) -> None:
+    try:
+        project_name = next(
+            (
+                str(project["project_name"])
+                for project in load_projects()
+                if project.get("project_id") == project_id
+            ),
+            "目前專案",
+        )
+    except ApiClientError as error:
+        show_api_error(error)
+        project_name = "目前專案"
+    phase = {
+        "awaiting_understanding_confirmation": "需求確認",
+        "brief_submitted": "需求確認",
+        "correction_pending": "需求確認",
+        "ready_for_interview": "需求訪談",
+        "ready_for_next_round": "需求訪談",
+        "awaiting_answers": "需求訪談",
+        "ready_for_assessment": "訪談完成",
+    }.get(str(session.get("status")), "需求確認")
+    st.title(project_name)
+    st.caption(f"第 {version_number} 版 · {phase}")
+    if st.button("建立其他專案", icon=":material/add:"):
+        st.session_state.pop("selected_project", None)
+        _refresh()
+
+
 def _understanding(
     session: dict[str, Any], project_id: str, version_number: int
 ) -> str | None:
@@ -89,7 +120,6 @@ def _provider_ready() -> tuple[bool, str]:
 
 
 def _brief() -> None:
-    st.subheader("建立新專案")
     ready, model = _provider_ready()
     if ready:
         st.success(f"目前使用模型：{model}（已通過本次啟動的連線測試）")
@@ -175,28 +205,40 @@ def _confirmation(session: dict[str, Any], project_id: str, number: int) -> None
     except ApiClientError as error:
         show_api_error(error)
         return
-    st.subheader("AI 對需求的理解")
-    st.write(summary or "需求理解暫時無法顯示。")
-    if st.button("理解正確，繼續", type="primary", icon=":material/check_circle:"):
+    with st.container(border=True):
+        st.subheader("AI 對需求的理解")
+        st.write(summary or "需求理解暫時無法顯示。")
+        st.caption("請確認內容是否符合目前流程、責任與限制；可隨時補充修正。")
+        with st.container(horizontal=True):
+            confirmed = st.button(
+                "確認", type="primary", icon=":material/check_circle:"
+            )
+            modify = st.button("修改", icon=":material/edit:")
+    if confirmed:
         try:
             get_api_client().confirm_understanding(project_id, number)
         except ApiClientError as error:
             show_api_error(error)
         else:
-            _refresh("feedback_text")
-    if st.button("需要修改", icon=":material/edit:"):
+            try:
+                with st.spinner("正在整理需要進一步確認的重點……"):
+                    get_api_client().generate_interview_round(project_id, number)
+            except ApiClientError:
+                st.session_state["question_generation_pending"] = True
+            _refresh("feedback_text", "show_feedback")
+    if modify:
         st.session_state["show_feedback"] = True
     if st.session_state.get("show_feedback"):
         feedback = st.text_area(
-            "請直接說明哪裡不正確，以及正確情況是什麼",
+            "請說明需要修改或補充的地方",
             key="feedback_text",
             placeholder=(
-                "例如：第一階段仍必須保留紙本申請，但要把狀態和核准紀錄"
-                "統一登記在 Microsoft 365。"
+                "例如：第一階段不使用 AI 自動判斷權限，而是先由主管從既有"
+                "權限範本中選擇，再由系統提醒常見遺漏。"
             ),
             height=160,
         )
-        if st.button("提交修改並重新整理需求", type="primary"):
+        if st.button("提交修改", type="primary"):
             if not feedback.strip():
                 st.warning("請先輸入修改內容。")
             else:
@@ -213,13 +255,15 @@ def _confirmation(session: dict[str, Any], project_id: str, number: int) -> None
 
 
 def _next_round(project_id: str, number: int) -> None:
-    st.info("AI 只會詢問可能影響方向判斷的少量關鍵問題。")
-    if st.button("查看關鍵問題", type="primary", icon=":material/forum:"):
+    st.warning("需求理解已確認，但問題尚未生成。")
+    if st.button("重新整理問題", type="primary", icon=":material/refresh:"):
         try:
-            get_api_client().generate_interview_round(project_id, number)
+            with st.spinner("正在整理需要進一步確認的重點……"):
+                get_api_client().generate_interview_round(project_id, number)
         except ApiClientError as error:
             show_api_error(error)
         else:
+            st.session_state.pop("question_generation_pending", None)
             _refresh()
 
 
@@ -280,7 +324,7 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
             st.warning("請回答每一題，或選擇目前不清楚／目前沒有相關資料。")
             return
         try:
-            get_api_client().submit_interview_answers(
+            updated = get_api_client().submit_interview_answers(
                 project_id,
                 number,
                 interview_payload(answers=answers, supplementary_note=note),
@@ -293,6 +337,12 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
                 for i in range(len(questions))
                 for part in ("question", "unknown", "missing")
             ]
+            if updated.get("status") == "ready_for_next_round":
+                try:
+                    with st.spinner("正在整理需要進一步確認的重點……"):
+                        get_api_client().generate_interview_round(project_id, number)
+                except ApiClientError:
+                    st.session_state["question_generation_pending"] = True
             _refresh(*keys)
 
 
@@ -306,7 +356,7 @@ def _complete(project_id: str, number: int) -> None:
         (
             str(project.get("project_name", ""))
             for project in load_projects()
-            if project.get("id") == project_id
+            if project.get("project_id") == project_id
         ),
         "",
     )
@@ -327,9 +377,9 @@ def _complete(project_id: str, number: int) -> None:
             st.switch_page("app_pages/history.py")
 
 
-st.title("新建專案")
 target = _target()
 if target is None:
+    st.title("建立新專案")
     _brief()
     st.stop()
 project_id, version_number = target
@@ -338,6 +388,7 @@ try:
 except ApiClientError as error:
     show_api_error(error)
     st.stop()
+_project_heading(project_id, version_number, session)
 view = discovery_view_for_status(session.get("status"))
 if view == "understanding_generation":
     _generation(project_id, version_number)
