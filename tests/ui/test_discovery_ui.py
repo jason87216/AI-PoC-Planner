@@ -227,3 +227,33 @@ def test_discovery_ui_hides_fact_governance_and_forbidden_imports() -> None:
     assert "ai_poc_planner.application" not in source
     assert "ai_poc_planner.persistence" not in source
     assert "ai_poc_planner.providers" not in source
+
+
+def test_discovery_page_keeps_project_context_and_inline_question_generation() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "discovery.py").read_text(encoding="utf-8")
+
+    assert "st.title(project_name)" in source
+    assert 'f"第 {version_number} 版 · {phase}"' in source
+    assert 'st.title("建立新專案")' in source
+    assert 'st.title("新建專案")' not in source
+    assert "st.container(border=True)" in source
+    assert '"確認",' in source
+    assert '"修改",' in source
+    assert "理解正確，繼續" not in source
+    assert "開始下一輪訪談" not in source
+    assert source.index("confirm_understanding") < source.index(
+        "generate_interview_round"
+    )
+    assert "需求理解已確認，但問題尚未生成。" in source
+    assert "重新整理問題" in source
+
+
+def test_discovery_page_generates_the_next_round_after_answers() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "discovery.py").read_text(encoding="utf-8")
+
+    submission = source.index("submit_interview_answers")
+    next_generation = source.index("generate_interview_round", submission)
+    assert submission < next_generation
+    assert "正在整理需要進一步確認的重點……" in source

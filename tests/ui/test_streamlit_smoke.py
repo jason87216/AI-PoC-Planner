@@ -16,7 +16,7 @@ def test_home_page_loads_without_a_running_api(monkeypatch: pytest.MonkeyPatch) 
 @pytest.mark.parametrize(
     ("page_path", "title"),
     [
-        ("app_pages/discovery.py", "新建專案"),
+        ("app_pages/discovery.py", "建立新專案"),
         ("app_pages/history.py", "專案歷史"),
         ("app_pages/results.py", "評估與規劃報告"),
         ("app_pages/model_settings.py", "模型設定"),
