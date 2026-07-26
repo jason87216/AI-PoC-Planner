@@ -108,6 +108,15 @@ P6.4 Discovery UX closeout is complete; P6.5 is next.
   Traditional Chinese and limit questions to material direction, gate, scope,
   deployment, and human-review decisions. P6.5 navigation, results, and
   error-state closeout remains pending; Phase 7 has not started.
+- P6.4 human-UAT follow-up keeps the selected project name, version, and phase
+  as the Discovery-page context; renders complete AI understanding in a bordered
+  card with concise confirmation/modification controls; and removes normal-flow
+  interview transition pages by generating questions inline after confirmation
+  and saved answers. Its prompts require fuller Traditional Chinese
+  understanding and prioritize reviewed-case matching/gap inputs. P6.5 remains
+  unstarted: its documented direction is case-centred assessment, separating
+  case reference value, project-case fit, and critical gaps rather than having
+  AI score its own generated option.
 
 ## UAT findings recorded from PR #8
 

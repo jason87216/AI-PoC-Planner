@@ -266,15 +266,23 @@ scoring, reports, and the Streamlit product UI remain pending.
 
 - **Status:** implemented. Product Discovery UI no longer exposes fact-level
   governance. It accepts natural-language correction and free supplementary
-  input, asks bounded material questions, renders a human-readable summary, and
-  explicitly requests Traditional Chinese output.
+  input, keeps project name/version/phase visible, renders requirement
+  understanding in a bordered card with confirmation/modification actions, and
+  generates interview questions inline after confirmation or a saved answer.
+  Prompts request complete Traditional Chinese understanding and prioritize
+  reviewed-case matching/gap inputs over fact completion.
 
 ### [Must] P6.5 Navigation, Results and Error-State Closeout
 
-- **Status:** not started. Remaining work includes independent model-settings
-  editing, history empty/error states, durable result selection, readable option
-  kinds and hard-gate names, reviewed-case details, specific safe errors, and
-  global navigation/layout cleanup.
+- **Status:** not started. Direction: make reviewed cases the centre of the
+  assessment path: user needs → deterministic reviewed-case matching → case
+  reference value → project-to-case fit → critical gaps → transferable practices
+  → hard gates that constrain the current stage → traceable implementation path.
+  Scores must not mean that AI generated and then rated its own option. Future
+  work separates case evidence value, project-to-case fit, and critical gaps;
+  it also includes independent model-settings editing, history empty/error
+  states, durable result selection, readable option kinds/hard-gate names,
+  reviewed-case details, specific safe errors, and global navigation/layout cleanup.
 
 ## Phase 7 — Local launcher
 
