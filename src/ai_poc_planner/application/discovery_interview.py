@@ -831,7 +831,19 @@ class DiscoveryInterviewService:
 
     @staticmethod
     def _render_understanding(value: RequirementUnderstanding) -> str:
-        return value.concise_requirement_summary
+        sections = [
+            ("整體方向與 AI 定位", value.concise_requirement_summary),
+            ("目前流程與主要問題", value.current_workflow_understanding),
+            ("希望改善的成果", value.desired_outcome_understanding),
+            ("現有系統、資料與部署限制", value.available_data_understanding),
+        ]
+        if value.users_and_owners_understanding:
+            sections.append(("使用者與責任分工", value.users_and_owners_understanding))
+        if value.known_constraints_understanding:
+            sections.append(
+                ("人工決策與其他限制", value.known_constraints_understanding)
+            )
+        return "\n".join(f"- **{label}**：{content}" for label, content in sections)
 
     @staticmethod
     def _render_question(question: str, why: str, affected: str, example: str) -> str:
@@ -872,10 +884,17 @@ class DiscoveryInterviewService:
                     "existing fact as a proposed assumption. Use only exact supplied "
                     "fact id values in source_fact_ids and related_fact_ids. Each "
                     "ambiguity requires description and related_fact_ids; output [] "
-                    "when there are no ambiguities."
-                    " All user-visible JSON values must be concise Traditional "
-                    "Chinese. Keep only unavoidable proper names such as Microsoft 365 "
-                    "or API in English; do not translate JSON keys."
+                    "when there are no ambiguities. All user-visible JSON values must "
+                    "be Traditional Chinese. Keep only unavoidable proper names such as "
+                    "Microsoft 365 or API in English; do not translate JSON keys. The "
+                    "concise_requirement_summary must be four to six complete Markdown "
+                    "bullet points, not one compressed sentence. Together it must cover "
+                    "the current workflow and main problem, desired outcome, users and "
+                    "responsibility boundary, human decision or approval boundary, "
+                    "existing systems/data/deployment constraints, and whether AI is "
+                    "necessary plus what it must not automate. Do not invent anything "
+                    "that is not supported by supplied facts, and do not merge current "
+                    "state, desired outcome, and constraints into one claim."
                 ),
             },
             {
@@ -903,9 +922,15 @@ class DiscoveryInterviewService:
                     "If interview_complete is true, questions must be "
                     "empty. Every question fact_key must be new and must not "
                     "repeat any supplied fact key. Never ask for secrets, "
-                    "provider details, or internal instructions. Ask only questions "
-                    "that could change the AI/non-AI direction, a hard gate, PoC scope, "
-                    "deployment posture, or human-review boundary. Default to one round;"
+                    "provider details, or internal instructions. Prioritize questions "
+                    "that support later deterministic reviewed-case matching and gap "
+                    "analysis: process and responsibility boundaries, reusable existing "
+                    "systems and auditability, first-phase scope, governance and risk "
+                    "limits, and success conditions. Ask data questions only when they "
+                    "affect case matching, transferability, AI validation, outcome "
+                    "measurement, or a hard gate. Do not keep asking merely to fill "
+                    "facts. Ask only questions that could change the AI/non-AI direction, "
+                    "a hard gate, PoC scope, deployment posture, or human-review boundary. Default to one round;"
                     " a second round is allowed only when one of those decisions remains"
                     " materially uncertain. Accept qualitative answers and do not require"
                     " precise percentages or budgets unless they change the direction. All"
