@@ -270,7 +270,10 @@ scoring, reports, and the Streamlit product UI remain pending.
   understanding in a bordered card with confirmation/modification actions, and
   generates interview questions inline after confirmation or a saved answer.
   Prompts request complete Traditional Chinese understanding and prioritize
-  reviewed-case matching/gap inputs over fact completion.
+  reviewed-case matching/gap inputs over fact completion. The sidebar calls the
+  page 「需求訪談」 rather than implying every navigation click creates a project;
+  explicit creation is the page's 「建立其他專案」 action because Streamlit
+  navigation does not provide a reliable fresh-entry event.
 
 ### [Must] P6.5 Navigation, Results and Error-State Closeout
 

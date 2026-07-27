@@ -119,6 +119,10 @@ P6.5 has not started.
   unstarted: its documented direction is case-centred assessment, separating
   case reference value, project-case fit, and critical gaps rather than having
   AI score its own generated option.
+- The Discovery sidebar label is 「需求訪談」. Creating another project is an
+  explicit create-mode action, not an implicit side effect of visiting the page;
+  this preserves refresh recovery because Streamlit navigation has no reliable
+  fresh-entry signal.
 
 ## UAT findings recorded from PR #8
 
