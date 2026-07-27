@@ -29,22 +29,20 @@ with history_slot.skeleton():
 if not projects:
     st.info("目前沒有可顯示的專案歷史。")
 else:
-    rows = [
-        {
-            "專案": project.get("project_name"),
-            "版本": project.get("version_number"),
-            "狀態": status_label(project.get("status")),
-            "模型設定": project.get("profile_name") or "尚未選擇",
-            "模型": project.get("model_name") or "—",
-            "最近更新": project.get("updated_at"),
-        }
-        for project in projects
-    ]
-    st.dataframe(rows, hide_index=True)
-    selected = st.selectbox("選擇要查看的規劃", projects, format_func=_selection_label)
-    if st.button("查看評估與報告", icon=":material/insights:"):
-        st.session_state["selected_project"] = {
-            "project_id": selected.get("project_id"),
-            "version_number": selected.get("version_number"),
-        }
-        st.switch_page("app_pages/results.py")
+    for project in projects:
+        with st.container(border=True):
+            st.subheader(_selection_label(project))
+            st.caption(
+                f"{status_label(project.get('status'))}｜最近更新：{project.get('updated_at')}"
+            )
+            st.write("可回看既有需求與目前工作階段。")
+            if st.button(
+                "繼續處理" if project.get("status") != "complete" else "查看專案",
+                key=f"open_project_{project.get('project_id')}",
+                icon=":material/folder_open:",
+            ):
+                st.session_state["selected_project"] = {
+                    "project_id": project.get("project_id"),
+                    "version_number": project.get("version_number"),
+                }
+                st.switch_page("app_pages/discovery.py")
