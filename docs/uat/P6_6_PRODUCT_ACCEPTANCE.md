@@ -14,9 +14,9 @@
 | model name | `openai/gpt-oss-20b` |
 | runtime mode | `uat` |
 | 執行日期 | 2026-07-27 |
-| 驗收 commit SHA | `996c71f`（四個場景修正後重跑的評估程式碼基準；後續文件 commit 未改變評估邏輯） |
+| 驗收 commit SHA | `e2f789c`（四個場景重跑所使用的 deterministic 修正與 regression tests） |
 | artifact 目錄 | `artifacts/product_acceptance/20260727-140758/`（被 gitignore） |
-| 執行次數 | 場景一 1 次；場景二 1 次完整執行（同一專案補答超出初始 runner 輪數）；場景三 2 個修正前證據與 1 個修正後完整執行；場景四 1 個修正前證據與 1 個修正後完整執行 |
+| 執行次數 | 四個場景各 1 次以最終程式碼完成完整 headed Chrome UAT；另保留場景二修正前的 provider hybrid／錯誤 readiness 證據，以及場景三、四修正前的歷史驗收證據 |
 
 ## 四個合成基準場景
 
@@ -76,24 +76,50 @@
 | 員工入職與系統權限申請輔助 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | **20** | 無 | 通過 |
 | 製造設備影像預測性維護規劃 | 2 | 2 | 2 | 1 | 1 | 1 | 2 | 2 | 2 | 2 | **17** | 無 | 通過 |
 
+### 低於 2 分的具體理由
+
+- 場景一「專案適配與差距」為 1：目前 reviewed cases 的系統依賴與治理欄位仍有 unknown，結果能指出差距，但不足以給出高適配判定。「UI／API／Markdown 一致性」為 1：結果內容一致，但一次 report narrative provider 失敗，最後使用 deterministic fallback，語言表現需要人工確認。
+- 場景二「專案適配與差距」為 1：目前沒有足夠的 approved case，無法提供案例層級的 fit／gap 比較；修正後結果誠實顯示沒有足夠案例，並轉為規則優先路線。
+- 場景四「案例相關性」為 1：只有泛化的 predictive-maintenance 案例，與影像、標註及設備基準的相似度有限。「案例參考價值」為 1：案例成果未記錄，不能支持準確率或 PoC 成功主張。「專案適配與差距」為 1：本專案缺少穩定標籤、代表性驗證集與維護基準，因此只能列為低適配及待確認條件。
+
+### 正式 recommendation category 與 gates
+
+| 場景 | 正式 recommendation category | deterministic gates |
+| --- | --- | --- |
+| 內部客服知識檢索與人工回覆輔助 | `ai_hybrid` | HG-01、HG-05、HG-06；沒有 employment HG-03 |
+| 員工費用報銷規則檢查 | `rules_first` | HG-01、HG-05、HG-06；不因「員工」觸發 employment HG-03 |
+| 員工入職與系統權限申請輔助 | `governed_assistive` | HG-01、HG-03、HG-05、HG-06；主管最終核准，限制外部個資處理與高風險權限自動開通 |
+| 製造設備影像預測性維護規劃 | `readiness_first` | HG-01、HG-05、HG-06；驗證資料不足限制目前階段 |
+
+### 流程與 provider narrative 狀態
+
+| 場景 | 產品流程 | provider narrative | deterministic fallback |
+| --- | --- | --- | --- |
+| 內部客服知識檢索與人工回覆輔助 | 完整成功 | report narrative 未成功 | 是，僅用於 report narrative |
+| 員工費用報銷規則檢查 | 完整成功 | 成功 | 否 |
+| 員工入職與系統權限申請輔助 | 完整成功；需求修正重試上限後保留正確理解 | 需求修正部分失敗；最終 report narrative 成功 | 否 |
+| 製造設備影像預測性維護規劃 | 完整成功 | 成功 | 否 |
+
+fallback 不計為 provider 成功；在所有情況下 deterministic recommendation、gates、案例與 phased path 仍為正式依據。
+
 ### 問題分類與處理
 
 | 分類 | 可提交摘要 |
 | --- | --- |
-| A. 產品邏輯缺陷 | 已以 failing regression tests 固定並最小修正：檢索訊號、規則優先／AI 需求、員工高影響治理 gate、否定語句不可建立驗證集正向證據、泛用「風險」不可匹配 fraud，以及泛用「預測」不可匹配 demand forecasting。 |
+| A. 產品邏輯缺陷 | 已以 failing regression tests 固定並最小修正：檢索訊號、規則優先／AI 需求、規則優先訊號抑制泛用案例匹配、員工高影響治理 gate、否定語句不可建立驗證集正向證據、泛用「風險」不可匹配 fraud，以及泛用「預測」不可匹配 demand forecasting。 |
 | B. Prompt／typed narrative | 場景一 report narrative provider 失敗時安全回退，deterministic 結果、案例、gates 與 phased path 仍一致；其他場景的繁中 report narrative 可讀且有具體指標。沒有針對模型名稱的 prompt hack。 |
 | C. 模型／供應商行為 | 場景三需求修正曾出現 provider 暫時無法產生可用結果，重試上限後以已保留的正確理解繼續；場景一 report narrative 使用 fallback。另有一次 headed automation kernel timeout。這些列為 P7.2 輸入，不在本輪建立 adapter。 |
 | D. 案例庫覆蓋 | 場景二誠實顯示沒有足夠成熟案例；場景四只得到一個成果未記錄、適配低的 Predictive maintenance 案例，沒有宣稱已驗證準確率。後續需要有影像資料、標籤、驗證成果與維護基準的 reviewed cases，以及 IAM／權限治理案例。 |
 
 ### 自動測試
 
-初始 golden 測試：7 passed。完整自動測試最後結果：579 passed、6 skipped（既有 opt-in provider integration tests；未啟用秘密環境變數）；Ruff check、format check、`git diff --check` 均通過；`.pytest-tmp` 已清理。既有 P6.4、P6.5、P7.1 測試均納入同一套完整 pytest。
+初始 golden 測試：7 passed；本次 golden expectation parameterized tests、deterministic 修正後完整結果：`601 passed, 6 skipped`（既有 opt-in provider integration tests；未啟用秘密環境變數）。Ruff check、format check、`git diff --check` 均通過；`.pytest-tmp` 已清理。既有 P6.4、P6.5、P7.1 測試均納入同一套完整 pytest。
 
 ### Headed Chrome UAT
 
-四個場景均由首頁開始，完成新建專案、NVIDIA baseline 選擇與連線測試、brief、需求理解修改或確認、訪談、assessment、案例／適配／差距／做法／gates／phased path、Markdown、refresh 與歷史重新進入。每個完成結果 refresh 後保留原結果，歷史重新進入沒有重新顯示開始評估；未觀察到同一專案重複正式 PlanningRun。UI、API persisted result 與 Markdown 使用相同 recommendation、matched cases、gates、phased path；報告沒有 raw UUID、fact token、case ID、Option 1 或 provider internals。
+四個場景均由首頁開始，完成新建專案、NVIDIA baseline 選擇與連線測試、brief、需求理解修改或確認、訪談、assessment、案例／適配／差距／做法／gates／phased path、Markdown、refresh 與歷史重新進入。修正後場景二顯示「流程標準化與規則檢查路線」、沒有正式匹配案例且沒有 employment HG-03；場景三保留權限治理與人工最終決策限制；場景四顯示驗證資料不足且沒有 demand forecasting 案例。每個完成結果 refresh 後保留原結果，歷史重新進入沒有重新顯示開始評估；未觀察到同一專案重複正式 PlanningRun。UI、API persisted result 與 Markdown 使用相同 recommendation、matched cases、gates、phased path；報告沒有 raw UUID、fact token、case ID、Option 1 或 provider internals。
 
-場景一、二、三修正後、四修正後的 screenshot 與 report 均保存在被忽略的 acceptance artifact 目錄。瀏覽器診斷看見 Streamlit route 的 `_stcore/health`／`host-config` 404 probe，沒有 FastAPI assessment／report 4xx/5xx；這是 runtime route noise，不影響畫面完成。一次 Chrome automation kernel timeout 後重新開啟 headed Chrome，沒有用 API 取代剩餘 UAT。
+四個場景最終重跑的 screenshot 與 report 均保存在被忽略的 acceptance artifact 目錄。瀏覽器診斷看見 Streamlit route 的 `_stcore/health`／`host-config` 404 probe，沒有 FastAPI assessment／report 4xx/5xx；這是 runtime route noise，不影響畫面完成。一次 Chrome automation kernel timeout 後重新開啟 headed Chrome，沒有用 API 取代剩餘 UAT；最後已關閉 Chrome 並停止 UAT runtime。
 
 ### Baseline 結論
 
