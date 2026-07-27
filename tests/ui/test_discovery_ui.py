@@ -10,9 +10,13 @@ import pytest
 from ai_poc_planner.ui.api_client import ApiClient, ApiClientError
 from ai_poc_planner.ui.discovery import (
     discovery_view_for_status,
+    enter_create_project_mode,
     facts_summary,
     interview_payload,
+    is_create_project_mode,
     question_details,
+    restore_active_project,
+    select_active_project,
 )
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -257,3 +261,48 @@ def test_discovery_page_generates_the_next_round_after_answers() -> None:
     next_generation = source.index("generate_interview_round", submission)
     assert submission < next_generation
     assert "正在整理需要進一步確認的重點……" in source
+
+
+def test_create_mode_prevents_selected_project_restore_across_reruns() -> None:
+    state: dict[str, object] = {
+        "selected_project": {"project_id": PROJECT_ID, "version_number": 1},
+        "feedback_text": "old feedback",
+        "question_0": "old answer",
+        "unknown_0": True,
+        "brief_project_name": "old draft",
+    }
+
+    enter_create_project_mode(state)
+
+    assert is_create_project_mode(state)
+    assert "selected_project" not in state
+    assert "feedback_text" not in state
+    assert "question_0" not in state
+    assert "unknown_0" not in state
+    assert "brief_project_name" not in state
+    assert state["discovery_return_target"] == {
+        "project_id": PROJECT_ID,
+        "version_number": 1,
+    }
+    assert is_create_project_mode(state)
+
+
+def test_return_or_new_selection_leaves_create_mode_without_losing_history() -> None:
+    state: dict[str, object] = {
+        "discovery_create_mode": True,
+        "discovery_return_target": {"project_id": PROJECT_ID, "version_number": 1},
+    }
+
+    assert restore_active_project(state)
+    assert not is_create_project_mode(state)
+    assert state["selected_project"]["project_id"] == PROJECT_ID
+
+    enter_create_project_mode(state)
+    second_project_id = "20000000-0000-0000-0000-000000000001"
+    select_active_project(state, second_project_id, 1)
+
+    assert not is_create_project_mode(state)
+    assert state["selected_project"] == {
+        "project_id": second_project_id,
+        "version_number": 1,
+    }
