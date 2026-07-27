@@ -229,6 +229,7 @@ class PlanningReportService:
             or snapshot is None
             or profile.id != snapshot.profile_id
             or profile.model_name != snapshot.model_name
+            or not profile.is_enabled
         ):
             raise PlanningReportError("provider_profile_mismatch")
         return profile

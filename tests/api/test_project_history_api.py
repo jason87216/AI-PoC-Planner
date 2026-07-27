@@ -6,6 +6,12 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from ai_poc_planner.app.api import create_app
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
 
+
+class ConnectedAdapter:
+    def complete(self, **_: object) -> str:
+        return "connected"
+
+
 SENSITIVE_MARKER = "not-a-real-secret-marker"
 
 
@@ -304,3 +310,55 @@ def test_project_creation_keeps_only_safe_selected_model_snapshot(
     }
     assert SENSITIVE_MARKER not in created.text
     assert "base_url" not in created.text
+
+
+def test_project_model_binding_requires_readiness_and_survives_global_selection_change(
+    tmp_path: Path,
+) -> None:
+    profiles = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
+    client = TestClient(
+        create_app(
+            chat_model=GenericFakeChatModel(messages=iter([])),
+            database_path=tmp_path / "binding.sqlite3",
+            model_profile_repository=profiles,
+            connection_adapter_factory=lambda _: ConnectedAdapter(),
+        )
+    )
+    first = client.post(
+        "/v1/model-profiles",
+        json={
+            "profile_name": "First",
+            "base_url": "http://localhost:8080/v1",
+            "model_name": "first-model",
+        },
+    ).json()
+    second = client.post(
+        "/v1/model-profiles",
+        json={
+            "profile_name": "Second",
+            "base_url": "http://localhost:8081/v1",
+            "model_name": "second-model",
+        },
+    ).json()
+    created = client.post("/v1/projects", json={"project_name": "Binding"}).json()
+    path = f"/v1/projects/{created['project_id']}/versions/1/model-profile"
+
+    untested = client.post(path, json={"model_profile_id": first["id"]})
+    assert untested.status_code == 409
+    assert untested.json()["error"]["code"] == "provider_not_ready"
+
+    assert client.post(f"/v1/model-profiles/{first['id']}/test").status_code == 200
+    bound = client.post(path, json={"model_profile_id": first["id"]})
+    assert bound.status_code == 200
+    assert bound.json()["selected_model"]["model_name"] == "first-model"
+
+    client.post(f"/v1/model-profiles/{second['id']}/select")
+    unchanged = client.get(f"/v1/projects/{created['project_id']}/versions/1").json()
+    assert unchanged["selected_model"]["profile_id"] == first["id"]
+
+    client.patch(
+        f"/v1/model-profiles/{first['id']}", json={"model_name": "renamed-model"}
+    )
+    still_viewable = client.get(f"/v1/projects/{created['project_id']}/versions/1")
+    assert still_viewable.status_code == 200
+    assert still_viewable.json()["selected_model"]["model_name"] == "first-model"

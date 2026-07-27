@@ -210,10 +210,20 @@ class SQLiteProjectHistoryRepository:
         with self._transaction():
             cursor = self._connection.execute(
                 "UPDATE planning_project_versions "
-                "SET status=?, updated_at=?, completed_at=? "
+                "SET status=?, profile_id=?, profile_name=?, model_name=?, "
+                "updated_at=?, completed_at=? "
                 "WHERE id=? AND project_id=?",
                 (
                     version.status.value,
+                    str(version.selected_model.profile_id)
+                    if version.selected_model
+                    else None,
+                    version.selected_model.profile_name
+                    if version.selected_model
+                    else None,
+                    version.selected_model.model_name
+                    if version.selected_model
+                    else None,
                     version.updated_at.isoformat(),
                     version.completed_at.isoformat() if version.completed_at else None,
                     str(version.id),

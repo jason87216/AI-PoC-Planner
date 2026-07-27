@@ -240,6 +240,12 @@ class DiscoveryProjectCreateRequest(InitialBrief):
     model_profile_id: UUID | None = None
 
 
+class ProjectModelProfileRequest(ContractModel):
+    """Safe project binding request; provider configuration stays server-side."""
+
+    model_profile_id: UUID
+
+
 def _error_response(
     status_code: int,
     code: str,
@@ -788,6 +794,20 @@ def create_app(
     def get_project_version(project_id: UUID, version_number: int) -> ProjectVersion:
         with project_history_flow() as history:
             return history.get_version(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/model-profile",
+        response_model=ProjectVersion,
+    )
+    def bind_project_model_profile(
+        project_id: UUID,
+        version_number: int,
+        request: ProjectModelProfileRequest,
+    ) -> ProjectVersion:
+        profile = profile_repository.get(request.model_profile_id)
+        readiness.require_profile_ready(profile.id)
+        with project_history_flow() as history:
+            return history.bind_model_profile(project_id, version_number, profile)
 
     @app.post(
         "/v1/projects/{project_id}/versions/{version_number}/complete",

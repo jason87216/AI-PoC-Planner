@@ -77,6 +77,23 @@ def _ready_profile(client: TestClient) -> str:
     return profile["id"]
 
 
+def test_initial_brief_requires_a_ready_project_profile(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    response = client.post(
+        "/v1/discovery-projects",
+        json={
+            "project_name": "Needs a model",
+            "current_workflow_problem": "Manual work",
+            "desired_outcome": "A clearer process",
+            "available_data": "目前沒有",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "provider_not_ready"
+    assert client.get("/v1/projects").json() == []
+
+
 def test_phase_three_initial_brief_understanding_and_bounded_round(
     tmp_path: Path,
 ) -> None:
