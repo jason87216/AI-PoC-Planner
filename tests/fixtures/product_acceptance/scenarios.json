@@ -1,0 +1,172 @@
+[
+  {
+    "scenario_id": "knowledge_assist",
+    "name": "內部客服知識檢索與人工回覆輔助",
+    "initial_brief": {
+      "project_name": "內部客服知識檢索與人工回覆輔助",
+      "current_workflow_problem": "客服人員需要從產品文件、FAQ 與歷史工單尋找答案，資料分散在多個資料夾。",
+      "desired_outcome": "縮短搜尋時間並提高回覆一致性。",
+      "available_data": "產品文件與 FAQ 已數位化，另有歷史問題與標準答案可供知識檢索驗證。",
+      "users_and_owners": "客服人員查找與確認答案；客服主管負責流程與品質。",
+      "known_constraints": "第一階段只提供檢索與回覆草稿，不允許自動傳送給客戶；客服人員必須最終確認。"
+    },
+    "understanding_correction": "補充：AI 可以整理候選答案與引用來源，但不得自行對客戶承諾或發送訊息。",
+    "interview_answers": [
+      {
+        "question_purpose": "確認人工與自動化邊界",
+        "answer": "AI 只負責檢索、摘要與提出回覆草稿；客服人員確認內容後才可回覆客戶。"
+      },
+      {
+        "question_purpose": "確認驗證資料與指標",
+        "answer": "使用歷史問題與標準答案建立驗證集，觀察搜尋時間、答案引用正確率與人工修改比例。"
+      }
+    ],
+    "expected": {
+      "recommendation_category": "ai_hybrid",
+      "opportunity_types": ["customer_service_assist", "enterprise_knowledge_and_professional_document_assist"],
+      "human_decision_boundary": "客服人員保留最終確認與對外回覆權限。",
+      "deployment_constraint": "第一階段使用核准環境與數位化文件，不自動傳送給客戶。",
+      "key_conclusions": ["可採用檢索與人工回覆輔助", "需要歷史問題與標準答案驗證", "不應全自動客服"],
+      "must_have_gap_terms": ["驗證", "人工"],
+      "must_have_phase_names": ["目前階段", "第一階段 PoC"],
+      "must_not_have_conclusions": ["AI 自動回覆客戶", "AI 自主承諾或補償"]
+    },
+    "facts": [
+      {"fact_key": "current_workflow_problem", "value": "客服人員從產品文件、FAQ 與歷史工單尋找答案，資料分散。", "status": "confirmed"},
+      {"fact_key": "desired_outcome", "value": "縮短搜尋時間並提高回覆一致性。", "status": "confirmed"},
+      {"fact_key": "available_data", "value": "數位化產品文件、FAQ、歷史問題與標準答案，可建立知識檢索驗證集。", "status": "confirmed"},
+      {"fact_key": "users_and_owners", "value": "客服人員查找並確認，客服主管負責流程與品質。", "status": "confirmed"},
+      {"fact_key": "known_constraints", "value": "第一階段不自動傳送給客戶，客服人員必須最終確認；需要引用來源與驗證指標。", "status": "confirmed"},
+      {"fact_key": "human_final_decision", "value": "客服人員確認後才可對外回覆。", "status": "confirmed"}
+    ]
+  },
+  {
+    "scenario_id": "expense_rules",
+    "name": "員工費用報銷規則檢查",
+    "initial_brief": {
+      "project_name": "員工費用報銷規則檢查",
+      "current_workflow_problem": "報銷規則明確，但人工檢查時常漏看欄位、金額超限與附件缺失。",
+      "desired_outcome": "先降低人工檢查時間並提高規則檢查一致性。",
+      "available_data": "資料來自結構化報銷表單，欄位與金額格式固定。",
+      "users_and_owners": "員工填寫表單；財務人員負責最終審核。",
+      "known_constraints": "不需要理解複雜自然語言；規則可轉成條件判斷；規則優先，先採規則引擎與表單驗證；不需 AI 作為主要方案。"
+    },
+    "understanding_correction": "補充：這一階段不以生成式 AI 為目標，先完成規則整理、欄位驗證與超限提示。",
+    "interview_answers": [
+      {
+        "question_purpose": "確認規則與例外範圍",
+        "answer": "漏填、金額超限與附件缺失都有明確規則；少數例外仍由財務人員判斷。"
+      },
+      {
+        "question_purpose": "確認驗收方式",
+        "answer": "比較規則命中率、漏檢數量與人工檢查時間，不承諾生成式 AI 的準確率。"
+      }
+    ],
+    "expected": {
+      "recommendation_category": "rules_first",
+      "opportunity_types": [],
+      "human_decision_boundary": "財務人員保留最終審核與例外判斷。",
+      "deployment_constraint": "使用結構化表單與既有內部流程，先不引入外部模型。",
+      "key_conclusions": ["規則引擎或表單驗證優先", "不應為使用 AI 而使用生成式 AI", "非結構化附件可列為後續探索"],
+      "must_have_gap_terms": ["規則", "資料"],
+      "must_have_phase_names": ["目前階段", "第一階段 PoC"],
+      "must_not_have_conclusions": ["生成式 AI 是主要方案", "AI 自動核准報銷"]
+    },
+    "facts": [
+      {"fact_key": "current_workflow_problem", "value": "報銷規則明確，主要問題是漏填、金額超限與附件缺失。", "status": "confirmed"},
+      {"fact_key": "desired_outcome", "value": "降低人工檢查時間並提高規則檢查一致性。", "status": "confirmed"},
+      {"fact_key": "available_data", "value": "結構化報銷表單，欄位與金額格式固定。", "status": "confirmed"},
+      {"fact_key": "users_and_owners", "value": "員工填寫，財務人員最終審核與處理例外。", "status": "confirmed"},
+      {"fact_key": "known_constraints", "value": "規則可轉成條件判斷，不需要理解複雜自然語言；規則優先，先採規則引擎與表單驗證；不需 AI 作為主要方案。", "status": "confirmed"},
+      {"fact_key": "human_final_decision", "value": "財務人員保留最終審核。", "status": "confirmed"}
+    ]
+  },
+  {
+    "scenario_id": "governed_access",
+    "name": "員工入職與系統權限申請輔助",
+    "initial_brief": {
+      "project_name": "員工入職與系統權限申請輔助",
+      "current_workflow_problem": "目前使用 Email 與 Excel 處理員工入職與系統權限申請，容易漏填且格式不一致。",
+      "desired_outcome": "先減少漏項並標準化員工入職與權限申請流程。",
+      "available_data": "員工資料、既有權限清單、Email 紀錄與 Excel 表單。",
+      "users_and_owners": "員工提出申請；主管最終核准；IT 管理員維護權限目錄。",
+      "known_constraints": "員工資料包含個人資料，未批准傳送到外部模型；不得自動開通高風險權限；尚未完成職位—權限範本。"
+    },
+    "understanding_correction": "補充：第一階段只做流程整理、欄位檢查、權限範本與人工提醒，不做自動核准或權限寫入。",
+    "interview_answers": [
+      {
+        "question_purpose": "確認高風險人工決策邊界",
+        "answer": "主管必須最終核准，AI 不得決定是否核准，也不得直接開通高風險權限。"
+      },
+      {
+        "question_purpose": "確認資料與部署限制",
+        "answer": "第一階段只使用脫敏或核准環境資料；外部模型處理員工資料要等治理審查與授權完成。"
+      },
+      {
+        "question_purpose": "確認前置條件",
+        "answer": "先建立職位—權限範本、申請狀態與 audit trail，再評估後續系統整合。"
+      }
+    ],
+    "expected": {
+      "recommendation_category": "governed_assistive",
+      "opportunity_types": ["enterprise_knowledge_and_professional_document_assist"],
+      "human_decision_boundary": "主管保留最終核准；AI 僅能整理、提示與規則檢查。",
+      "deployment_constraint": "個人資料不得送到未核准外部模型；高風險權限不得自動開通。",
+      "key_conclusions": ["先做權限範本與流程標準化", "hard gate 限制外部處理與自動開通", "完成治理條件後才可擴大"],
+      "must_have_gap_terms": ["IAM", "權限", "個人資料", "治理"],
+      "must_have_phase_names": ["目前階段", "第一階段 PoC", "第二階段與後續擴展"],
+      "must_not_have_conclusions": ["AI 自動核准", "AI 直接寫入權限", "將個人資料送到未核准外部服務"]
+    },
+    "facts": [
+      {"fact_key": "current_workflow_problem", "value": "Email 與 Excel 處理員工入職與系統權限申請，容易漏填且格式不一致。", "status": "confirmed"},
+      {"fact_key": "desired_outcome", "value": "減少漏項並標準化員工入職與權限申請流程。", "status": "confirmed"},
+      {"fact_key": "available_data", "value": "員工資料、既有權限清單、Email 紀錄與 Excel 表單，包含個人資料。", "status": "confirmed"},
+      {"fact_key": "users_and_owners", "value": "員工提出申請，主管最終核准，IT 管理員維護權限目錄。", "status": "confirmed"},
+      {"fact_key": "known_constraints", "value": "個人資料不得送到未核准外部模型；不得自動開通高風險權限；尚未完成職位—權限範本；需要 IAM 與治理確認。", "status": "confirmed"},
+      {"fact_key": "human_final_decision", "value": "主管保留最終核准，AI 不得核准或開通權限。", "status": "confirmed"},
+      {"fact_key": "processing_boundary", "value": "只能使用脫敏或核准環境，外部模型尚未獲准。", "status": "confirmed"}
+    ]
+  },
+  {
+    "scenario_id": "maintenance_coverage_gap",
+    "name": "製造設備影像預測性維護規劃",
+    "initial_brief": {
+      "project_name": "製造設備影像預測性維護規劃",
+      "current_workflow_problem": "希望用設備影像預測故障，但目前只有少量未標註照片。",
+      "desired_outcome": "先確認資料、標籤與驗證設計是否足以支持後續規劃。",
+      "available_data": "少量未標註設備照片，沒有穩定故障標籤，也沒有可用模型驗證集。",
+      "users_and_owners": "設備維護人員提供判定基準；工程負責人規劃資料與驗證。",
+      "known_constraints": "沒有明確設備維護基準、資料量不足，不能直接承諾預測準確率或 PoC 成功。"
+    },
+    "understanding_correction": "補充：目前目標是資料收集、故障標籤定義與驗證設計，不是直接部署預測模型。",
+    "interview_answers": [
+      {
+        "question_purpose": "確認故障標籤與基準",
+        "answer": "目前尚未有穩定故障標籤，先由設備維護人員定義故障類型與維護基準。"
+      },
+      {
+        "question_purpose": "確認驗證資料",
+        "answer": "先收集代表性影像、建立標註規則與留出驗證集，不承諾準確率。"
+      }
+    ],
+    "expected": {
+      "recommendation_category": "readiness_first",
+      "opportunity_types": ["predictive_maintenance"],
+      "human_decision_boundary": "設備維護人員與工程負責人保留故障判定與驗收責任。",
+      "deployment_constraint": "目前不進入生產部署，不直接承諾預測準確率。",
+      "key_conclusions": ["資料收集與標籤定義優先", "建立代表性驗證集", "案例證據不足時必須誠實說明"],
+      "must_have_gap_terms": ["標籤", "驗證", "資料"],
+      "must_have_phase_names": ["目前階段", "第一階段 PoC"],
+      "must_not_have_conclusions": ["已有成熟案例驗證本專案", "保證預測準確率", "直接進入生產部署"]
+    },
+    "facts": [
+      {"fact_key": "current_workflow_problem", "value": "想用設備影像預測故障，但目前只有少量未標註照片。", "status": "confirmed"},
+      {"fact_key": "desired_outcome", "value": "先確認資料、標籤與驗證設計是否足以支持後續規劃。", "status": "confirmed"},
+      {"fact_key": "available_data", "value": "少量未標註設備照片，沒有穩定故障標籤，也沒有模型驗證集。", "status": "confirmed"},
+      {"fact_key": "users_and_owners", "value": "設備維護人員提供判定基準，工程負責人規劃資料與驗證。", "status": "confirmed"},
+      {"fact_key": "known_constraints", "value": "沒有明確設備維護基準，資料量不足，不能承諾預測準確率或 PoC 成功。", "status": "confirmed"},
+      {"fact_key": "validation_sample", "value": null, "status": "unknown"},
+      {"fact_key": "fault_labels", "value": null, "status": "unknown"}
+    ]
+  }
+]
