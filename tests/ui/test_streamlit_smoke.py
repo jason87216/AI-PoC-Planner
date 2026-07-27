@@ -56,5 +56,6 @@ def test_workspace_refresh_uses_route_parameters_not_only_session_state() -> Non
     source = open("src/ai_poc_planner/ui/navigation.py", encoding="utf-8").read()
 
     assert "query_params" in source
+    assert "workspace_route_key" in source
     assert "open_workspace" in source
     assert "workspace_target_from_query" in source
