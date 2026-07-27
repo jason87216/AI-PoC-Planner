@@ -87,6 +87,21 @@ def _project_heading(
         "ready_for_assessment": "訪談完成",
     }.get(str(session.get("status")), "需求確認")
     st.title(project_name)
+    try:
+        version = get_api_client().get_project_version(project_id, version_number)
+    except ApiClientError as error:
+        show_api_error(error)
+    else:
+        selected_model = version.get("selected_model")
+        if isinstance(selected_model, dict):
+            profile_name = selected_model.get("profile_name")
+            model_name = selected_model.get("model_name")
+            if profile_name and model_name:
+                st.caption(f"本專案使用的模型：{profile_name}｜{model_name}")
+            else:
+                st.warning("本專案尚未指定可用模型；需要 AI 操作時請重新選擇模型。")
+        else:
+            st.warning("本專案尚未指定可用模型；需要 AI 操作時請重新選擇模型。")
     st.caption(f"第 {version_number} 版 · {phase}")
     if st.button("建立其他專案", icon=":material/add:"):
         st.switch_page("app_pages/new_project.py")
@@ -132,7 +147,7 @@ def _provider_ready() -> tuple[bool, str]:
     return selected is not None, profile_label(selected) if selected else ""
 
 
-def _brief() -> None:
+def _legacy_brief() -> None:
     st.warning("請從「新建專案」建立新的規劃。")
     if st.button("前往新建專案", icon=":material/add:"):
         st.switch_page("app_pages/new_project.py")
@@ -211,6 +226,13 @@ def _brief() -> None:
                 _refresh()
         except ApiClientError as error:
             show_api_error(error)
+
+
+def _brief() -> None:
+    """Direct creation belongs to the independent new-project route."""
+    st.warning("請從新建專案頁建立專案。")
+    if st.button("前往新建專案", icon=":material/add:"):
+        st.switch_page("app_pages/new_project.py")
 
 
 def _generation(project_id: str, number: int) -> None:

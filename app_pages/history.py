@@ -19,13 +19,16 @@ if st.button("重新整理歷史", icon=":material/refresh:"):
     st.rerun()
 
 history_slot = st.container()
+projects: list[dict[str, object]] | None
 with history_slot.skeleton():
     try:
         projects = load_projects()
     except ApiClientError as error:
         show_api_error(error)
-        projects = []
+        projects = None
 
+if projects is None:
+    st.stop()
 if not projects:
     st.info("目前沒有可顯示的專案歷史。")
 else:

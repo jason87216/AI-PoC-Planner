@@ -32,8 +32,16 @@ if not profiles:
         st.switch_page("app_pages/model_settings.py")
     st.stop()
 
+default_profile_index = next(
+    (index for index, profile in enumerate(profiles) if profile.get("is_selected")),
+    0,
+)
 selected = st.selectbox(
-    "本專案使用的模型", profiles, format_func=_profile_choice, key="new_project_profile"
+    "本專案使用的模型",
+    profiles,
+    index=default_profile_index,
+    format_func=_profile_choice,
+    key="new_project_profile",
 )
 profile_id = str(selected["id"])
 try:

@@ -235,6 +235,8 @@ def test_new_project_route_is_independent_of_discovery_session_flags() -> None:
     assert "新建專案" in source
     assert "model_profile_id" in source
     assert "測試連線" in source
+    assert "default_profile_index" in source
+    assert "is_selected" in source
     assert "discovery_create_mode" not in source
     assert "discovery_return_target" not in source
     assert "ai_poc_planner.application" not in source
