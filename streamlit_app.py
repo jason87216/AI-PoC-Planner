@@ -17,6 +17,18 @@ page = st.navigation(
             title="模型設定",
             icon=":material/tune:",
         ),
+        st.Page(
+            "app_pages/discovery.py",
+            title="專案階段",
+            url_path="project",
+            visibility="hidden",
+        ),
+        st.Page(
+            "app_pages/results.py",
+            title="專案結果",
+            url_path="project-results",
+            visibility="hidden",
+        ),
     ],
     position="top",
 )

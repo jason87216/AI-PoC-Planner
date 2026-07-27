@@ -43,3 +43,10 @@ def test_global_navigation_contains_only_project_entry_points() -> None:
         assert label in source
     for label in ("需求訪談", "評估結果", "專案工作區"):
         assert label not in source
+
+
+def test_project_workspace_is_an_internal_supported_streamlit_route() -> None:
+    source = open("streamlit_app.py", encoding="utf-8").read()
+
+    assert '"app_pages/discovery.py"' in source
+    assert 'visibility="hidden"' in source

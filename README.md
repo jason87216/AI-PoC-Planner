@@ -183,8 +183,9 @@ now enters work through four global pages only: Home, New project, Project
 history, and Model settings. Discovery, assessment, and reports are rendered
 inside the selected project's workspace. New-project routing remains stable on
 refresh; the selected model profile is persisted safely with the project, and
-copying a project prefills only its initial brief. P6.5 assessment redesign has
-not started.
+copying a project prefills only its initial brief. Headed Chrome UAT verified
+the new-project refresh route, selected-profile readiness, project workspace,
+discovery, history, and copy flow. P6.5 assessment redesign has not started.
 
 The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
 API using `json_schema`, `reasoning_effort=low`, and temporary local state. The

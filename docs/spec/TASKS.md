@@ -275,8 +275,9 @@ scoring, reports, and the Streamlit product UI remain pending.
   Project history, and Model settings. Discovery, assessment, and reports are
   internal project-workspace stages rather than global features. New-project
   routing survives refresh, binds a selected tested model profile to the saved
-  version, and project copy pre-fills only the initial brief. No new-version
-  feature is implemented.
+  version, and project copy pre-fills only the initial brief. Headed Chrome UAT
+  covered the route refresh, readiness, workspace, Discovery, history, and copy
+  flow. No new-version feature is implemented.
 
 ### [Must] P6.5 Navigation, Results and Error-State Closeout
 
