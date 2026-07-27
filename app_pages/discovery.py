@@ -9,9 +9,13 @@ import streamlit as st
 from ai_poc_planner.ui.api_client import ApiClientError
 from ai_poc_planner.ui.discovery import (
     discovery_view_for_status,
+    enter_create_project_mode,
     facts_summary,
     interview_payload,
+    is_create_project_mode,
     question_details,
+    restore_active_project,
+    select_active_project,
 )
 from ai_poc_planner.ui.presentation import profile_label, show_api_error
 from ai_poc_planner.ui.runtime import (
@@ -28,13 +32,12 @@ from ai_poc_planner.ui.runtime import (
 
 
 def _select_target(project_id: str, version_number: int) -> None:
-    st.session_state["selected_project"] = {
-        "project_id": project_id,
-        "version_number": version_number,
-    }
+    select_active_project(st.session_state, project_id, version_number)
 
 
 def _target() -> tuple[str, int] | None:
+    if is_create_project_mode(st.session_state):
+        return None
     target = st.session_state.get("selected_project")
     if (
         isinstance(target, dict)
@@ -91,7 +94,7 @@ def _project_heading(
     st.title(project_name)
     st.caption(f"第 {version_number} 版 · {phase}")
     if st.button("建立其他專案", icon=":material/add:"):
-        st.session_state.pop("selected_project", None)
+        enter_create_project_mode(st.session_state)
         _refresh()
 
 
@@ -120,6 +123,10 @@ def _provider_ready() -> tuple[bool, str]:
 
 
 def _brief() -> None:
+    if st.session_state.get("discovery_return_target"):
+        if st.button("返回目前專案", icon=":material/arrow_back:"):
+            if restore_active_project(st.session_state):
+                _refresh()
     ready, model = _provider_ready()
     if ready:
         st.success(f"目前使用模型：{model}（已通過本次啟動的連線測試）")
@@ -129,31 +136,39 @@ def _brief() -> None:
             st.switch_page("app_pages/model_settings.py")
     with st.form("create_project"):
         project_name = st.text_input(
-            "專案名稱", placeholder="例如：內部請購與費用核准流程改善"
+            "專案名稱",
+            key="brief_project_name",
+            placeholder="例如：內部請購與費用核准流程改善",
         )
         current = st.text_area(
             "目前流程與問題",
+            key="brief_current_workflow_problem",
             help="說明目前怎麼做、卡在哪裡。",
             placeholder="例如：Excel、紙本與 Email 分散，附件與進度難以追蹤。",
             height=140,
         )
         outcome = st.text_area(
             "希望改善的成果",
+            key="brief_desired_outcome",
             help="描述希望改變的工作成果。",
             placeholder="例如：先統一流程與規則檢查，再評估 AI 是否有幫助。",
             height=120,
         )
         data = st.text_area(
             "現有資料與文件",
+            key="brief_available_data",
             help="可描述文件、歷史紀錄、Excel、資料庫、品質與限制；也可填目前不清楚。",
             placeholder="例如：有紙本、Excel 和 Email，但格式不一致。",
             height=120,
         )
         owners = st.text_area(
-            "使用者與負責人", placeholder="例如：申請人、部門主管、財務人員與資訊部門。"
+            "使用者與負責人",
+            key="brief_users_and_owners",
+            placeholder="例如：申請人、部門主管、財務人員與資訊部門。",
         )
         constraints = st.text_area(
             "已知限制",
+            key="brief_known_constraints",
             placeholder="例如：正式核准必須由授權主管決定，優先使用 Microsoft 365。",
         )
         submitted = st.form_submit_button(

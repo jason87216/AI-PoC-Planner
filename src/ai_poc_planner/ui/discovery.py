@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from typing import Any
 
 _DISCOVERY_VIEWS = {
@@ -22,6 +22,54 @@ _FACT_LABELS = {
     "users_and_owners": "使用者與負責人",
     "known_constraints": "已知限制",
 }
+
+CREATE_MODE_KEY = "discovery_create_mode"
+RETURN_TARGET_KEY = "discovery_return_target"
+_ACTIVE_WIDGET_KEYS = (
+    "feedback_text",
+    "show_feedback",
+    "question_generation_pending",
+    "supplementary_note",
+)
+
+
+def is_create_project_mode(state: Mapping[str, Any]) -> bool:
+    return state.get(CREATE_MODE_KEY) is True
+
+
+def enter_create_project_mode(state: MutableMapping[str, Any]) -> None:
+    target = state.get("selected_project")
+    if isinstance(target, dict):
+        state[RETURN_TARGET_KEY] = dict(target)
+    state[CREATE_MODE_KEY] = True
+    state.pop("selected_project", None)
+    for key in tuple(state):
+        if key in _ACTIVE_WIDGET_KEYS or key.startswith(
+            ("question_", "unknown_", "missing_", "brief_")
+        ):
+            state.pop(key, None)
+
+
+def select_active_project(
+    state: MutableMapping[str, Any], project_id: str, version_number: int
+) -> None:
+    state["selected_project"] = {
+        "project_id": project_id,
+        "version_number": version_number,
+    }
+    state.pop(CREATE_MODE_KEY, None)
+    state.pop(RETURN_TARGET_KEY, None)
+
+
+def restore_active_project(state: MutableMapping[str, Any]) -> bool:
+    target = state.get(RETURN_TARGET_KEY)
+    if not isinstance(target, dict):
+        return False
+    project_id, version_number = target.get("project_id"), target.get("version_number")
+    if not isinstance(project_id, str) or not isinstance(version_number, int):
+        return False
+    select_active_project(state, project_id, version_number)
+    return True
 
 
 def discovery_view_for_status(status: object) -> str:
