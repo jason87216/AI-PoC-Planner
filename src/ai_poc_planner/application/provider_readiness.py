@@ -117,7 +117,13 @@ class ProviderReadinessService:
         selected = self._profiles.get_selected()
         if selected is None or not selected.is_enabled:
             raise ProviderReadinessError("provider_not_ready")
-        status = self.status_for(selected)
+        return self.require_profile_ready(selected.id)
+
+    def require_profile_ready(self, profile_id: UUID) -> ProviderConnectionStatus:
+        profile = self._profiles.get(profile_id)
+        if not profile.is_enabled:
+            raise ProviderReadinessError("provider_not_ready")
+        status = self.status_for(profile)
         if not status.formal_analysis_allowed:
             raise ProviderReadinessError("provider_not_ready")
         return status

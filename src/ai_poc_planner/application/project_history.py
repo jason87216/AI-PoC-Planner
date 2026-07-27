@@ -54,7 +54,7 @@ class ProjectHistoryService:
         self._clock = clock
 
     def create_project(
-        self, project_name: str
+        self, project_name: str, selected_profile: ModelProfile | None = None
     ) -> tuple[PlanningProject, ProjectVersion]:
         timestamp = self._clock()
         project = PlanningProject(
@@ -68,7 +68,7 @@ class ProjectHistoryService:
             project_id=project.id,
             version_number=1,
             status=ProjectStatus.DRAFT,
-            selected_model=self._selected_snapshot(),
+            selected_model=self._snapshot_for(selected_profile),
             created_at=timestamp,
             updated_at=timestamp,
         )
@@ -428,6 +428,17 @@ class ProjectHistoryService:
         profile = self._selected_profile_getter()
         if profile is None:
             return None
+        return SelectedModelSnapshot(
+            profile_id=profile.id,
+            profile_name=profile.profile_name,
+            model_name=profile.model_name,
+        )
+
+    def _snapshot_for(
+        self, profile: ModelProfile | None
+    ) -> SelectedModelSnapshot | None:
+        if profile is None:
+            return self._selected_snapshot()
         return SelectedModelSnapshot(
             profile_id=profile.id,
             profile_name=profile.profile_name,

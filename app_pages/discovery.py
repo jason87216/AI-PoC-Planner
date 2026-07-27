@@ -9,12 +9,9 @@ import streamlit as st
 from ai_poc_planner.ui.api_client import ApiClientError
 from ai_poc_planner.ui.discovery import (
     discovery_view_for_status,
-    enter_create_project_mode,
     facts_summary,
     interview_payload,
-    is_create_project_mode,
     question_details,
-    restore_active_project,
     select_active_project,
 )
 from ai_poc_planner.ui.presentation import profile_label, show_api_error
@@ -36,8 +33,6 @@ def _select_target(project_id: str, version_number: int) -> None:
 
 
 def _target() -> tuple[str, int] | None:
-    if is_create_project_mode(st.session_state):
-        return None
     target = st.session_state.get("selected_project")
     if (
         isinstance(target, dict)
@@ -94,8 +89,23 @@ def _project_heading(
     st.title(project_name)
     st.caption(f"第 {version_number} 版 · {phase}")
     if st.button("建立其他專案", icon=":material/add:"):
-        enter_create_project_mode(st.session_state)
-        _refresh()
+        st.switch_page("app_pages/new_project.py")
+    if st.button("複製為新專案", icon=":material/content_copy:"):
+        try:
+            facts = load_current_facts(project_id, version_number)
+        except ApiClientError as error:
+            show_api_error(error)
+        else:
+            values = {str(item.get("fact_key")): item.get("value") for item in facts}
+            st.session_state["new_project_prefill"] = {
+                "new_project_name": f"{project_name} 副本",
+                "new_project_current": values.get("current_workflow_problem", ""),
+                "new_project_outcome": values.get("desired_outcome", ""),
+                "new_project_data": values.get("available_data", ""),
+                "new_project_owners": values.get("users_and_owners", ""),
+                "new_project_constraints": values.get("known_constraints", ""),
+            }
+            st.switch_page("app_pages/new_project.py")
 
 
 def _understanding(
@@ -123,10 +133,10 @@ def _provider_ready() -> tuple[bool, str]:
 
 
 def _brief() -> None:
-    if st.session_state.get("discovery_return_target"):
-        if st.button("返回目前專案", icon=":material/arrow_back:"):
-            if restore_active_project(st.session_state):
-                _refresh()
+    st.warning("請從「新建專案」建立新的規劃。")
+    if st.button("前往新建專案", icon=":material/add:"):
+        st.switch_page("app_pages/new_project.py")
+    return
     ready, model = _provider_ready()
     if ready:
         st.success(f"目前使用模型：{model}（已通過本次啟動的連線測試）")
