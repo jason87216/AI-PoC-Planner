@@ -36,6 +36,13 @@ class FitDimensionStatus(StrEnum):
     UNKNOWN = "unknown"
 
 
+class RecommendationCategory(StrEnum):
+    AI_HYBRID = "ai_hybrid"
+    RULES_FIRST = "rules_first"
+    GOVERNED_ASSISTIVE = "governed_assistive"
+    READINESS_FIRST = "readiness_first"
+
+
 class GapCategory(StrEnum):
     READY = "ready"
     MISSING = "missing"
@@ -138,4 +145,5 @@ class CaseCenteredAssessment(ContractModel):
     gate_impacts: list[HardGateImpact] = Field(default_factory=list)
     phased_path: list[ImplementationPhase] = Field(min_length=1)
     recommendation_title: NonEmptyStr
+    recommendation_category: RecommendationCategory = RecommendationCategory.AI_HYBRID
     recommendation_basis: list[NonEmptyStr] = Field(min_length=1)

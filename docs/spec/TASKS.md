@@ -1,340 +1,238 @@
-# Tasks: viable MVP reset
+# Tasks: viable MVP
 
 ## Status legend
 
-- **Must**: required before viable-MVP release.
-- **Should**: valuable after the blocking path works.
-- **Deferred**: explicitly outside this MVP.
-- Every task is one small PR and must state tests plus a human verification.
+- **Complete**: implemented and merged or accepted as the current baseline.
+- **Next**: the next bounded implementation target.
+- **Deferred**: intentionally outside the current MVP path.
+- Each implementation task should remain one reviewable PR with automated tests and
+  an explicit human-verification note.
 
-## Deprecated roadmap items
+## Product acceptance rules
 
-The following previous completion logic is deprecated and must not be revived as
-product acceptance:
+The following are not valid product acceptance evidence:
 
-- a fake-model API/Streamlit vertical slice as a successful MVP;
-- scripted fixed-field clarification as a viable interview;
-- fake-mode browser flow as evidence of real AI analysis;
-- Docker, FAISS, or live-provider claims in the current product README.
+- a fake-model API or Streamlit vertical slice;
+- scripted fixed-field clarification presented as a viable interview;
+- fake-provider browser output presented as real AI analysis;
+- unsupported claims that Docker, FAISS, cloud deployment, or a provider integration
+  are complete.
 
-Fake models remain permitted for deterministic automated tests only.
+Fake providers remain permitted only for deterministic automated tests.
 
 ## Phase 0 — Specification reset
 
-### [Must] S0.1 Approve viable-MVP specification package
+### S0.1 Approve viable-MVP specification package — Complete
 
-- **Purpose:** Approve the real-provider-first product contract.
-- **Scope:** Documentation only.
-- **Acceptance:** SPEC, PLAN, TASKS, README, and project log agree that no
-  formal analysis occurs without a real selected profile.
-- **Verification:** Cross-document review and `git diff --check`.
+- The product is real-provider-first.
+- Formal analysis requires a selected, enabled, tested model profile.
+- SPEC, PLAN, TASKS, README, and PROJECT_LOG must not imply a runtime fake fallback.
 
-## Phase 1 — Model profile and OpenAI-compatible connection
+## Phase 1 — Model profiles and OpenAI-compatible connection
 
-### [Must] P1.1 Define model profile and provider-status contracts
+### P1.1–P1.5 — Complete
 
-- **Purpose:** Define profile name, base URL, model name, optional API key,
-  selected status, and safe connection-test result.
-- **Scope:** Pydantic/API contracts and tests only.
-- **Dependencies:** S0.1.
-- **Acceptance:** No contract implies a fake fallback.
+Delivered:
 
-### [Must] P1.2 Add ignored local JSON model-profile repository
+- model-profile and safe provider-status contracts;
+- ignored local profile persistence with optional API keys;
+- OpenAI-compatible chat adapter with bounded errors and timeouts;
+- connection test, readiness guard, and provider-status API;
+- opt-in llama.cpp integration test, including an empty-key local path.
 
-- **Purpose:** Persist profile CRUD and selection locally, including optional
-  API key, without committing secrets.
-- **Scope:** Local repository/config boundary and tests.
-- **Dependencies:** P1.1.
-- **Acceptance:** Create, edit, delete, and select profiles; ignored file is
-  never staged.
-
-### [Must] P1.3 Add OpenAI-compatible chat adapter
-
-- **Purpose:** Send real chat requests through an injected adapter.
-- **Scope:** Provider adapter and unit tests; no report/interview/UI rewrite.
-- **Dependencies:** P1.1.
-- **Acceptance:** Explicit timeout/safe error handling; no runtime fake default.
-
-### [Must] P1.4 Add profile connection test and provider-status API
-
-- **Purpose:** Test selected profile connectivity and expose safe current status.
-- **Scope:** API/application boundary and tests.
-- **Dependencies:** P1.2, P1.3.
-- **Acceptance:** Absent/failed profile blocks formal analysis.
-
-### [Must] P1.5 Add opt-in llama.cpp integration test
-
-- **Purpose:** Verify a manually started llama.cpp OpenAI-compatible server.
-- **Scope:** Explicit integration marker/test and documentation.
-- **Dependencies:** P1.3, P1.4.
-- **Acceptance:** Not run by default; validates empty API-key path when server
-  permits it.
-
-### Checkpoint P1
-
-- Human verifies a real local endpoint is called and formal analysis is rejected
-  when no tested profile is selected.
-
-**Implementation/UAT status (PR #11):** Offline validation and real llama.cpp
-UAT passed. P1.1 contracts, P1.2 local JSON profile repository, P1.3
-OpenAI-compatible adapter, P1.4 safe profile/status API plus readiness guard,
-and P1.5 opt-in llama.cpp test are implemented; profile CRUD, selection,
-connection test, readiness, invalidation, and process-restart status reset
-passed with no fake runtime fallback. Phase 2 and viable-MVP completion remain
-pending.
+Human and integration UAT verified real local inference and blocked-no-profile behavior.
 
 ## Phase 2 — Project versions, conversation, and facts
 
-### [Must] P2.1 Define project/version/conversation/fact contracts
+### P2.1–P2.3 — Complete
 
-- **Purpose:** Model project identity, immutable versions, visible conversation,
-  confirmed facts, assumptions, references, and correction state.
-- **Dependencies:** P1.
-- **Acceptance:** No system prompt, chain of thought, trajectory, or raw
-  provider metadata appears in durable visible records.
+Delivered:
 
-### [Must] P2.2 Persist projects and immutable completed versions
-
-- **Purpose:** Save history and create a new version for completed-project edits.
-- **Dependencies:** P2.1.
-- **Acceptance:** Reload is durable; completed versions cannot be overwritten.
-
-### [Must] P2.3 Persist visible conversation and protect confirmed facts
-
-- **Purpose:** Save user/AI messages and prevent silent overwrite of confirmed
-  facts while allowing explicit corrections.
-- **Dependencies:** P2.1, P2.2.
-- **Acceptance:** Contradictions/missing facts are detectable and test-covered.
-
-### Checkpoint P2
-
-- Human reloads a project and creates a new version from a completed version.
-
-**Implementation status (Phase 2):** P2.1 project/version/conversation/fact
-contracts, P2.2 schema v3 SQLite persistence with additive v1/v2 migration and
-immutable completed versions, and P2.3 visible conversation plus append-only
-confirmed-fact revisions are implemented. Offline tests and local SQLite API
-UAT passed. Phase 3 is implemented on schema v4; viable-MVP completion,
-scoring, reports, and the Streamlit product UI remain pending.
+- project, immutable version, visible conversation, and fact contracts;
+- additive SQLite persistence and completed-version protection;
+- append-only confirmed-fact revisions, explicit corrections, and fact/message
+  references without storing prompts, raw provider responses, or reasoning traces.
 
 ## Phase 3 — AI understanding and interview
 
-### [Must] P3.1 Add minimal initial-brief contract and API
+### P3.1–P3.3 — Complete
 
-- **Purpose:** Require project name, current workflow/problem, desired outcome,
-  and available data; accept unknown/no data.
-- **Dependencies:** P1, P2.
-- **Acceptance:** Optional users/owner and known constraints only; no generic
-  supplementary-notes field.
-- **Status:** implemented (schema v4; provider-readiness-gated initial brief).
+Delivered:
 
-### [Must] P3.2 Add AI requirement-understanding confirmation
+- minimal initial brief;
+- structured requirement understanding with confirmation and correction;
+- bounded contextual interview of at most three rounds and three questions per round;
+- durable reload and unknown/missing fact handling.
 
-- **Purpose:** Obtain structured understanding and user confirmation/correction.
-- **Dependencies:** P3.1.
-- **Acceptance:** Unconfirmed claims remain assumptions.
-- **Status:** implemented (strict structured output, confirmation, correction).
-
-### [Must] P3.3 Add bounded contextual interview
-
-- **Purpose:** Enable at most three rounds of at most three questions, each with
-  why, impact, and example.
-- **Dependencies:** P3.2.
-- **Acceptance:** User can answer unknown, add corrections, and the AI updates
-  structured facts without storing reasoning traces.
-- **Status:** implemented (visible questions/answers; maximum 3 rounds × 3 questions).
-
-### Checkpoint P3
-
-- Human UAT with a real model confirms questions are contextual rather than a
-  fixed template.
-- Offline/API validation and real Qwen3 llama.cpp UAT passed.
+Real-model UAT verified contextual questions rather than a fixed template.
 
 ## Phase 4 — Analysis, rubric, and hard gates
 
-### [Must] P4.1 Define AI option and evidence-backed rubric contracts
+### P4.1–P4.3 — Complete
 
-- **Purpose:** Add AI/non-AI/hybrid options, six ratings, fact references, gaps,
-  risks, and score-improvement conditions.
-- **Status:** implemented (strict provider-owned contracts; program-owned fields
-  are rejected).
-- **Dependencies:** P3.
-- **Acceptance:** Catalog-external candidate is marked `unstandardized_candidate`.
+Delivered:
 
-### [Must] P4.2 Validate AI ratings and calculate weighted total
+- AI, non-AI, hybrid, and foundations-first option contracts;
+- evidence-backed six-dimension ratings and program-owned weighted totals;
+- deterministic HG-01 through HG-07 evaluation that provider output cannot bypass;
+- conservative treatment of unknown critical inputs.
 
-- **Purpose:** Program validates score range/references and calculates totals.
-- **Dependencies:** P4.1.
-- **Acceptance:** No old fixed Boolean rules set a final rating.
-- **Status:** implemented (schema v5 persistence and deterministic normative
-  weights/total; the legacy Boolean scorer is not used for ratings).
+The provider proposes structured options and narrative; program code owns formal
+scores, recommendation constraints, and gates.
 
-### [Must] P4.3 Apply existing hard gates to AI analysis
+## Phase 5 — Reviewed cases and report
 
-- **Purpose:** Enforce safety/governance conflicts after AI proposal generation.
-- **Dependencies:** P4.2.
-- **Acceptance:** AI cannot bypass a triggered gate.
-- **Status:** implemented (existing HG-01 through HG-07 evaluator remains
-  program-owned; unknown critical inputs map conservatively).
+### P5.1 Reviewed local cases — Complete
 
-### Checkpoint P4
+- Nine source-backed reviewed cases are validated as a complete local library.
+- Matching is deterministic and rejects fabricated companies, metrics, or sources.
 
-- Human verifies a real model can recommend non-AI, foundations-first, or hybrid.
-- Offline validation passed. Two real NVIDIA NIM `openai/gpt-oss-20b` UAT runs
-  passed through the production API. A0 selects an option index; the program
-  derives the formal conclusion and generates the stable option key before
-  kind-specific A1 details. Real llama.cpp Phase 4 structured-output
-  compatibility remains pending and does not block this checkpoint.
+### P5.2 Persisted Markdown planning report — Complete
 
-## Phase 5 — Cases and report
+- Structured narration is generated in bounded stages.
+- Markdown rendering preserves confirmed facts, reviewed-case attribution,
+  deterministic recommendation, scores, and gates.
+- Unsupported numeric and KPI claims are rejected.
 
-### [Must] P5.1 Define and validate reviewed local success cases
+## Phase 6 — Product UI and case-centred workflow
 
-- **Purpose:** Add manually curated source-backed case records and tag/rule
-  filtering.
-- **Dependencies:** P4.
-- **Acceptance:** No FAISS and no fabricated company, metric, or source.
-- **Status:** implemented (nine approved, source-backed local cases; strict
-  validation and deterministic tag/rule matching only). Offline validation
-  passed.
+### P6.1 Home, history, and model settings — Complete
 
-### [Must] P5.2 Assemble full Markdown planning report
+- Streamlit uses the public FastAPI HTTP boundary.
+- Product pages hide secrets, raw JSON, internal IDs, API URLs, and developer controls.
 
-- **Purpose:** Produce every section in the SPEC report contract.
-- **Dependencies:** P4, P5.1.
-- **Status:** implemented (schema v6 immutable report persistence; eighteen
-  strict report narration fields generated in staged Report Part A/Part B
-  calls; deterministic Markdown rendering with reviewed-case integration; and
-  reloadable report APIs). Numeric/KPI safeguards reject unsupported numeric
-  claims. The report-only NVIDIA UAT passed twice using fresh temporary state;
-  full cross-phase UAT is deferred to Phase 8.
-- **Acceptance:** Report is business-actionable and preserves fact references.
+### P6.2 Brief, confirmation, and interview — Complete
 
-### Checkpoint P5
+- The durable Discovery flow supports correction, confirmation, interview rounds,
+  refresh recovery, and a project-bound tested model profile.
 
-- Business reviewer approves sample report usefulness, not merely schema validity.
+### P6.3 Analysis and readable report views — Complete
 
-## Phase 6 — Streamlit product UI
+- Results and persisted Markdown are restored through the public API.
+- UUIDs, fact tokens, option keys, raw provider data, and technical diagnostics remain
+  outside the product surface.
 
-### [Must] P6.1 Build home/history and model-settings views
+### P6.4 Discovery UX closeout — Complete, merged in PR #20
 
-- **Purpose:** Show project history and profile management without developer
-  controls.
-- **Dependencies:** P1, P2.
-- **Status:** implemented (a Streamlit home, readable project history, and
-  model-settings views backed exclusively by a thin FastAPI HTTP client).
-  The UI caches short-lived public reads, keeps API keys masked and never
-  renders internal IDs, raw JSON, API base URLs, or developer controls.
-  Offline client and Streamlit smoke tests pass.
+- Four global entries only: Home, New project, Project history, and Model settings.
+- Discovery, assessment, and report are internal project-workspace stages.
+- New-project and copy flows preserve only user-authored brief data and model binding.
 
-### [Must] P6.2 Build brief, confirmation, and interview views
+### P6.5 Case-centred results closeout — Complete, merged in PR #22
 
-- **Purpose:** Render the Phase 3 flow through HTTP only.
-- **Dependencies:** P3, P6.1.
-- **Status:** implemented. The Streamlit brief uses only the formal initial-brief
-  fields and calls the public FastAPI API for requirement understanding,
-  correction/regeneration, confirmation, bounded interview rounds, and
-  ready-for-assessment facts. The UI follows durable API status rather than
-  recreating the interview state machine, restores the latest discovery item
-  after a rerun, and keeps UUIDs, raw JSON, prompts, API URLs, SQLite paths,
-  and technical errors out of the product surface. Real NVIDIA NIM browser UAT
-  passed with a selected/tested profile, a correction, unknown answer, proactive
-  fact, bounded completion, and refresh recovery.
+The formal path is:
 
-### [Must] P6.3 Build analysis and readable report views
+user needs → reviewed-case matching → case reference value → project-case fit →
+critical gaps → transferable practices → hard-gate impacts → phased implementation.
 
-- **Purpose:** Render Phase 4–5 results and Markdown export without raw JSON,
-  UUIDs, API URLs, or technical warnings.
-- **Dependencies:** P4, P5, P6.2.
-- **Status:** implemented. A Streamlit results page uses only the public FastAPI
-  HTTP API to restore the durable project status, create analysis or report from
-  explicit user actions, and render persisted Phase 4 options, six scores,
-  hard-gate results, risks, gaps, all eighteen Phase 5 sections, and saved
-  reviewed-case sources. It downloads the persisted UTF-8 Markdown without
-  regenerating it and hides UUIDs, fact tokens, raw JSON, API URLs, SQLite paths,
-  prompts, and technical diagnostics. Offline UI/client tests and a real NVIDIA
-  NIM browser UAT passed for assessment, Report Part A/Part B, refresh recovery,
-  and Markdown download.
+API, persisted analysis, Results UI, and Markdown consume the same formal result.
+
+### P6.6 Product Acceptance Baseline — Technical acceptance complete in PR #23
+
+Delivered:
+
+- four synthetic Traditional Chinese golden scenarios;
+- typed fixtures and parameterized formal-result invariants;
+- deterministic recommendation categories for AI hybrid, rules first, governed
+  assistive, and readiness first routes;
+- regression coverage for negation, high-impact employment signals, opportunity
+  matching, case traceability, gates, refresh, and idempotency;
+- NVIDIA-compatible headed Chrome UAT across all four full workflows.
+
+Verification baseline:
+
+- `601 passed, 6 skipped` before the final documentation/refactor closeout;
+- Ruff, formatting, diff checks, and GitHub Actions passed;
+- no critical failure and no duplicate formal PlanningRun was observed;
+- provider narrative fallback and case-library gaps remain explicitly recorded.
+
+The product-owner review of exact Traditional Chinese wording and business usefulness
+was not performed after the owner lost access to a usable local UI session. It is
+**deferred, not claimed as passed**, and is included in P8.1. P6 implementation work is
+otherwise closed; P6.6 is an acceptance baseline, not another product feature.
 
 ### Checkpoint P6
 
-- Complete. Human can complete a real-model planning flow through assessment and
-  persisted Markdown report views without internal identifiers. Full cross-phase
-  UAT remains deferred to Phase 8.
+- P6.1–P6.6 implementation and technical acceptance are complete.
+- The four golden scenarios are the regression baseline for future providers.
+- Final owner-facing language and portfolio review remains P8 work.
 
-### [Must] P6.4 Discovery UX Closeout
+## Phase 7 — Local runtime and provider compatibility
 
-- **Status:** implemented. Product Discovery UI no longer exposes fact-level
-  governance. It accepts natural-language correction and free supplementary
-  input, keeps project name/version/phase visible, renders requirement
-  understanding in a bordered card with confirmation/modification actions, and
-  generates interview questions inline after confirmation or a saved answer.
-  Prompts request complete Traditional Chinese understanding and prioritize
-  reviewed-case matching/gap inputs over fact completion. Project-centred
-  navigation now provides four global entry points only: Home, New project,
-  Project history, and Model settings. Discovery, assessment, and reports are
-  internal project-workspace stages rather than global features. New-project
-  routing survives refresh, binds a selected tested model profile to the saved
-  version, and project copy pre-fills only the initial brief. Headed Chrome UAT
-  covered the route refresh, readiness, workspace, Discovery, history, and copy
-  flow. No new-version feature is implemented.
+### P7.1 Local Runtime Prerequisite — Complete, merged in PR #21
 
-### [Must] P6.5 Navigation, Results and Error-State Closeout
+Delivered:
 
-- **Status:** implemented on `codex/p6-5-case-centered-assessment-results`.
-  Direction delivered: make reviewed cases the centre of the
-  assessment path: user needs → deterministic reviewed-case matching → case
-  reference value → project-to-case fit → critical gaps → transferable practices
-  → hard gates that constrain the current stage → traceable implementation path.
-  Scores must not mean that AI generated and then rated its own option. The
-  implementation separates case evidence value, project-to-case fit, and
-  critical gaps; it also provides durable result selection, readable case and
-  hard-gate views, reviewed-case details, safe no-case errors, and global
-  navigation/layout cleanup.
-- **Acceptance:** API, persisted analysis, Results workspace, and Markdown
-  report read the same case-centered result. No-case outcomes remain honest;
-  unknown facts remain pending confirmation; duplicate assessment creation is
-  idempotent; the UI hides UUIDs, enums, raw JSON, evidence tokens, and option keys.
-- **Verification:** deterministic domain/application tests, full pytest/Ruff
-  validation, integrated P6.4 regression, P7.1 launcher tests, and headed Chrome
-  UAT from new-project creation through assessment/report refresh.
+- project-owned `.venv` enforcement and runtime identity checks;
+- dynamic API/UI ports with Local/Uat state isolation;
+- safe start, status, and stop lifecycle for FastAPI and Streamlit;
+- browser launch, supervised processes, and safe logs.
 
-## Phase 7 — Local launcher
+The previous roadmap items for separate install/start and package stop scripts are
+**superseded by P7.1**. A consumer installer or release package is deferred.
 
-- **Status:** P7.1 Local Runtime Prerequisite is implemented on its stacked
-  branch. It provides a Windows launcher with project `.venv` enforcement,
-  identity validation, dynamic port handoff, distinct persistent Local/Uat data,
-  safe logs, and supervised FastAPI/Streamlit lifecycle. It is not an installer,
-  Windows auto-start, or release package.
+### P7.2 Provider Compatibility and Local Inference — Next
 
-### [Must] P7.1 Local Runtime Prerequisite
+Purpose:
 
-- **Purpose:** Recover browser UAT after reboot through project-owned Python,
-  identity-validated API/UI startup, and controlled lifecycle.
-- **Dependencies:** P6.
+- make existing project AI calls work consistently across the current cloud
+  OpenAI-compatible baseline and one real local OpenAI-compatible endpoint first.
 
-### [Must] P7.2 Add install batch entry point
+Required scope:
 
-- **Purpose:** Start API, wait for health, start Streamlit, and open browser.
-- **Dependencies:** P7.1.
+- explicit provider capabilities and safe profile validation;
+- normalized token, authentication, structured-output, and response behavior;
+- bounded structured-output fallback with strict validation;
+- no silent provider or model fallback;
+- project-bound profiles remain authoritative;
+- reuse the P6.6 golden scenarios, beginning with one representative scenario before
+  expanding to the full four-scenario matrix.
 
-### [Must] P7.3 Add package start/stop entry points
+Acceptance:
 
-- **Purpose:** Stop the two owned local processes without broad process kills.
-- **Dependencies:** P7.2.
+- requirement understanding, interview, assessment narrative, and report narration
+  work through the same application contracts;
+- deterministic matching, recommendation categories, scoring, and hard gates remain
+  provider-independent;
+- provider failures are actionable and never expose API keys or raw responses;
+- at least the existing NVIDIA-compatible endpoint and one local endpoint pass the
+  agreed compatibility matrix.
 
-## Phase 8 — Portfolio UAT
+Out of scope for P7.2:
 
-### [Must] P8.1 Execute viable-MVP acceptance review
+- automatic model download or installation;
+- support for every local runtime at once;
+- Docker, cloud accounts, or release packaging.
 
-- **Purpose:** Verify real provider, blocked-no-provider behavior, versioning,
-  interview, analysis choices, report, launcher, and ignored-artifact hygiene.
-- **Dependencies:** P1–P7.
-- **Acceptance:** Human product UAT passes; fake-model test suite is supporting
-  evidence only.
+## Phase 8 — Portfolio and release UAT
+
+### P8.1 Execute viable-MVP acceptance review — Pending
+
+Verify as a product owner:
+
+- blocked-no-provider behavior and project-bound model selection;
+- requirement understanding and interview usefulness;
+- reviewed-case relevance, gaps, transferable practices, and phased path;
+- report language and business usefulness, including deterministic fallback output;
+- whether the six-dimension score adds user value or should remain secondary/hidden;
+- launcher behavior, refresh/history recovery, and ignored-artifact hygiene;
+- provider compatibility evidence from P7.2.
+
+Fake-provider tests remain supporting evidence only.
+
+## Known follow-ups
+
+- Six live-provider integration tests remain opt-in because they require local secrets
+  or endpoints.
+- The reviewed-case library lacks strong expense-rule, IAM/governance, and
+  image-based predictive-maintenance evidence.
+- Provider narrative fallback behavior is a P7.2 compatibility input.
 
 ## Deferred
 
-- Multi-agent, LangGraph, FAISS, Docker, cloud deployment, accounts, online
-  search, multi-tenancy, production-grade credential encryption, PDF/DOCX, and
-  automatic llama.cpp/model installation.
+- consumer installer and release packaging;
+- automatic llama.cpp or model installation;
+- multi-agent, LangGraph, FAISS, and Docker;
+- cloud deployment, accounts, online search, and multi-tenancy;
+- production-grade credential encryption;
+- PDF/DOCX export.

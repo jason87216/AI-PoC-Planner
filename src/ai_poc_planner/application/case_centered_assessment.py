@@ -20,6 +20,7 @@ from ai_poc_planner.domain.case_centered import (
     ImplementationPhase,
     MatchedCaseAssessment,
     ProjectCaseFit,
+    RecommendationCategory,
     TransferablePractice,
 )
 from ai_poc_planner.domain.enums import (
@@ -194,6 +195,105 @@ def _contains(facts: Mapping[str, FactRevision], *words: str) -> bool:
     return any(word.casefold() in text for word in words)
 
 
+def _contains_positive(facts: Mapping[str, FactRevision], *words: str) -> bool:
+    """Find a positive signal within one fact and sentence.
+
+    A project can have one confirmed fact saying that images exist and another
+    sentence saying that no validation sample exists.  Joining all facts before
+    checking negation makes those two statements contaminate each other.
+    """
+
+    negation_markers = (
+        "not available",
+        "without",
+        "沒有",
+        "尚未",
+        "不需要",
+        "無法",
+        "缺少",
+        "不足",
+        "無",
+        "計畫",
+        "計劃",
+        "預計",
+        "未來",
+        "將",
+        "需要",
+        "no",
+        "not",
+    )
+    contrast_markers = ("但", "可是", "然而", "but", "however")
+
+    def is_negated(sentence: str, start: int, end: int) -> bool:
+        before = sentence[max(0, start - 24) : start]
+        after = sentence[end : min(len(sentence), end + 24)]
+        marker_positions = [
+            (before.rfind(marker), marker) for marker in negation_markers
+        ]
+        marker_positions = [item for item in marker_positions if item[0] >= 0]
+        if marker_positions:
+            marker_start, marker = max(marker_positions)
+            trailing = before[marker_start + len(marker) :]
+            if not any(contrast in trailing for contrast in contrast_markers):
+                return True
+        return bool(
+            re.match(
+                r"\s*(?:[a-z]+\s+){0,4}(?:not\s+available|not\b|unavailable|無法|不存在|缺少|不足)",
+                after,
+            )
+        )
+
+    for fact in facts.values():
+        if fact.status is not FactStatus.CONFIRMED:
+            continue
+        for sentence in re.split(r"[。！？!?；;\n]", _text(fact.value).casefold()):
+            for word in words:
+                for match in re.finditer(re.escape(word.casefold()), sentence):
+                    if not is_negated(sentence, match.start(), match.end()):
+                        return True
+    return False
+
+
+_RULES_FIRST_SIGNAL_WORDS = (
+    "rule-based",
+    "規則優先",
+    "表單流程",
+    "規則引擎",
+    "條件判斷",
+    "結構化表單",
+    "表單驗證",
+    "傳統自動化",
+    "不需要複雜自然語言",
+    "不需要自然語言",
+)
+
+
+_EMPLOYMENT_HIGH_IMPACT_PATTERNS = (
+    r"招募|招聘|錄用|录用|雇用|聘用|解雇|解僱|終止雇傭|终止雇佣|升遷|升迁|晉升|晋升",
+    r"薪酬|薪資|薪资|績效|绩效|處分|处分|任職資格|任职资格",
+    r"高風險.{0,8}(?:系統)?權限",
+    r"(?:employment|hiring|recruiting|termination|promotion|compensation|performance|disciplinary|qualification)",
+    r"high[- ]risk.{0,12}(?:system )?permission.{0,12}(?:approval|approve|authorize)",
+)
+
+
+def _has_employment_high_impact_signal(
+    facts: Mapping[str, FactRevision],
+) -> bool:
+    for fact in facts.values():
+        if fact.status is not FactStatus.CONFIRMED:
+            continue
+        text = _text(fact.value).casefold()
+        if fact.fact_key.casefold() in {"high_impact_domain", "decision_impact"}:
+            if any(term in text for term in ("employment", "人事", "高影響")):
+                return True
+        if any(
+            re.search(pattern, text) for pattern in _EMPLOYMENT_HIGH_IMPACT_PATTERNS
+        ):
+            return True
+    return False
+
+
 def build_deterministic_assessment_facts(
     facts: Iterable[FactRevision],
     *,
@@ -206,10 +306,16 @@ def build_deterministic_assessment_facts(
     confirmed_ids = [
         fact.id for fact in by_key.values() if fact.status is FactStatus.CONFIRMED
     ]
-    text = _confirmed_text(by_key)
     has_owner = _confirmed(by_key, "users_and_owners", "process_owner", "owner")
+    data_text = " ".join(
+        _text(fact.value)
+        for key, fact in by_key.items()
+        if key in {"available_data", "data_sources"}
+        and fact.status is FactStatus.CONFIRMED
+    ).casefold()
     has_data = _confirmed(by_key, "available_data", "data_sources") and not any(
-        marker in text for marker in ("none", "not available", "沒有", "無資料")
+        marker in data_text
+        for marker in ("none", "not available", "沒有資料", "無資料", "尚無資料")
     )
     digitization = (
         DigitizationLevel.COMPLETE
@@ -244,7 +350,7 @@ def build_deterministic_assessment_facts(
             quality_known=_contains(by_key, "quality", "品質", "資料品質"),
             quality_sampled=_contains(by_key, "sample", "抽樣", "樣本"),
             quality_measured=_contains(by_key, "measured", "量測", "衡量"),
-            validation_sample_available=_contains(
+            validation_sample_available=_contains_positive(
                 by_key, "validation", "驗證集", "驗證樣本"
             ),
             representative_validation_sample=_contains(
@@ -254,10 +360,17 @@ def build_deterministic_assessment_facts(
         ),
         technical_fit=TechnicalFitFacts(
             evidence_ids=evidence,
-            ai_needed=not _contains(by_key, "rule only", "不需要 ai", "不需 ai"),
+            ai_needed=not _contains(
+                by_key,
+                "rule only",
+                "不需要 ai",
+                "不需 ai",
+                "不需要複雜自然語言",
+                "不需要自然語言",
+            ),
             technically_feasible=not _contains(by_key, "not feasible", "不可行"),
             traditional_solution_preferred=_contains(
-                by_key, "rule-based", "規則優先", "表單流程"
+                by_key, *_RULES_FIRST_SIGNAL_WORDS
             ),
             technical_path_defined=_contains(
                 by_key, "api", "integration", "整合", "架構"
@@ -333,7 +446,7 @@ def build_deterministic_assessment_facts(
             prohibited_use=_contains(by_key, "prohibited", "禁止用途"),
             high_impact_domain=(
                 HighImpactDomain.EMPLOYMENT
-                if _contains(by_key, "employment", "人事", "招募")
+                if _has_employment_high_impact_signal(by_key)
                 else HighImpactDomain.NONE
             ),
             autonomous_final_decision=selected_authority
@@ -369,7 +482,9 @@ def build_deterministic_assessment_facts(
             is ProcessingBoundary.EXTERNAL_ENDPOINT,
             data_available=has_data,
             digitization=digitization,
-            validation_sample_available=_contains(by_key, "validation", "驗證樣本"),
+            validation_sample_available=_contains_positive(
+                by_key, "validation", "驗證集", "驗證樣本"
+            ),
         ),
     )
 
@@ -454,9 +569,13 @@ def infer_opportunity_types(facts: Iterable[FactRevision]) -> tuple[object, ...]
     from ai_poc_planner.application.catalog_matching import match_opportunities
     from ai_poc_planner.domain.catalog import OpportunityMatchInput, OpportunityType
 
+    facts_tuple = tuple(facts)
+    by_key = _all_fact_map(facts_tuple)
+    if _contains(by_key, *_RULES_FIRST_SIGNAL_WORDS):
+        return ()
     signals = [
         _text(fact.value)
-        for fact in facts
+        for fact in facts_tuple
         if fact.status is FactStatus.CONFIRMED
         and fact.fact_key.strip().casefold() in _MATCHING_FACT_KEYS
         and _text(fact.value).strip()
@@ -488,7 +607,7 @@ def infer_opportunity_types(facts: Iterable[FactRevision]) -> tuple[object, ...]
             "meeting",
         ),
         OpportunityType.MARKETING_CONTENT_ASSIST: ("行銷", "文案", "marketing"),
-        OpportunityType.DEMAND_FORECASTING: ("預測", "庫存", "補貨", "forecast"),
+        OpportunityType.DEMAND_FORECASTING: ("庫存", "補貨", "需求預測", "forecast"),
         OpportunityType.PREDICTIVE_MAINTENANCE: (
             "設備",
             "故障",
@@ -498,7 +617,6 @@ def infer_opportunity_types(facts: Iterable[FactRevision]) -> tuple[object, ...]
         OpportunityType.ANOMALY_AND_RISK_DETECTION: (
             "詐欺",
             "異常",
-            "風險",
             "檢測",
             "fraud",
         ),
@@ -835,6 +953,29 @@ def rank_case_matches(
     return tuple(item[4] for item in ranked[:limit])
 
 
+def derive_recommendation_category(
+    facts: Iterable[FactRevision],
+    gate_results: Sequence[ProgramGateResult],
+) -> RecommendationCategory:
+    """Derive the formal route from facts and gates, not provider option choice."""
+
+    assessment_facts = build_deterministic_assessment_facts(facts)
+    gate_ids = {item.rule_id for item in gate_results}
+    if "HG-03" in gate_ids:
+        return RecommendationCategory.GOVERNED_ASSISTIVE
+    if (
+        assessment_facts.technical_fit.traditional_solution_preferred
+        and not assessment_facts.technical_fit.ai_needed
+    ):
+        return RecommendationCategory.RULES_FIRST
+    if (
+        not assessment_facts.data_readiness.data_available
+        or not assessment_facts.data_readiness.validation_sample_available
+    ):
+        return RecommendationCategory.READINESS_FIRST
+    return RecommendationCategory.AI_HYBRID
+
+
 def _practice(case_match: MatchedCaseAssessment) -> TransferablePractice | None:
     case = case_match.case
     source_text = case.solution_pattern or case.implementation_method
@@ -904,15 +1045,23 @@ def build_case_centered_assessment(
     gate_results: Sequence[ProgramGateResult],
     option_kind: str,
 ) -> CaseCenteredAssessment:
+    facts_tuple = tuple(facts)
     matches = rank_case_matches(
-        cases, facts, opportunity_types=opportunity_types, limit=3
+        cases, facts_tuple, opportunity_types=opportunity_types, limit=3
     )
     practices = [item for match in matches if (item := _practice(match)) is not None]
     impacts = [_gate_impact(gate) for gate in gate_results]
+    recommendation_category = derive_recommendation_category(facts_tuple, gate_results)
     case_ids = [match.case.case_id for match in matches]
     case_basis = [f"以 {match.case.title} 的來源證據作為主要參考" for match in matches]
     if not matches:
         case_basis = ["目前沒有通過審核且與需求相符的成熟案例。"]
+    fact_basis = [
+        f"已確認需求依據：{_text(fact.value)}"
+        for fact in facts_tuple
+        if fact.status is FactStatus.CONFIRMED
+        and fact.fact_key.strip().casefold() in _MATCHING_FACT_KEYS
+    ]
     gate_ids = [item.rule_id for item in impacts]
     constrained = bool(impacts)
     phases = [
@@ -999,7 +1148,11 @@ def build_case_centered_assessment(
         gate_impacts=impacts,
         phased_path=phases,
         recommendation_title=recommendation_title,
+        recommendation_category=recommendation_category,
         recommendation_basis=case_basis
+        + fact_basis
         + (["hard gate 只限制目前階段與自動化能力。"] if constrained else [])
-        + ([f"採用 {option_kind} 實施路徑的保守範圍。"] if not matches else []),
+        + (
+            [f"採用 {recommendation_title} 實施路徑的保守範圍。"] if not matches else []
+        ),
     )
