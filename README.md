@@ -209,6 +209,33 @@ FAISS, a provider, or case-derived scoring. Phase 5.2 adds a strict structured
 report draft, deterministic Markdown rendering, immutable reloadable storage,
 and report APIs; it does not add a Streamlit product UI.
 
+## Windows local runtime
+
+P7.1 provides a one-command, supervised local runtime for browser UAT. From
+the project directory run:
+
+```powershell
+.\scripts\start-local.ps1 -Mode Uat
+```
+
+The launcher requires this project's `.venv\Scripts\python.exe`; it never
+falls back to a system Python. It starts FastAPI and Streamlit, selects free
+ports in API `18610-18699` and UI `18501-18599`, validates API identity, opens
+the browser, and stops both child processes together on Ctrl+C or child failure.
+It does not use port 8000 as a product default.
+
+Persistent data is separate in `%LOCALAPPDATA%\AI-PoC-Planner` (Local) and
+`%LOCALAPPDATA%\AI-PoC-Planner-UAT` (Uat): SQLite, profile storage, safe state,
+and logs. Profiles/selection persist, while readiness intentionally returns to
+untested after a process restart. API keys retain the existing local plaintext
+MVP trade-off and are not written to launcher state or logs. This is not an
+installer, Windows auto-start, or release package.
+
+```powershell
+.\scripts\status-local.ps1 -Mode Uat
+.\scripts\stop-local.ps1 -Mode Uat
+```
+
 ## License
 
 MIT License. See [LICENSE](LICENSE).

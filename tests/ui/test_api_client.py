@@ -65,6 +65,32 @@ def test_history_and_status_use_only_the_public_http_api() -> None:
     ]
 
 
+def test_runtime_validation_rejects_other_application_and_old_instance() -> None:
+    wrong_app = _client(lambda _: httpx.Response(200, json={"application": "other"}))
+    with pytest.raises(ApiClientError, match="其他應用程式"):
+        wrong_app.validate_runtime("expected")
+
+    old_instance = _client(
+        lambda _: httpx.Response(
+            200,
+            json={
+                "application": "ai-poc-planner",
+                "api_contract_version": "1",
+                "instance_id": "old",
+            },
+        )
+    )
+    with pytest.raises(ApiClientError, match="舊的"):
+        old_instance.validate_runtime("expected")
+
+
+def test_client_without_launcher_configuration_never_falls_back_to_port_8000() -> None:
+    client = ApiClient()
+    with pytest.raises(ApiClientError) as caught:
+        client.list_projects()
+    assert caught.value.code == "runtime_configuration_missing"
+
+
 def test_profile_actions_send_safe_public_requests() -> None:
     requests: list[httpx.Request] = []
 

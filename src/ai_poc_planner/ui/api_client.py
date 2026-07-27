@@ -40,6 +40,18 @@ _USER_MESSAGES = {
     "understanding_already_confirmed": "需求理解已確認。",
     "understanding_confirmation_required": "請先確認或修正目前的需求理解。",
     "internal_error": "服務暫時無法完成此操作，請稍後再試。",
+    "runtime_configuration_missing": "應用程式尚未透過本機啟動器啟動。",
+    "local_service_unavailable": (
+        "AI PoC Planner 本機服務目前未運行，請重新執行啟動器。"
+    ),
+    "wrong_local_application": (
+        "目前端口連接到其他應用程式，AI PoC Planner 未使用該服務。"
+    ),
+    "runtime_instance_mismatch": (
+        "頁面連接到舊的 AI PoC Planner 服務，請關閉舊頁面並重新啟動應用程式。"
+    ),
+    "runtime_version_mismatch": "本機服務版本不相容，請重新啟動應用程式。",
+    "local_service_timeout": "AI PoC Planner 本機服務回應逾時，請重新執行啟動器。",
 }
 
 
@@ -52,12 +64,46 @@ class ApiClient:
         base_url: str | None = None,
         client: httpx.Client | None = None,
     ) -> None:
+        self._configuration_missing = client is None and not base_url
         self._client = client or httpx.Client(
-            base_url=base_url or "http://127.0.0.1:8000",
+            base_url=base_url or "http://127.0.0.1:1",
             timeout=httpx.Timeout(120.0, connect=5.0),
             follow_redirects=False,
             trust_env=False,
         )
+
+    def get_runtime_info(self) -> dict[str, Any]:
+        return self._object(self._request("GET", "/v1/runtime-info"))
+
+    def validate_runtime(self, expected_instance_id: str | None) -> dict[str, Any]:
+        if not expected_instance_id:
+            raise ApiClientError(
+                "runtime_configuration_missing",
+                _USER_MESSAGES["runtime_configuration_missing"],
+            )
+        try:
+            info = self.get_runtime_info()
+        except ApiClientError as error:
+            if error.code == "api_unavailable":
+                raise ApiClientError(
+                    "local_service_unavailable",
+                    _USER_MESSAGES["local_service_unavailable"],
+                ) from error
+            raise
+        if info.get("application") != "ai-poc-planner":
+            raise ApiClientError(
+                "wrong_local_application", _USER_MESSAGES["wrong_local_application"]
+            )
+        if info.get("api_contract_version") != "1":
+            raise ApiClientError(
+                "runtime_version_mismatch", _USER_MESSAGES["runtime_version_mismatch"]
+            )
+        if info.get("instance_id") != expected_instance_id:
+            raise ApiClientError(
+                "runtime_instance_mismatch",
+                _USER_MESSAGES["runtime_instance_mismatch"],
+            )
+        return info
 
     def list_projects(self) -> list[dict[str, Any]]:
         payload = self._request("GET", "/v1/projects")
@@ -272,9 +318,18 @@ class ApiClient:
         *,
         expected: set[int] | None = None,
     ) -> object:
+        if self._configuration_missing:
+            raise ApiClientError(
+                "runtime_configuration_missing",
+                _USER_MESSAGES["runtime_configuration_missing"],
+            )
         expected = expected or {200, 201}
         try:
             response = self._client.request(method, path, json=payload)
+        except httpx.TimeoutException as error:
+            raise ApiClientError(
+                "local_service_timeout", _USER_MESSAGES["local_service_timeout"]
+            ) from error
         except httpx.HTTPError as error:
             raise ApiClientError(
                 "api_unavailable", "目前無法連線到本機服務，請稍後再試。"

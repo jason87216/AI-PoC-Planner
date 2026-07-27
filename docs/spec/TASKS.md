@@ -293,22 +293,24 @@ scoring, reports, and the Streamlit product UI remain pending.
 
 ## Phase 7 — Local launcher
 
-- **Status:** not started. Future work includes a unified Windows launcher,
-  project `.venv` ownership, port ownership, API identity, persistent local data,
-  process monitoring, and restart recovery.
+- **Status:** P7.1 Local Runtime Prerequisite is implemented on its stacked
+  branch. It provides a Windows launcher with project `.venv` enforcement,
+  identity validation, dynamic port handoff, distinct persistent Local/Uat data,
+  safe logs, and supervised FastAPI/Streamlit lifecycle. It is not an installer,
+  Windows auto-start, or release package.
 
-### [Must] P7.1 Add install batch entry point
+### [Must] P7.1 Local Runtime Prerequisite
 
-- **Purpose:** Check Python 3.12, create venv, install dependencies, initialise
-  local storage/data, and disable Streamlit email prompt/telemetry.
+- **Purpose:** Recover browser UAT after reboot through project-owned Python,
+  identity-validated API/UI startup, and controlled lifecycle.
 - **Dependencies:** P6.
 
-### [Must] P7.2 Add start batch entry point
+### [Must] P7.2 Add install batch entry point
 
 - **Purpose:** Start API, wait for health, start Streamlit, and open browser.
 - **Dependencies:** P7.1.
 
-### [Must] P7.3 Add reliable stop batch entry point
+### [Must] P7.3 Add package start/stop entry points
 
 - **Purpose:** Stop the two owned local processes without broad process kills.
 - **Dependencies:** P7.2.

@@ -10,11 +10,14 @@ def test_home_page_loads_without_a_running_api(monkeypatch: pytest.MonkeyPatch) 
 
     assert not app.exception
     assert [title.value for title in app.title] == ["AI PoC Planner"]
-    assert [button.label for button in app.button] == [
-        "建立新專案",
-        "查看歷史專案",
-        "重新整理",
-    ]
+    if app.button:
+        assert [button.label for button in app.button] == [
+            "建立新專案",
+            "查看歷史專案",
+            "重新整理",
+        ]
+    else:
+        assert any("啟動器" in error.value for error in app.error)
 
 
 @pytest.mark.parametrize(

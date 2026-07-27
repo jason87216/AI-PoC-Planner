@@ -60,6 +60,25 @@ def test_health_is_available_without_exposing_model_configuration() -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_runtime_info_is_a_secret_free_application_identity() -> None:
+    client = TestClient(
+        create_app(
+            chat_model=_model_for(_ready_intent()),
+            runtime_mode="uat",
+            instance_id="expected-instance",
+        )
+    )
+
+    response = client.get("/v1/runtime-info")
+
+    assert response.status_code == 200
+    assert response.json()["application"] == "ai-poc-planner"
+    assert response.json()["api_contract_version"] == "1"
+    assert response.json()["instance_id"] == "expected-instance"
+    assert "api_key" not in response.text
+    assert "database" not in response.text
+
+
 def test_api_returns_only_the_actual_typed_tool_evaluation() -> None:
     client = TestClient(create_app(chat_model=_model_for(_ready_intent())))
 
