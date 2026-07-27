@@ -93,6 +93,11 @@ class ApiClient:
             self._request("POST", f"/v1/model-profiles/{profile_id}/test")
         )
 
+    def profile_status(self, profile_id: str) -> dict[str, Any]:
+        return self._object(
+            self._request("GET", f"/v1/model-profiles/{profile_id}/status")
+        )
+
     def create_discovery_project(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         return self._object(self._request("POST", "/v1/discovery-projects", payload))
 

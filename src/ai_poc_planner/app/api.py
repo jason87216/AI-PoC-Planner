@@ -233,6 +233,12 @@ class DiscoveryProjectResponse(ContractModel):
     normalized_brief: NormalizedInitialBrief
 
 
+class DiscoveryProjectCreateRequest(InitialBrief):
+    """Initial brief plus the safe reference to the profile chosen for this project."""
+
+    model_profile_id: UUID | None = None
+
+
 def _error_response(
     status_code: int,
     code: str,
@@ -382,6 +388,7 @@ def create_app(
                 sessions=SQLiteDiscoveryRepository(connection),
                 readiness=readiness,
                 selected_profile_getter=profile_repository.get_selected,
+                profile_getter=profile_repository.get,
                 adapter_factory=interview_adapter_factory or default_interview_adapter,
             )
         finally:
@@ -404,6 +411,7 @@ def create_app(
                 analyses=SQLiteAnalysisRepository(connection),
                 readiness=readiness,
                 selected_profile_getter=profile_repository.get_selected,
+                profile_getter=profile_repository.get,
                 adapter_factory=analysis_adapter_factory or default_analysis_adapter,
             )
         finally:
@@ -425,6 +433,7 @@ def create_app(
                 reports=SQLitePlanningReportRepository(connection),
                 readiness=readiness,
                 selected_profile_getter=profile_repository.get_selected,
+                profile_getter=profile_repository.get,
                 adapter_factory=analysis_adapter_factory or default_analysis_adapter,
                 cases_path=Path(__file__).resolve().parents[3]
                 / "data"
@@ -597,6 +606,13 @@ def create_app(
     def test_model_profile(profile_id: UUID) -> ProviderConnectionStatus:
         return readiness.test(profile_id)
 
+    @app.get(
+        "/v1/model-profiles/{profile_id}/status",
+        response_model=ProviderConnectionStatus,
+    )
+    def model_profile_status(profile_id: UUID) -> ProviderConnectionStatus:
+        return readiness.status_for(profile_repository.get(profile_id))
+
     @app.get("/v1/provider-status", response_model=ProviderConnectionStatus)
     def selected_provider_status() -> ProviderConnectionStatus:
         status = readiness.selected_status()
@@ -615,10 +631,18 @@ def create_app(
         response_model=DiscoveryProjectResponse,
         status_code=201,
     )
-    def create_discovery_project(request: InitialBrief) -> DiscoveryProjectResponse:
+    def create_discovery_project(
+        request: DiscoveryProjectCreateRequest,
+    ) -> DiscoveryProjectResponse:
         with discovery_flow() as discovery:
+            profile = (
+                profile_repository.get(request.model_profile_id)
+                if request.model_profile_id is not None
+                else None
+            )
             project, version, session, normalized = discovery.create_initial_brief(
-                request
+                InitialBrief(**request.model_dump(exclude={"model_profile_id"})),
+                selected_profile=profile,
             )
             return DiscoveryProjectResponse(
                 project=project,

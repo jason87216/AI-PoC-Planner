@@ -120,6 +120,7 @@ class DiscoveryInterviewService:
         sessions: SQLiteDiscoveryRepository,
         readiness: ProviderReadinessService,
         selected_profile_getter: Callable[[], ModelProfile | None],
+        profile_getter: Callable[[UUID], ModelProfile] | None = None,
         adapter_factory: Callable[[ModelProfile], InterviewCompletionAdapter],
         clock: Callable[[], datetime] = _utc_now,
         uuid_factory: Callable[[], UUID] = uuid4,
@@ -128,20 +129,26 @@ class DiscoveryInterviewService:
         self._sessions = sessions
         self._readiness = readiness
         self._selected_profile_getter = selected_profile_getter
+        self._profile_getter = profile_getter
         self._adapter_factory = adapter_factory
         self._clock = clock
         self._uuid_factory = uuid_factory
 
     def create_initial_brief(
-        self, brief: InitialBrief
+        self, brief: InitialBrief, selected_profile: ModelProfile | None = None
     ) -> tuple[object, ProjectVersion, DiscoverySession, NormalizedInitialBrief]:
-        self._readiness.require_formal_analysis_ready()
+        if selected_profile is None:
+            self._readiness.require_formal_analysis_ready()
+        else:
+            self._readiness.require_profile_ready(selected_profile.id)
         available_status = normalize_available_data(brief.available_data)
         normalized = NormalizedInitialBrief(
             **brief.model_dump(), available_data_status=available_status
         )
         with self._history._repository.transaction():
-            project, version = self._history.create_project(brief.project_name)
+            project, version = self._history.create_project(
+                brief.project_name, selected_profile
+            )
             message = self._history.append_message(
                 project.id,
                 version.version_number,
@@ -702,7 +709,6 @@ class DiscoveryInterviewService:
     def _require_model_ready_version(
         self, project_id: UUID, version_number: int
     ) -> ProjectVersion:
-        self._readiness.require_formal_analysis_ready()
         version = self._history.get_version(project_id, version_number)
         latest = self._history._repository.get_latest_version(project_id)
         if latest.id != version.id:
@@ -713,7 +719,7 @@ class DiscoveryInterviewService:
             raise CurrentVersionRequiredError(
                 "completed versions cannot enter discovery"
             )
-        profile = self._selected_profile_getter()
+        profile = self._profile_for_version(version)
         if (
             profile is None
             or version.selected_model is None
@@ -722,6 +728,31 @@ class DiscoveryInterviewService:
         ):
             raise DiscoveryError("provider_profile_mismatch")
         return version
+
+    def _profile_for_version(self, version: ProjectVersion) -> ModelProfile | None:
+        snapshot = version.selected_model
+        if snapshot is None:
+            return None
+        try:
+            profile = (
+                self._profile_getter(snapshot.profile_id)
+                if self._profile_getter is not None
+                else self._selected_profile_getter()
+            )
+        except Exception:
+            return None
+        if (
+            profile is None
+            or profile.id != snapshot.profile_id
+            or profile.model_name != snapshot.model_name
+            or not profile.is_enabled
+        ):
+            return None
+        try:
+            self._readiness.require_profile_ready(profile.id)
+        except Exception:
+            return None
+        return profile
 
     def _call_structured(
         self,
@@ -737,7 +768,7 @@ class DiscoveryInterviewService:
         name or base URL.
         """
 
-        profile = self._selected_profile_getter()
+        profile = self._profile_for_version(version)
         if profile is None:
             raise DiscoveryError("provider_not_ready")
         adapter = self._adapter_factory(profile)
