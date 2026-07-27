@@ -172,6 +172,7 @@ _ANALYSIS_RESULT_COLUMNS = frozenset(
         "conclusion_rationale",
         "overall_risks_json",
         "unresolved_gaps_json",
+        "case_centered_json",
     }
 )
 _ANALYSIS_OPTION_COLUMNS = frozenset(
@@ -346,7 +347,8 @@ CREATE TABLE IF NOT EXISTS planning_analysis_results (
     requirement_summary TEXT NOT NULL,
     conclusion_rationale TEXT NOT NULL,
     overall_risks_json TEXT NOT NULL,
-    unresolved_gaps_json TEXT NOT NULL
+    unresolved_gaps_json TEXT NOT NULL,
+    case_centered_json TEXT
 )
 """
 _CREATE_ANALYSIS_OPTIONS_TABLE = """
@@ -667,6 +669,19 @@ def _validate_current_schema(connection: sqlite3.Connection) -> None:
     _validate_phase_five_tables(connection)
 
 
+def _ensure_case_centered_column(connection: sqlite3.Connection) -> None:
+    """Add the additive result payload to an existing v6 database."""
+
+    columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(planning_analysis_results)")
+    }
+    if columns and "case_centered_json" not in columns:
+        connection.execute(
+            "ALTER TABLE planning_analysis_results ADD COLUMN case_centered_json TEXT"
+        )
+
+
 def _validate_columns(
     connection: sqlite3.Connection,
     table: str,
@@ -811,6 +826,7 @@ def initialize_database(connection: sqlite3.Connection) -> None:
 
     if version == CURRENT_SCHEMA_VERSION:
         try:
+            _ensure_case_centered_column(connection)
             _validate_current_schema(connection)
         except SchemaMismatchError:
             raise

@@ -32,6 +32,11 @@ class SQLiteAnalysisRepository:
         if row is None:
             return None
         try:
+            case_centered_json = (
+                row["case_centered_json"]
+                if "case_centered_json" in row.keys()
+                else None
+            )
             options = [
                 json.loads(item[0])
                 for item in self._connection.execute(
@@ -95,6 +100,9 @@ class SQLiteAnalysisRepository:
                     "overall_risks": json.loads(row["overall_risks_json"]),
                     "unresolved_gaps": json.loads(row["unresolved_gaps_json"]),
                     "created_at": row["created_at"],
+                    "case_centered": (
+                        json.loads(case_centered_json) if case_centered_json else None
+                    ),
                 }
             )
         except (json.JSONDecodeError, KeyError, TypeError, ValidationError) as error:
@@ -108,8 +116,9 @@ class SQLiteAnalysisRepository:
                 "INSERT INTO planning_analysis_results "
                 "(id, version_id, rubric_version, hard_gate_version, model_conclusion, "
                 "recommended_option_key, weighted_total, gate_disposition, created_at, "
-                "requirement_summary, conclusion_rationale, overall_risks_json, unresolved_gaps_json) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "requirement_summary, conclusion_rationale, overall_risks_json, "
+                "unresolved_gaps_json, case_centered_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     str(result.id),
                     str(result.version_id),
@@ -124,6 +133,9 @@ class SQLiteAnalysisRepository:
                     result.conclusion_rationale,
                     _json(result.overall_risks),
                     _json(result.unresolved_gaps),
+                    _json(result.case_centered.model_dump(mode="json"))
+                    if result.case_centered is not None
+                    else None,
                 ),
             )
             for position, option in enumerate(result.options, start=1):

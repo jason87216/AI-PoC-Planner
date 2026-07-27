@@ -8,21 +8,26 @@ import json
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
+from ai_poc_planner.application.case_centered_assessment import (
+    build_case_centered_assessment,
+    build_deterministic_gate_evaluation,
+    build_deterministic_scores,
+    infer_opportunity_types,
+)
 from ai_poc_planner.application.discovery_interview import (
     InterviewCompletionAdapter,
 )
 from ai_poc_planner.application.project_history import ProjectHistoryService
 from ai_poc_planner.application.provider_readiness import ProviderReadinessService
-from ai_poc_planner.assessment.gates import evaluate_hard_gates
 from ai_poc_planner.domain.analysis import (
     AIAnalysisDraft,
     FactToken,
     ProgramGateResult,
-    ProgramScore,
     ValidatedAnalysisResult,
 )
 from ai_poc_planner.domain.enums import (
@@ -33,18 +38,16 @@ from ai_poc_planner.domain.enums import (
     HighImpactDomain,
     ProcessingBoundary,
     ProjectStatus,
+    ScoreDimension,
 )
 from ai_poc_planner.domain.facts import GateFacts
-from ai_poc_planner.domain.models import SCORE_WEIGHTS
 from ai_poc_planner.domain.project_history import FactRevision, ProjectVersion
 from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import CurrentVersionRequiredError
 from ai_poc_planner.providers.analysis_contracts import (
-    StageCOutput,
     option_detail_contract,
     stage_a0_contract,
-    stage_b_contract,
 )
 from ai_poc_planner.providers.json_schema import normalize_provider_schema
 from ai_poc_planner.providers.openai_compatible import (
@@ -80,6 +83,7 @@ class EvidenceAnalysisService:
         selected_profile_getter: Callable[[], ModelProfile | None],
         profile_getter: Callable[[UUID], ModelProfile] | None = None,
         adapter_factory: Callable[[ModelProfile], InterviewCompletionAdapter],
+        cases_path: Path | None = None,
         clock: Callable[[], datetime] = _utc_now,
         uuid_factory: Callable[[], UUID] = uuid4,
     ) -> None:
@@ -92,6 +96,9 @@ class EvidenceAnalysisService:
         self._adapter_factory = adapter_factory
         self._clock = clock
         self._uuid_factory = uuid_factory
+        self._cases_path = cases_path or (
+            Path(__file__).resolve().parents[3] / "data" / "reviewed_cases.json"
+        )
 
     def get(self, project_id: UUID, version_number: int) -> ValidatedAnalysisResult:
         version = self._history.get_version(project_id, version_number)
@@ -101,6 +108,10 @@ class EvidenceAnalysisService:
         return result
 
     def create(self, project_id: UUID, version_number: int) -> ValidatedAnalysisResult:
+        version = self._history.get_version(project_id, version_number)
+        existing = self._analyses.get_by_version(version.id)
+        if existing is not None:
+            return existing
         version, facts, tokens = self._require_ready(project_id, version_number)
         profile = self._require_profile(version)
         catalog = self._analysis_prompt(version, facts, tokens)
@@ -117,35 +128,12 @@ class EvidenceAnalysisService:
             )
             for index, skeleton in enumerate(stage_a.options, 1)
         ]
-        stage_b = self._call_stage(
-            profile,
-            "analysis_rubric",
-            stage_b_contract(confirmed_tokens, gap_tokens),
-            {
-                "catalog": catalog,
-                "options": self._stage_options_payload(stage_a, option_details),
-                "recommended_option_key": self._option_key(
-                    stage_a.recommended_option_index
-                ),
-            },
-        )
-        stage_c = self._call_stage(
-            profile,
-            "analysis_gates",
-            StageCOutput,
-            {
-                "catalog": catalog,
-                "recommended_option": next(
-                    item
-                    for item in self._stage_options_payload(stage_a, option_details)
-                    if item["option_key"]
-                    == self._option_key(stage_a.recommended_option_index)
-                ),
-            },
-        )
-        draft = self._to_domain_draft(stage_a, option_details, stage_b, stage_c)
+        # Scores and gates are program-owned. The provider is only used for
+        # structured option/narrative content; no provider rubric or gate result
+        # is accepted as a formal assessment value.
+        draft = self._to_domain_draft(stage_a, option_details, facts, tokens)
         self._validate_references(draft, facts, tokens)
-        result = self._validated_result(version, draft)
+        result = self._validated_result(version, draft, facts, tokens)
         with self._history._repository.transaction():
             current = sorted(
                 self._history.list_current_facts(project_id, version_number),
@@ -356,7 +344,7 @@ class EvidenceAnalysisService:
         ]
 
     @staticmethod
-    def _to_domain_draft(stage_a, details, stage_b, stage_c) -> AIAnalysisDraft:
+    def _to_domain_draft(stage_a, details, facts, tokens) -> AIAnalysisDraft:
         options = []
         for index, (skeleton, detail) in enumerate(
             zip(stage_a.options, details, strict=True), 1
@@ -393,67 +381,31 @@ class EvidenceAnalysisService:
             else:
                 data["ai_opportunity"] = None
             options.append(data)
-        signals = []
-        signal_names = {
-            "authorization": "authorization",
-            "lawful_basis": "lawful_basis",
-            "prohibited_use": "prohibited_use",
-            "personal_data": "personal_or_sensitive_data",
-            "minimization_control": "minimization",
-            "retention_control": "retention",
-            "access_control": "access_control",
-            "security_controls": "security_controls",
-            "governance_controls": "governance_controls",
-            "audit_controls": "audit_controls",
-            "data_available": "data_availability",
-            "validation_sample_available": "validation_sample",
-        }
-        for name, signal in stage_c.model_dump().items():
-            if name == "schema_version" or not isinstance(signal, dict):
-                continue
-            mapped_name = signal_names.get(name)
-            if mapped_name is None:
-                continue
-            signals.append(
-                {
-                    "signal_name": mapped_name,
-                    "value": {
-                        "confirmed_yes": "confirmed",
-                        "confirmed_no": "denied",
-                        "unknown": "unknown",
-                    }[signal["state"]],
-                    "fact_refs": signal["fact_refs"],
-                    "rationale": signal["rationale"],
-                }
-            )
-        signals.extend(
-            [
-                {
-                    "signal_name": "high_impact_domain",
-                    "value": stage_c.high_impact_domain
-                    if stage_c.high_impact_domain != "unknown"
-                    else "other_high_impact",
-                    "fact_refs": [stage_a.recommendation_fact_refs[0]],
-                    "rationale": "Stage C classified impact.",
-                },
-                {
-                    "signal_name": "data_boundary",
-                    "value": stage_c.data_boundary
-                    if stage_c.data_boundary != "unknown"
-                    else "local_only",
-                    "fact_refs": [stage_a.recommendation_fact_refs[0]],
-                    "rationale": "Stage C classified boundary.",
-                },
-                {
-                    "signal_name": "digitization",
-                    "value": stage_c.digitization
-                    if stage_c.digitization != "unknown"
-                    else "none",
-                    "fact_refs": [stage_a.recommendation_fact_refs[0]],
-                    "rationale": "Stage C classified digitization.",
-                },
-            ]
+        confirmed_tokens = tuple(
+            token
+            for token, fact_id in tokens.items()
+            if next(fact for fact in facts if fact.id == fact_id).status
+            is FactStatus.CONFIRMED
         )
+        gap_tokens = tuple(
+            token
+            for token, fact_id in tokens.items()
+            if next(fact for fact in facts if fact.id == fact_id).status
+            in {FactStatus.UNKNOWN, FactStatus.MISSING}
+        )
+        rubric_ratings = [
+            {
+                "dimension": dimension.value,
+                "rating": 3,
+                "rationale": "正式評分由 deterministic assessment engine 依確認事實計算。",
+                "evidence_fact_refs": [confirmed_tokens[0]],
+                "gap_fact_refs": list(gap_tokens),
+                "data_gaps": [],
+                "risks": [],
+                "improvement_conditions": ["由程式依確認事實重新計算。"],
+            }
+            for dimension in ScoreDimension
+        ]
         return AIAnalysisDraft.model_validate(
             {
                 "schema_version": "1.0",
@@ -467,11 +419,8 @@ class EvidenceAnalysisService:
                 ),
                 "conclusion_rationale": stage_a.recommendation_rationale,
                 "conclusion_fact_refs": stage_a.recommendation_fact_refs,
-                "rubric_ratings": [
-                    {"dimension": dimension, **rating}
-                    for dimension, rating in stage_b.model_dump(mode="json").items()
-                ],
-                "gate_signals": signals,
+                "rubric_ratings": rubric_ratings,
+                "gate_signals": [],
                 "overall_risks": [],
                 "unresolved_gaps": [],
             }
@@ -611,23 +560,23 @@ class EvidenceAnalysisService:
             resolve(signal.fact_refs)
 
     def _validated_result(
-        self, version: ProjectVersion, draft: AIAnalysisDraft
+        self,
+        version: ProjectVersion,
+        draft: AIAnalysisDraft,
+        facts: list[FactRevision],
+        tokens: dict[str, UUID],
     ) -> ValidatedAnalysisResult:
-        scores = [
-            ProgramScore(
-                **rating.model_dump(),
-                weight=SCORE_WEIGHTS[rating.dimension],
-                weighted_points=rating.rating * SCORE_WEIGHTS[rating.dimension] // 5,
-            )
-            for rating in draft.rubric_ratings
-        ]
+        scores, weighted_total = build_deterministic_scores(facts, tokens)
         selected = next(
             item
             for item in draft.options
             if item.option_key == draft.recommended_option_key
         )
-        gate_facts = self._gate_facts(selected, draft)
-        evaluation = evaluate_hard_gates(gate_facts)
+        evaluation = build_deterministic_gate_evaluation(
+            facts,
+            selected_authority=selected.decision_authority,
+            selected_boundary=selected.processing_boundary,
+        )
         gates = sorted(
             [
                 ProgramGateResult(
@@ -636,16 +585,38 @@ class EvidenceAnalysisService:
                     reason=item.reason,
                     required_controls=item.required_controls,
                     human_review_required=item.human_review_required,
+                    affected_stage=(
+                        "目前階段與第一階段 PoC"
+                        if item.disposition.value == "blocked"
+                        else "第一階段 PoC"
+                    ),
+                    release_conditions=item.required_controls,
                 )
                 for item in evaluation.triggered
             ],
             key=lambda item: item.rule_id,
         )
+        # Matching is deliberately independent from model-generated options.
+        # Only confirmed project facts may select the reviewed-case catalogue.
+        opportunity_types = list(infer_opportunity_types(facts))
+        recommendation_title = self._recommendation_title(selected, opportunity_types)
+        from ai_poc_planner.infrastructure.local_case_repository import (
+            LocalCaseRepository,
+        )
+
+        case_centered = build_case_centered_assessment(
+            cases=LocalCaseRepository(self._cases_path).load(),
+            facts=facts,
+            opportunity_types=opportunity_types,
+            recommendation_title=recommendation_title,
+            gate_results=gates,
+            option_kind=selected.option_kind.value,
+        )
         return ValidatedAnalysisResult(
             id=self._uuid_factory(),
             version_id=version.id,
             rubric_version="1.0",
-            hard_gate_version="legacy-1",
+            hard_gate_version="case-centered-1",
             requirement_summary=draft.requirement_summary,
             options=draft.options,
             recommended_option_key=draft.recommended_option_key,
@@ -653,13 +624,35 @@ class EvidenceAnalysisService:
             conclusion_rationale=draft.conclusion_rationale,
             conclusion_fact_refs=sorted(draft.conclusion_fact_refs),
             scores=scores,
-            weighted_total=sum(item.weighted_points for item in scores),
+            weighted_total=weighted_total,
             gate_results=gates,
             gate_disposition=evaluation.disposition,
             overall_risks=draft.overall_risks,
             unresolved_gaps=draft.unresolved_gaps,
             created_at=self._clock(),
+            case_centered=case_centered,
         )
+
+    @staticmethod
+    def _recommendation_title(selected, opportunity_types) -> str:
+        if selected.option_kind.value == "foundations_first":
+            return "資料基礎建設優先路線"
+        if selected.option_kind.value == "non_ai":
+            return "流程標準化與規則檢查路線"
+        labels = {
+            "customer_service_assist": "客服知識檢索與人工回覆輔助",
+            "enterprise_knowledge_and_professional_document_assist": "文件知識檢索與人工審核輔助",
+            "document_classification_and_extraction": "文件分類與人工覆核輔助",
+            "recruiting_process_assist": "招募流程整理與人工決策輔助",
+        }
+        for item in opportunity_types:
+            key = getattr(item, "value", str(item))
+            if key in labels:
+                return labels[key]
+        title = str(selected.title)
+        if title.casefold().startswith(("option", "ai option", "candidate")):
+            return "混合式流程改善路線"
+        return title
 
     @staticmethod
     def _gate_facts(selected: object, draft: AIAnalysisDraft) -> GateFacts:

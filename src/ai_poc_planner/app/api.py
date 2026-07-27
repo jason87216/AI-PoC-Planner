@@ -433,6 +433,9 @@ def create_app(
                 selected_profile_getter=profile_repository.get_selected,
                 profile_getter=profile_repository.get,
                 adapter_factory=analysis_adapter_factory or default_analysis_adapter,
+                cases_path=Path(__file__).resolve().parents[3]
+                / "data"
+                / "reviewed_cases.json",
             )
         finally:
             connection.close()
