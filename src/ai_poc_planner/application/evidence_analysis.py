@@ -78,6 +78,7 @@ class EvidenceAnalysisService:
         analyses: SQLiteAnalysisRepository,
         readiness: ProviderReadinessService,
         selected_profile_getter: Callable[[], ModelProfile | None],
+        profile_getter: Callable[[UUID], ModelProfile] | None = None,
         adapter_factory: Callable[[ModelProfile], InterviewCompletionAdapter],
         clock: Callable[[], datetime] = _utc_now,
         uuid_factory: Callable[[], UUID] = uuid4,
@@ -87,6 +88,7 @@ class EvidenceAnalysisService:
         self._analyses = analyses
         self._readiness = readiness
         self._selected_profile_getter = selected_profile_getter
+        self._profile_getter = profile_getter
         self._adapter_factory = adapter_factory
         self._clock = clock
         self._uuid_factory = uuid_factory
@@ -523,11 +525,21 @@ class EvidenceAnalysisService:
 
     def _require_profile(self, version: ProjectVersion) -> ModelProfile:
         try:
-            self._readiness.require_formal_analysis_ready()
+            snapshot = version.selected_model
+            if snapshot is None:
+                raise EvidenceAnalysisError("provider_profile_mismatch")
+            self._readiness.require_profile_ready(snapshot.profile_id)
         except Exception as error:
             raise EvidenceAnalysisError("provider_not_ready") from error
-        profile = self._selected_profile_getter()
         snapshot = version.selected_model
+        try:
+            profile = (
+                self._profile_getter(snapshot.profile_id)
+                if self._profile_getter is not None and snapshot is not None
+                else self._selected_profile_getter()
+            )
+        except Exception:
+            profile = None
         if (
             profile is None
             or snapshot is None

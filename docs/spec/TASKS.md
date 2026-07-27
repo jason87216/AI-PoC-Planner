@@ -262,7 +262,40 @@ scoring, reports, and the Streamlit product UI remain pending.
   persisted Markdown report views without internal identifiers. Full cross-phase
   UAT remains deferred to Phase 8.
 
+### [Must] P6.4 Discovery UX Closeout
+
+- **Status:** implemented. Product Discovery UI no longer exposes fact-level
+  governance. It accepts natural-language correction and free supplementary
+  input, keeps project name/version/phase visible, renders requirement
+  understanding in a bordered card with confirmation/modification actions, and
+  generates interview questions inline after confirmation or a saved answer.
+  Prompts request complete Traditional Chinese understanding and prioritize
+  reviewed-case matching/gap inputs over fact completion. Project-centred
+  navigation now provides four global entry points only: Home, New project,
+  Project history, and Model settings. Discovery, assessment, and reports are
+  internal project-workspace stages rather than global features. New-project
+  routing survives refresh, binds a selected tested model profile to the saved
+  version, and project copy pre-fills only the initial brief. Headed Chrome UAT
+  covered the route refresh, readiness, workspace, Discovery, history, and copy
+  flow. No new-version feature is implemented.
+
+### [Must] P6.5 Navigation, Results and Error-State Closeout
+
+- **Status:** not started. Direction: make reviewed cases the centre of the
+  assessment path: user needs → deterministic reviewed-case matching → case
+  reference value → project-to-case fit → critical gaps → transferable practices
+  → hard gates that constrain the current stage → traceable implementation path.
+  Scores must not mean that AI generated and then rated its own option. Future
+  work separates case evidence value, project-to-case fit, and critical gaps;
+  it also includes independent model-settings editing, history empty/error
+  states, durable result selection, readable option kinds/hard-gate names,
+  reviewed-case details, specific safe errors, and global navigation/layout cleanup.
+
 ## Phase 7 — Local launcher
+
+- **Status:** not started. Future work includes a unified Windows launcher,
+  project `.venv` ownership, port ownership, API identity, persistent local data,
+  process monitoring, and restart recovery.
 
 ### [Must] P7.1 Add install batch entry point
 

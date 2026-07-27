@@ -3,6 +3,7 @@
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.navigation import open_workspace
 from ai_poc_planner.ui.presentation import show_api_error, status_label
 from ai_poc_planner.ui.runtime import load_projects, refresh_api_data
 
@@ -14,37 +15,53 @@ def _selection_label(project: dict[str, object]) -> str:
     return f"{project.get('project_name')} · 第 {project.get('version_number')} 版"
 
 
+def _action_label(status: object) -> str:
+    return {
+        "draft": "繼續處理",
+        "interviewing": "繼續處理",
+        "clarification_required": "繼續處理",
+        "ready_for_assessment": "繼續評估",
+        "assessed": "查看專案",
+        "proposal_generated": "查看專案",
+        "complete": "查看專案",
+        "failed": "查看問題",
+    }.get(str(status), "查看專案")
+
+
 if st.button("重新整理歷史", icon=":material/refresh:"):
     refresh_api_data()
     st.rerun()
 
 history_slot = st.container()
+projects: list[dict[str, object]] | None
 with history_slot.skeleton():
     try:
         projects = load_projects()
     except ApiClientError as error:
         show_api_error(error)
-        projects = []
+        projects = None
 
+if projects is None:
+    st.stop()
 if not projects:
     st.info("目前沒有可顯示的專案歷史。")
 else:
-    rows = [
-        {
-            "專案": project.get("project_name"),
-            "版本": project.get("version_number"),
-            "狀態": status_label(project.get("status")),
-            "模型設定": project.get("profile_name") or "尚未選擇",
-            "模型": project.get("model_name") or "—",
-            "最近更新": project.get("updated_at"),
-        }
-        for project in projects
-    ]
-    st.dataframe(rows, hide_index=True)
-    selected = st.selectbox("選擇要查看的規劃", projects, format_func=_selection_label)
-    if st.button("查看評估與報告", icon=":material/insights:"):
-        st.session_state["selected_project"] = {
-            "project_id": selected.get("project_id"),
-            "version_number": selected.get("version_number"),
-        }
-        st.switch_page("app_pages/results.py")
+    for project in projects:
+        with st.container(border=True):
+            st.subheader(_selection_label(project))
+            st.caption(
+                f"{status_label(project.get('status'))}｜最近更新：{project.get('updated_at')}"
+            )
+            st.write("可回看既有需求與目前工作階段。")
+            if st.button(
+                _action_label(project.get("status")),
+                key=f"open_project_{project.get('project_id')}",
+                icon=":material/folder_open:",
+            ):
+                st.session_state["selected_project"] = {
+                    "project_id": project.get("project_id"),
+                    "version_number": project.get("version_number"),
+                }
+                open_workspace(
+                    str(project.get("project_id")), int(project.get("version_number"))
+                )

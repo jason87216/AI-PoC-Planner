@@ -1,5 +1,7 @@
 """Phase 3 real-provider discovery workflow with durable visible evidence only."""
 
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import json
@@ -20,6 +22,7 @@ from ai_poc_planner.domain.discovery import (
     InterviewQuestion,
     InterviewRoundAnswerSubmission,
     InterviewRoundOutput,
+    NaturalLanguageFeedback,
     NormalizedInitialBrief,
     RequirementUnderstanding,
     UnderstandingCorrectionSubmission,
@@ -117,6 +120,7 @@ class DiscoveryInterviewService:
         sessions: SQLiteDiscoveryRepository,
         readiness: ProviderReadinessService,
         selected_profile_getter: Callable[[], ModelProfile | None],
+        profile_getter: Callable[[UUID], ModelProfile] | None = None,
         adapter_factory: Callable[[ModelProfile], InterviewCompletionAdapter],
         clock: Callable[[], datetime] = _utc_now,
         uuid_factory: Callable[[], UUID] = uuid4,
@@ -125,20 +129,26 @@ class DiscoveryInterviewService:
         self._sessions = sessions
         self._readiness = readiness
         self._selected_profile_getter = selected_profile_getter
+        self._profile_getter = profile_getter
         self._adapter_factory = adapter_factory
         self._clock = clock
         self._uuid_factory = uuid_factory
 
     def create_initial_brief(
-        self, brief: InitialBrief
+        self, brief: InitialBrief, selected_profile: ModelProfile | None = None
     ) -> tuple[object, ProjectVersion, DiscoverySession, NormalizedInitialBrief]:
-        self._readiness.require_formal_analysis_ready()
+        if selected_profile is None:
+            self._readiness.require_formal_analysis_ready()
+        else:
+            self._readiness.require_profile_ready(selected_profile.id)
         available_status = normalize_available_data(brief.available_data)
         normalized = NormalizedInitialBrief(
             **brief.model_dump(), available_data_status=available_status
         )
         with self._history._repository.transaction():
-            project, version = self._history.create_project(brief.project_name)
+            project, version = self._history.create_project(
+                brief.project_name, selected_profile
+            )
             message = self._history.append_message(
                 project.id,
                 version.version_number,
@@ -373,6 +383,63 @@ class DiscoveryInterviewService:
             self._sessions.update_session(session)
         return session
 
+    def submit_natural_language_feedback(
+        self,
+        project_id: UUID,
+        version_number: int,
+        feedback: NaturalLanguageFeedback,
+    ) -> DiscoverySession:
+        """Persist one authoritative user correction without a UI fact editor."""
+
+        version = self._history.get_version(project_id, version_number)
+        session = self._sessions.get_session_for_version(version.id)
+        if (
+            session.status
+            is not DiscoverySessionStatus.AWAITING_UNDERSTANDING_CONFIRMATION
+        ):
+            raise InvalidInterviewTransitionError(
+                "feedback requires pending understanding"
+            )
+        with self._history._repository.transaction():
+            message = self._history.append_message(
+                project_id,
+                version_number,
+                role=InterviewRole.USER,
+                message_kind=VisibleMessageKind.CORRECTION.value,
+                content=feedback.feedback,
+            )
+            current = {
+                fact.fact_key: fact
+                for fact in self._history.list_current_facts(project_id, version_number)
+            }
+            existing = current.get("user_requirement_feedback")
+            if existing is None:
+                self._history.record_user_confirmed_fact(
+                    project_id,
+                    version_number,
+                    fact_key="user_requirement_feedback",
+                    value=feedback.feedback,
+                    reference_message_ids=[message.id],
+                )
+            else:
+                self._history.correct_fact(
+                    project_id,
+                    version_number,
+                    existing.id,
+                    status=FactStatus.CONFIRMED,
+                    value=feedback.feedback,
+                    correction_reason="使用者以自然語言修正需求理解。",
+                    reference_message_ids=[message.id],
+                )
+            updated = session.model_copy(
+                update={
+                    "status": DiscoverySessionStatus.CORRECTION_PENDING,
+                    "updated_at": self._clock(),
+                }
+            )
+            self._sessions.update_session(updated)
+        return updated
+
     def generate_round(
         self, project_id: UUID, version_number: int
     ) -> tuple[DiscoverySession, list[InterviewQuestion]]:
@@ -541,8 +608,23 @@ class DiscoveryInterviewService:
                     correction_reason=correction.correction_reason,
                     reference_message_ids=[correction_message.id],
                 )
+            if submission.supplementary_note:
+                note_message = self._history.append_message(
+                    project_id,
+                    version_number,
+                    role=InterviewRole.USER,
+                    message_kind=VisibleMessageKind.USER_INPUT.value,
+                    content=submission.supplementary_note,
+                )
+                self._history.record_user_confirmed_fact(
+                    project_id,
+                    version_number,
+                    fact_key=f"supplementary_note_round_{session.current_round}",
+                    value=submission.supplementary_note,
+                    reference_message_ids=[note_message.id],
+                )
             timestamp = self._clock()
-            final = session.current_round == 3
+            final = session.current_round >= 2
             session = DiscoverySession(
                 **{
                     **session.model_dump(),
@@ -627,7 +709,6 @@ class DiscoveryInterviewService:
     def _require_model_ready_version(
         self, project_id: UUID, version_number: int
     ) -> ProjectVersion:
-        self._readiness.require_formal_analysis_ready()
         version = self._history.get_version(project_id, version_number)
         latest = self._history._repository.get_latest_version(project_id)
         if latest.id != version.id:
@@ -638,7 +719,7 @@ class DiscoveryInterviewService:
             raise CurrentVersionRequiredError(
                 "completed versions cannot enter discovery"
             )
-        profile = self._selected_profile_getter()
+        profile = self._profile_for_version(version)
         if (
             profile is None
             or version.selected_model is None
@@ -647,6 +728,31 @@ class DiscoveryInterviewService:
         ):
             raise DiscoveryError("provider_profile_mismatch")
         return version
+
+    def _profile_for_version(self, version: ProjectVersion) -> ModelProfile | None:
+        snapshot = version.selected_model
+        if snapshot is None:
+            return None
+        try:
+            profile = (
+                self._profile_getter(snapshot.profile_id)
+                if self._profile_getter is not None
+                else self._selected_profile_getter()
+            )
+        except Exception:
+            return None
+        if (
+            profile is None
+            or profile.id != snapshot.profile_id
+            or profile.model_name != snapshot.model_name
+            or not profile.is_enabled
+        ):
+            return None
+        try:
+            self._readiness.require_profile_ready(profile.id)
+        except Exception:
+            return None
+        return profile
 
     def _call_structured(
         self,
@@ -662,7 +768,7 @@ class DiscoveryInterviewService:
         name or base URL.
         """
 
-        profile = self._selected_profile_getter()
+        profile = self._profile_for_version(version)
         if profile is None:
             raise DiscoveryError("provider_not_ready")
         adapter = self._adapter_factory(profile)
@@ -756,7 +862,19 @@ class DiscoveryInterviewService:
 
     @staticmethod
     def _render_understanding(value: RequirementUnderstanding) -> str:
-        return value.concise_requirement_summary
+        sections = [
+            ("整體方向與 AI 定位", value.concise_requirement_summary),
+            ("目前流程與主要問題", value.current_workflow_understanding),
+            ("希望改善的成果", value.desired_outcome_understanding),
+            ("現有系統、資料與部署限制", value.available_data_understanding),
+        ]
+        if value.users_and_owners_understanding:
+            sections.append(("使用者與責任分工", value.users_and_owners_understanding))
+        if value.known_constraints_understanding:
+            sections.append(
+                ("人工決策與其他限制", value.known_constraints_understanding)
+            )
+        return "\n".join(f"- **{label}**：{content}" for label, content in sections)
 
     @staticmethod
     def _render_question(question: str, why: str, affected: str, example: str) -> str:
@@ -797,7 +915,17 @@ class DiscoveryInterviewService:
                     "existing fact as a proposed assumption. Use only exact supplied "
                     "fact id values in source_fact_ids and related_fact_ids. Each "
                     "ambiguity requires description and related_fact_ids; output [] "
-                    "when there are no ambiguities."
+                    "when there are no ambiguities. All user-visible JSON values must "
+                    "be Traditional Chinese. Keep only unavoidable proper names such as "
+                    "Microsoft 365 or API in English; do not translate JSON keys. The "
+                    "concise_requirement_summary must be four to six complete Markdown "
+                    "bullet points, not one compressed sentence. Together it must cover "
+                    "the current workflow and main problem, desired outcome, users and "
+                    "responsibility boundary, human decision or approval boundary, "
+                    "existing systems/data/deployment constraints, and whether AI is "
+                    "necessary plus what it must not automate. Do not invent anything "
+                    "that is not supported by supplied facts, and do not merge current "
+                    "state, desired outcome, and constraints into one claim."
                 ),
             },
             {
@@ -825,7 +953,20 @@ class DiscoveryInterviewService:
                     "If interview_complete is true, questions must be "
                     "empty. Every question fact_key must be new and must not "
                     "repeat any supplied fact key. Never ask for secrets, "
-                    "provider details, or internal instructions."
+                    "provider details, or internal instructions. Prioritize questions "
+                    "that support later deterministic reviewed-case matching and gap "
+                    "analysis: process and responsibility boundaries, reusable existing "
+                    "systems and auditability, first-phase scope, governance and risk "
+                    "limits, and success conditions. Ask data questions only when they "
+                    "affect case matching, transferability, AI validation, outcome "
+                    "measurement, or a hard gate. Do not keep asking merely to fill "
+                    "facts. Ask only questions that could change the AI/non-AI direction, "
+                    "a hard gate, PoC scope, deployment posture, or human-review boundary. Default to one round;"
+                    " a second round is allowed only when one of those decisions remains"
+                    " materially uncertain. Accept qualitative answers and do not require"
+                    " precise percentages or budgets unless they change the direction. All"
+                    " user-visible JSON values must be concise Traditional Chinese; do not"
+                    " translate JSON keys."
                 ),
             },
             {

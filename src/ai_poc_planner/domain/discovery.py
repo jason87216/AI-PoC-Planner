@@ -208,10 +208,17 @@ class UnderstandingCorrectionSubmission(ContractModel):
         return self
 
 
+class NaturalLanguageFeedback(ContractModel):
+    """One user-authored correction without exposing fact-level governance."""
+
+    feedback: NonEmptyStr
+
+
 class InterviewRoundAnswerSubmission(ContractModel):
     answers: list[InterviewAnswer] = Field(min_length=1)
     additional_facts: list[AdditionalFact] = Field(default_factory=list)
     corrections: list[FactCorrectionCommand] = Field(default_factory=list)
+    supplementary_note: NonEmptyStr | None = None
 
     @model_validator(mode="after")
     def question_ids_are_unique(self) -> InterviewRoundAnswerSubmission:

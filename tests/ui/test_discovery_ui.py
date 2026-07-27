@@ -100,29 +100,20 @@ def test_understanding_confirmation_and_correction_use_discovery_endpoints() -> 
     ]
 
 
-def test_unknown_answer_and_proactive_fact_changes_use_the_round_contract() -> None:
+def test_unknown_answer_and_supplementary_note_use_the_round_contract() -> None:
     payload = interview_payload(
         answers=[
             {"question_id": QUESTION_ID, "answer_status": "unknown", "answer": None}
         ],
-        additional_fact={
-            "fact_key": "deployment_owner",
-            "status": "confirmed",
-            "value": "Operations director",
-        },
-        correction={
-            "target_fact_id": FACT_ID,
-            "status": "missing",
-            "value": None,
-            "correction_reason": "The source is no longer available",
-        },
+        supplementary_note="The finance lead retains approval.",
     )
 
     assert payload["answers"] == [
         {"question_id": QUESTION_ID, "answer_status": "unknown", "answer": None}
     ]
-    assert payload["additional_facts"][0]["fact_key"] == "deployment_owner"
-    assert payload["corrections"][0]["target_fact_id"] == FACT_ID
+    assert payload["supplementary_note"] == "The finance lead retains approval."
+    assert payload["additional_facts"] == []
+    assert payload["corrections"] == []
 
 
 def test_interview_answer_submission_uses_the_formal_round_endpoint() -> None:
@@ -182,9 +173,17 @@ def test_question_and_fact_summaries_show_only_user_facing_fields() -> None:
     )
     summary = facts_summary(
         [
-            {"fact_key": "owner", "status": "confirmed", "value": "Operations"},
-            {"fact_key": "volume", "status": "unknown", "value": None},
-            {"fact_key": "source", "status": "missing", "value": None},
+            {
+                "fact_key": "users_and_owners",
+                "status": "confirmed",
+                "value": "Operations",
+            },
+            {"fact_key": "available_data", "status": "unknown", "value": None},
+            {
+                "fact_key": "clarification_round_2_question_1",
+                "status": "missing",
+                "value": None,
+            },
         ]
     )
 
@@ -194,11 +193,8 @@ def test_question_and_fact_summaries_show_only_user_facing_fields() -> None:
         "affected_judgement": "Data readiness",
         "example": "A rough range is enough.",
     }
-    assert summary["confirmed"] == [{"fact_key": "owner", "value": "Operations"}]
-    assert summary["unknown_or_missing"] == [
-        {"fact_key": "volume", "status": "unknown"},
-        {"fact_key": "source", "status": "missing"},
-    ]
+    assert summary["confirmed"] == ["使用者與負責人：Operations"]
+    assert summary["unresolved"] == ["現有資料與文件"]
 
 
 def test_discovery_errors_are_safe_for_provider_and_stale_state_failures() -> None:
@@ -221,11 +217,88 @@ def test_discovery_errors_are_safe_for_provider_and_stale_state_failures() -> No
     assert "private.test" not in caught.value.user_message
 
 
-def test_discovery_ui_has_no_supplementary_notes_or_forbidden_imports() -> None:
+def test_discovery_ui_hides_fact_governance_and_forbidden_imports() -> None:
     root = Path(__file__).parents[2]
     source = (root / "app_pages" / "discovery.py").read_text(encoding="utf-8")
 
-    assert "supplementary" not in source.casefold()
+    assert "target_fact_id" not in source
+    assert "回答方式" not in source
     assert "ai_poc_planner.application" not in source
     assert "ai_poc_planner.persistence" not in source
     assert "ai_poc_planner.providers" not in source
+
+
+def test_discovery_has_no_second_project_creation_flow() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "discovery.py").read_text(encoding="utf-8")
+
+    assert "_legacy_brief" not in source
+    assert "_provider_ready" not in source
+    assert 'st.form("create_project")' not in source
+    assert "建立專案並整理需求" not in source
+    assert "尚未選取專案" in source
+    assert "前往新建專案" in source
+    assert "前往專案歷史" in source
+    assert "discovery_create_mode" not in source
+    assert "discovery_return_target" not in source
+
+
+def test_new_project_route_is_independent_of_discovery_session_flags() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "new_project.py").read_text(encoding="utf-8")
+
+    assert "新建專案" in source
+    assert "model_profile_id" in source
+    assert "測試連線" in source
+    assert "default_profile_index" in source
+    assert "is_selected" in source
+    assert "discovery_create_mode" not in source
+    assert "discovery_return_target" not in source
+    assert "ai_poc_planner.application" not in source
+    assert "ai_poc_planner.persistence" not in source
+    assert "ai_poc_planner.providers" not in source
+
+
+def test_discovery_page_keeps_project_context_and_inline_question_generation() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "discovery.py").read_text(encoding="utf-8")
+
+    assert "st.title(project_name)" in source
+    assert 'f"第 {version_number} 版 · {phase}"' in source
+    assert 'st.title("建立新專案")' in source
+    assert 'st.title("新建專案")' not in source
+    assert "st.container(border=True)" in source
+    assert '"確認",' in source
+    assert '"修改",' in source
+    assert "理解正確，繼續" not in source
+    assert "開始下一輪訪談" not in source
+    assert source.index("confirm_understanding") < source.index(
+        "generate_interview_round"
+    )
+    assert "需求理解已確認，但問題尚未生成。" in source
+    assert "重新整理問題" in source
+
+
+def test_discovery_page_generates_the_next_round_after_answers() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "discovery.py").read_text(encoding="utf-8")
+
+    submission = source.index("submit_interview_answers")
+    next_generation = source.index("generate_interview_round", submission)
+    assert submission < next_generation
+    assert "正在整理需要進一步確認的重點……" in source
+
+
+def test_history_maps_project_statuses_to_safe_actions() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "history.py").read_text(encoding="utf-8")
+
+    assert '"draft": "繼續處理"' in source
+    assert '"interviewing": "繼續處理"' in source
+    assert '"clarification_required": "繼續處理"' in source
+    assert '"ready_for_assessment": "繼續評估"' in source
+    assert '"assessed": "查看專案"' in source
+    assert '"proposal_generated": "查看專案"' in source
+    assert '"complete": "查看專案"' in source
+    assert '"failed": "查看問題"' in source
+    assert "raw" not in source.lower()

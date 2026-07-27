@@ -93,6 +93,11 @@ class ApiClient:
             self._request("POST", f"/v1/model-profiles/{profile_id}/test")
         )
 
+    def profile_status(self, profile_id: str) -> dict[str, Any]:
+        return self._object(
+            self._request("GET", f"/v1/model-profiles/{profile_id}/status")
+        )
+
     def create_discovery_project(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         return self._object(self._request("POST", "/v1/discovery-projects", payload))
 
@@ -137,6 +142,19 @@ class ApiClient:
                     project_id, version_number, "understanding/corrections"
                 ),
                 payload,
+            )
+        )
+
+    def submit_understanding_feedback(
+        self, project_id: str, version_number: int, feedback: str
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST",
+                self._discovery_path(
+                    project_id, version_number, "understanding/feedback"
+                ),
+                {"feedback": feedback},
             )
         )
 
@@ -194,6 +212,17 @@ class ApiClient:
     ) -> dict[str, Any]:
         return self._object(
             self._request("GET", self._version_path(project_id, version_number))
+        )
+
+    def bind_project_model_profile(
+        self, project_id: str, version_number: int, profile_id: str
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST",
+                self._version_path(project_id, version_number, "model-profile"),
+                {"model_profile_id": profile_id},
+            )
         )
 
     def create_analysis(self, project_id: str, version_number: int) -> dict[str, Any]:

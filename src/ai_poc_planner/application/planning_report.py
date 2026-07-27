@@ -91,6 +91,7 @@ class PlanningReportService:
         reports: SQLitePlanningReportRepository,
         readiness: ProviderReadinessService,
         selected_profile_getter,
+        profile_getter=None,
         adapter_factory,
         cases_path: Path,
         clock=lambda: datetime.now(UTC),
@@ -103,10 +104,11 @@ class PlanningReportService:
         )
         (
             self._selected_profile_getter,
+            self._profile_getter,
             self._adapter_factory,
             self._cases_path,
             self._clock,
-        ) = selected_profile_getter, adapter_factory, cases_path, clock
+        ) = selected_profile_getter, profile_getter, adapter_factory, cases_path, clock
 
     def get(self, project_id: UUID, version_number: int) -> PersistedPlanningReport:
         version = self._history.get_version(project_id, version_number)
@@ -207,15 +209,27 @@ class PlanningReportService:
 
     def _profile(self, version: ProjectVersion) -> ModelProfile:
         try:
-            self._readiness.require_formal_analysis_ready()
+            snapshot = version.selected_model
+            if snapshot is None:
+                raise PlanningReportError("provider_profile_mismatch")
+            self._readiness.require_profile_ready(snapshot.profile_id)
         except Exception as error:
             raise PlanningReportError("provider_not_ready") from error
-        profile, snapshot = self._selected_profile_getter(), version.selected_model
+        snapshot = version.selected_model
+        try:
+            profile = (
+                self._profile_getter(snapshot.profile_id)
+                if self._profile_getter is not None and snapshot is not None
+                else self._selected_profile_getter()
+            )
+        except Exception:
+            profile = None
         if (
             profile is None
             or snapshot is None
             or profile.id != snapshot.profile_id
             or profile.model_name != snapshot.model_name
+            or not profile.is_enabled
         ):
             raise PlanningReportError("provider_profile_mismatch")
         return profile

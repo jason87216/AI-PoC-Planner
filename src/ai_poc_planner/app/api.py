@@ -59,6 +59,7 @@ from ai_poc_planner.domain.discovery import (
     InitialBrief,
     InterviewQuestion,
     InterviewRoundAnswerSubmission,
+    NaturalLanguageFeedback,
     NormalizedInitialBrief,
     UnderstandingCorrectionSubmission,
 )
@@ -232,6 +233,18 @@ class DiscoveryProjectResponse(ContractModel):
     normalized_brief: NormalizedInitialBrief
 
 
+class DiscoveryProjectCreateRequest(InitialBrief):
+    """Initial brief plus the safe reference to the profile chosen for this project."""
+
+    model_profile_id: UUID | None = None
+
+
+class ProjectModelProfileRequest(ContractModel):
+    """Safe project binding request; provider configuration stays server-side."""
+
+    model_profile_id: UUID
+
+
 def _error_response(
     status_code: int,
     code: str,
@@ -381,6 +394,7 @@ def create_app(
                 sessions=SQLiteDiscoveryRepository(connection),
                 readiness=readiness,
                 selected_profile_getter=profile_repository.get_selected,
+                profile_getter=profile_repository.get,
                 adapter_factory=interview_adapter_factory or default_interview_adapter,
             )
         finally:
@@ -403,6 +417,7 @@ def create_app(
                 analyses=SQLiteAnalysisRepository(connection),
                 readiness=readiness,
                 selected_profile_getter=profile_repository.get_selected,
+                profile_getter=profile_repository.get,
                 adapter_factory=analysis_adapter_factory or default_analysis_adapter,
             )
         finally:
@@ -424,6 +439,7 @@ def create_app(
                 reports=SQLitePlanningReportRepository(connection),
                 readiness=readiness,
                 selected_profile_getter=profile_repository.get_selected,
+                profile_getter=profile_repository.get,
                 adapter_factory=analysis_adapter_factory or default_analysis_adapter,
                 cases_path=Path(__file__).resolve().parents[3]
                 / "data"
@@ -596,6 +612,13 @@ def create_app(
     def test_model_profile(profile_id: UUID) -> ProviderConnectionStatus:
         return readiness.test(profile_id)
 
+    @app.get(
+        "/v1/model-profiles/{profile_id}/status",
+        response_model=ProviderConnectionStatus,
+    )
+    def model_profile_status(profile_id: UUID) -> ProviderConnectionStatus:
+        return readiness.status_for(profile_repository.get(profile_id))
+
     @app.get("/v1/provider-status", response_model=ProviderConnectionStatus)
     def selected_provider_status() -> ProviderConnectionStatus:
         status = readiness.selected_status()
@@ -614,10 +637,18 @@ def create_app(
         response_model=DiscoveryProjectResponse,
         status_code=201,
     )
-    def create_discovery_project(request: InitialBrief) -> DiscoveryProjectResponse:
+    def create_discovery_project(
+        request: DiscoveryProjectCreateRequest,
+    ) -> DiscoveryProjectResponse:
         with discovery_flow() as discovery:
+            profile = (
+                profile_repository.get(request.model_profile_id)
+                if request.model_profile_id is not None
+                else None
+            )
             project, version, session, normalized = discovery.create_initial_brief(
-                request
+                InitialBrief(**request.model_dump(exclude={"model_profile_id"})),
+                selected_profile=profile,
             )
             return DiscoveryProjectResponse(
                 project=project,
@@ -669,6 +700,20 @@ def create_app(
     ) -> DiscoverySession:
         with discovery_flow() as discovery:
             return discovery.submit_corrections(project_id, version_number, request)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/understanding/feedback",
+        response_model=DiscoverySession,
+    )
+    def submit_understanding_feedback(
+        project_id: UUID,
+        version_number: int,
+        request: NaturalLanguageFeedback,
+    ) -> DiscoverySession:
+        with discovery_flow() as discovery:
+            return discovery.submit_natural_language_feedback(
+                project_id, version_number, request
+            )
 
     @app.post(
         "/v1/projects/{project_id}/versions/{version_number}/interview-rounds",
@@ -729,6 +774,20 @@ def create_app(
     def get_project_version(project_id: UUID, version_number: int) -> ProjectVersion:
         with project_history_flow() as history:
             return history.get_version(project_id, version_number)
+
+    @app.post(
+        "/v1/projects/{project_id}/versions/{version_number}/model-profile",
+        response_model=ProjectVersion,
+    )
+    def bind_project_model_profile(
+        project_id: UUID,
+        version_number: int,
+        request: ProjectModelProfileRequest,
+    ) -> ProjectVersion:
+        profile = profile_repository.get(request.model_profile_id)
+        readiness.require_profile_ready(profile.id)
+        with project_history_flow() as history:
+            return history.bind_model_profile(project_id, version_number, profile)
 
     @app.post(
         "/v1/projects/{project_id}/versions/{version_number}/complete",

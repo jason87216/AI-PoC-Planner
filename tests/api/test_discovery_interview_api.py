@@ -77,6 +77,23 @@ def _ready_profile(client: TestClient) -> str:
     return profile["id"]
 
 
+def test_initial_brief_requires_a_ready_project_profile(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    response = client.post(
+        "/v1/discovery-projects",
+        json={
+            "project_name": "Needs a model",
+            "current_workflow_problem": "Manual work",
+            "desired_outcome": "A clearer process",
+            "available_data": "目前沒有",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "provider_not_ready"
+    assert client.get("/v1/projects").json() == []
+
+
 def test_phase_three_initial_brief_understanding_and_bounded_round(
     tmp_path: Path,
 ) -> None:
@@ -123,6 +140,35 @@ def test_phase_three_initial_brief_understanding_and_bounded_round(
     )
     assert answered.status_code == 200
     assert answered.json()["status"] == "ready_for_next_round"
+
+
+def test_requirement_feedback_accepts_natural_language_without_fact_ids(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    _ready_profile(client)
+    created = client.post(
+        "/v1/discovery-projects",
+        json={
+            "project_name": "Discovery",
+            "current_workflow_problem": "Manual routing",
+            "desired_outcome": "Faster routing",
+            "available_data": "Unknown",
+        },
+    )
+    project_id = created.json()["project"]["id"]
+    assert (
+        client.post(f"/v1/projects/{project_id}/versions/1/understanding").status_code
+        == 200
+    )
+
+    response = client.post(
+        f"/v1/projects/{project_id}/versions/1/understanding/feedback",
+        json={"feedback": "The requester needs human review before any decision."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "correction_pending"
 
 
 def test_initial_brief_requires_a_tested_selected_provider_and_safe_errors(
