@@ -175,6 +175,9 @@ def test_governed_access_keeps_human_authority_and_exposes_gate_impacts() -> Non
     assert OpportunityType.ENTERPRISE_KNOWLEDGE_AND_PROFESSIONAL_DOCUMENT_ASSIST in (
         infer_opportunity_types(facts)
     )
+    assert OpportunityType.ANOMALY_AND_RISK_DETECTION not in infer_opportunity_types(
+        facts
+    )
     assert {"HG-01", "HG-03", "HG-05", "HG-06"}.issubset(gate_ids)
     assert not build_deterministic_assessment_facts(
         facts,
@@ -197,6 +200,7 @@ def test_coverage_gap_never_invents_a_case_and_keeps_unknowns_conservative() -> 
     }
 
     assert OpportunityType.PREDICTIVE_MAINTENANCE in infer_opportunity_types(facts)
+    assert OpportunityType.DEMAND_FORECASTING not in infer_opportunity_types(facts)
     assert not assessment_facts.data_readiness.validation_sample_available
     assert any(item.unknown_impact for item in _score_unknowns(facts))
     assert {match.case.case_id for match in result.matched_cases} <= approved_ids

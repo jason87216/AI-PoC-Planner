@@ -507,7 +507,7 @@ def infer_opportunity_types(facts: Iterable[FactRevision]) -> tuple[object, ...]
             "meeting",
         ),
         OpportunityType.MARKETING_CONTENT_ASSIST: ("行銷", "文案", "marketing"),
-        OpportunityType.DEMAND_FORECASTING: ("預測", "庫存", "補貨", "forecast"),
+        OpportunityType.DEMAND_FORECASTING: ("庫存", "補貨", "需求預測", "forecast"),
         OpportunityType.PREDICTIVE_MAINTENANCE: (
             "設備",
             "故障",
@@ -517,7 +517,6 @@ def infer_opportunity_types(facts: Iterable[FactRevision]) -> tuple[object, ...]
         OpportunityType.ANOMALY_AND_RISK_DETECTION: (
             "詐欺",
             "異常",
-            "風險",
             "檢測",
             "fraud",
         ),
