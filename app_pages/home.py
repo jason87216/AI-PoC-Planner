@@ -3,6 +3,7 @@
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.navigation import open_history, open_new_project
 from ai_poc_planner.ui.presentation import (
     connection_label,
     show_api_error,
@@ -18,10 +19,10 @@ st.title("AI PoC Planner")
 st.write("將需求訪談、可驗證評估與規劃報告整理為可持續追蹤的 PoC。")
 
 if st.button("建立新專案", icon=":material/add:", type="primary"):
-    st.switch_page("app_pages/new_project.py")
+    open_new_project()
 
 if st.button("查看歷史專案", icon=":material/history:"):
-    st.switch_page("app_pages/history.py")
+    open_history()
 
 if st.button("重新整理", icon=":material/refresh:"):
     refresh_api_data()
@@ -67,4 +68,4 @@ else:
     ]
     st.dataframe(recent_rows, hide_index=True)
     if st.button("查看歷史專案", icon=":material/history:"):
-        st.switch_page("app_pages/history.py")
+        open_history()

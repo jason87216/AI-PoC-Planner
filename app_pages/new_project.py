@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.navigation import open_workspace
 from ai_poc_planner.ui.presentation import profile_label, show_api_error
 from ai_poc_planner.ui.runtime import get_api_client, load_profiles, refresh_api_data
 
@@ -104,6 +105,6 @@ if submitted:
         except ApiClientError:
             st.warning("專案已建立，但需求理解尚未生成。可在工作區重新整理需求。")
         refresh_api_data()
-        st.switch_page("app_pages/discovery.py")
+        open_workspace(str(project["id"]), int(version["version_number"]))
     except ApiClientError as error:
         show_api_error(error)

@@ -3,6 +3,7 @@
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.navigation import open_workspace
 from ai_poc_planner.ui.presentation import show_api_error, status_label
 from ai_poc_planner.ui.runtime import load_projects, refresh_api_data
 
@@ -61,4 +62,6 @@ else:
                     "project_id": project.get("project_id"),
                     "version_number": project.get("version_number"),
                 }
-                st.switch_page("app_pages/discovery.py")
+                open_workspace(
+                    str(project.get("project_id")), int(project.get("version_number"))
+                )

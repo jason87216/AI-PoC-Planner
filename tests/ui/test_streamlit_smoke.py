@@ -53,3 +53,11 @@ def test_project_workspace_is_an_internal_supported_streamlit_route() -> None:
 
     assert '"app_pages/discovery.py"' in source
     assert 'visibility="hidden"' in source
+
+
+def test_workspace_refresh_uses_route_parameters_not_only_session_state() -> None:
+    source = open("src/ai_poc_planner/ui/navigation.py", encoding="utf-8").read()
+
+    assert "query_params" in source
+    assert "open_workspace" in source
+    assert "workspace_target_from_query" in source
