@@ -185,7 +185,9 @@ inside the selected project's workspace. New-project routing remains stable on
 refresh; the selected model profile is persisted safely with the project, and
 copying a project prefills only its initial brief. Headed Chrome UAT verified
 the new-project refresh route, selected-profile readiness, project workspace,
-discovery, history, and copy flow. P6.5 assessment redesign has not started.
+  discovery, history, and copy flow. P6.5 now centres assessment on reviewed
+  cases and preserves the same deterministic, case-backed result across API,
+  Results, and Markdown report views.
 
 The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
 API using `json_schema`, `reasoning_effort=low`, and temporary local state. The
@@ -201,13 +203,28 @@ cross-phase report UAT is deferred to Phase 8.
 
 ## Reviewed local cases
 
-Phase 5.1 provides a small, manually reviewed local case library in
-`data/reviewed_cases.json`. It is read-only, source-backed, Pydantic-validated,
-and matched deterministically by exact opportunity type, applicability tags,
-evidence grade, and stable case ID. It does not use online search, embeddings,
-FAISS, a provider, or case-derived scoring. Phase 5.2 adds a strict structured
-report draft, deterministic Markdown rendering, immutable reloadable storage,
-and report APIs; it does not add a Streamlit product UI.
+The reviewed local case library in `data/reviewed_cases.json` is read-only,
+source-backed, and Pydantic-validated. P6.5 computes case reference value and
+project-to-case fit separately, ranks only approved cases from confirmed project
+facts, records gaps and source-bound transferable practices, and persists the
+case-centered result for API, Results, and Markdown report reuse. It does not
+use online search, embeddings, FAISS, a vector database, or a provider to invent
+cases or override deterministic scoring.
+
+## Case-centered assessment results
+
+P6.5 makes reviewed cases the main evidence in the assessment result. The
+program calculates case reference value separately from project-to-case fit,
+keeps unknown conditions as confirmation items, derives transferable practices
+only from source-backed cases, and interprets hard gates as limits on stage,
+capability, and deployment scope. The persisted result also contains the
+current stage, PoC path, later-stage prerequisites, and acceptance criteria.
+
+The Results workspace is an internal project route and is not a fifth global
+navigation item. The FastAPI analysis snapshot is the shared source for the
+API response, Streamlit view, and Markdown report. Existing completed results
+are loaded from SQLite without calling the provider again; a missing reviewed
+case is reported honestly and never replaced with a fabricated candidate.
 
 ## Windows local runtime
 

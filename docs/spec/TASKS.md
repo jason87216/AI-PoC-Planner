@@ -281,15 +281,23 @@ scoring, reports, and the Streamlit product UI remain pending.
 
 ### [Must] P6.5 Navigation, Results and Error-State Closeout
 
-- **Status:** not started. Direction: make reviewed cases the centre of the
+- **Status:** implemented on `codex/p6-5-case-centered-assessment-results`.
+  Direction delivered: make reviewed cases the centre of the
   assessment path: user needs → deterministic reviewed-case matching → case
   reference value → project-to-case fit → critical gaps → transferable practices
   → hard gates that constrain the current stage → traceable implementation path.
-  Scores must not mean that AI generated and then rated its own option. Future
-  work separates case evidence value, project-to-case fit, and critical gaps;
-  it also includes independent model-settings editing, history empty/error
-  states, durable result selection, readable option kinds/hard-gate names,
-  reviewed-case details, specific safe errors, and global navigation/layout cleanup.
+  Scores must not mean that AI generated and then rated its own option. The
+  implementation separates case evidence value, project-to-case fit, and
+  critical gaps; it also provides durable result selection, readable case and
+  hard-gate views, reviewed-case details, safe no-case errors, and global
+  navigation/layout cleanup.
+- **Acceptance:** API, persisted analysis, Results workspace, and Markdown
+  report read the same case-centered result. No-case outcomes remain honest;
+  unknown facts remain pending confirmation; duplicate assessment creation is
+  idempotent; the UI hides UUIDs, enums, raw JSON, evidence tokens, and option keys.
+- **Verification:** deterministic domain/application tests, full pytest/Ruff
+  validation, integrated P6.4 regression, P7.1 launcher tests, and headed Chrome
+  UAT from new-project creation through assessment/report refresh.
 
 ## Phase 7 — Local launcher
 
