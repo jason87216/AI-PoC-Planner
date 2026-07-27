@@ -13,6 +13,11 @@ from ai_poc_planner.ui.discovery import (
     interview_payload,
     question_details,
 )
+from ai_poc_planner.ui.navigation import (
+    open_history,
+    open_new_project,
+    workspace_target_from_query,
+)
 from ai_poc_planner.ui.presentation import show_api_error
 from ai_poc_planner.ui.runtime import (
     get_api_client,
@@ -34,6 +39,14 @@ def _target() -> tuple[str, int] | None:
         and isinstance(target.get("version_number"), int)
     ):
         return target["project_id"], target["version_number"]
+    query_target = workspace_target_from_query()
+    if query_target is not None:
+        project_id, version_number = query_target
+        st.session_state["selected_project"] = {
+            "project_id": project_id,
+            "version_number": version_number,
+        }
+        return query_target
     return None
 
 
@@ -187,7 +200,7 @@ def _project_heading(
         _model_binding(project_id, version_number, version)
     st.caption(f"第 {version_number} 版 · {phase}")
     if st.button("建立其他專案", icon=":material/add:"):
-        st.switch_page("app_pages/new_project.py")
+        open_new_project()
     if st.button("複製為新專案", icon=":material/content_copy:"):
         try:
             facts = load_current_facts(project_id, version_number)
@@ -203,7 +216,7 @@ def _project_heading(
                 "new_project_owners": values.get("users_and_owners", ""),
                 "new_project_constraints": values.get("known_constraints", ""),
             }
-            st.switch_page("app_pages/new_project.py")
+            open_new_project()
 
 
 def _understanding(
@@ -220,9 +233,9 @@ def _brief() -> None:
     """Show navigation only; creation belongs to the independent new-project route."""
     st.info("尚未選取專案。")
     if st.button("前往新建專案", icon=":material/add:"):
-        st.switch_page("app_pages/new_project.py")
+        open_new_project()
     if st.button("前往專案歷史", icon=":material/history:"):
-        st.switch_page("app_pages/history.py")
+        open_history()
 
 
 def _generation(project_id: str, number: int) -> None:
