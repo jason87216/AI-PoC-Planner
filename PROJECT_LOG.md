@@ -5,7 +5,8 @@
 PR #20 contains the P6.4 project-centred navigation and model-binding closeout.
 PR #21 remains its stacked P7.1 runtime prerequisite. Both PRs remain open.
 Headed Chrome UAT passed for the new-project refresh, model readiness, project
-workspace, discovery, history, and copy flow. P6.5 has not started.
+workspace, discovery, history, and copy flow. P6.5 implementation is in progress;
+the final integrated headed Chrome run remains pending.
 
 ## Current status
 
@@ -110,16 +111,17 @@ workspace, discovery, history, and copy flow. P6.5 has not started.
   at the FastAPI boundary without exposing fact IDs or keys. Prompts require
   Traditional Chinese and limit questions to material direction, gate, scope,
   deployment, and human-review decisions. P6.5 navigation, results, and
-  error-state closeout remains pending; Phase 7 has not started.
+  error-state closeout is implemented in P6.5; full headed Chrome integrated
+  UAT is complete. Phase 7.1 is also implemented.
 - P6.4 human-UAT follow-up keeps the selected project name, version, and phase
   as the Discovery-page context; renders complete AI understanding in a bordered
   card with concise confirmation/modification controls; and removes normal-flow
   interview transition pages by generating questions inline after confirmation
   and saved answers. Its prompts require fuller Traditional Chinese
-  understanding and prioritize reviewed-case matching/gap inputs. P6.5 remains
-  unstarted: its documented direction is case-centred assessment, separating
-  case reference value, project-case fit, and critical gaps rather than having
-  AI score its own generated option.
+  understanding and prioritize reviewed-case matching/gap inputs. P6.5 now
+  separates case reference value, project-case fit, and critical gaps rather
+  than having AI score its own generated option; the integrated headed Chrome
+  UAT also covered report persistence, refresh recovery, and no-repeat execution.
 - Project-centred navigation replaces the old global Discovery/Results pages.
   The four global entry points are Home, New project, Project history, and
   Model settings. The workspace is an internal route: it owns requirement
@@ -128,7 +130,8 @@ workspace, discovery, history, and copy flow. P6.5 has not started.
   persists a safe model-profile reference on its version, and never silently
   adopts a different global profile. Copying a project prefills only the initial
   brief; it does not create a version or copy AI/interview/assessment/report
-  outputs. P6.5 remains unstarted.
+  outputs. P6.5 keeps these four global entry points and renders case-centered
+  assessment results inside the selected project's workspace.
 
 ## UAT findings recorded from PR #8
 

@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from ai_poc_planner.domain.analysis import FactToken
+from ai_poc_planner.domain.case_centered import CaseCenteredNarrative
 from ai_poc_planner.domain.models import ContractModel, NonEmptyStr, UtcDateTime
 
 REPORT_SECTION_KEYS = (
@@ -60,6 +61,7 @@ class PlanningReportDraft(ContractModel):
     implementation_stages_and_roles: ReportSectionDraft
     risks_governance_and_human_review: ReportSectionDraft
     open_issues_and_next_actions: ReportSectionDraft
+    case_centered_narrative: CaseCenteredNarrative | None = None
 
     @model_validator(mode="after")
     def contains_every_required_section(self) -> PlanningReportDraft:

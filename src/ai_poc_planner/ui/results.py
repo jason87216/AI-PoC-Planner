@@ -62,6 +62,52 @@ _VALUE_LABELS = {
     "architecture_controllability": "架構可控性",
     "governance_readiness": "治理就緒度",
     "user_adoption": "使用者採用度",
+    "matched": "已匹配",
+    "no_suitable_reviewed_case": "沒有足夠成熟案例",
+}
+
+_TEXT_REPLACEMENTS = {
+    "autonomous_action": "不得自主執行高風險動作",
+    "assistive_only": "僅限人工輔助",
+    (
+        "required authorization, lawful basis, or accountable ownership "
+        "is absent, or the use is prohibited."
+    ): ("授權、合法依據或可追責負責人尚未確認，或目前用途受到禁止。"),
+    (
+        "Required authorization, lawful basis, or accountable ownership "
+        "is absent, or the use is prohibited."
+    ): ("授權、合法依據或可追責負責人尚未確認，或目前用途受到禁止。"),
+    (
+        "A high-impact final decision cannot be autonomous or lack "
+        "meaningful human review."
+    ): ("高影響決策不得自主執行，也不得缺少有實質意義的人工覆核。"),
+    (
+        "One or more mandatory data, security, governance, or audit "
+        "controls are missing."
+    ): ("必要的資料、安全、治理或稽核控制措施仍有缺口。"),
+    "Data is unavailable, mostly non-digital, or lacks a validation sample.": (
+        "資料尚未提供、主要仍是非數位格式，或缺少驗證樣本。"
+    ),
+    "obtain documented authorization and lawful basis": "取得書面授權與合法依據",
+    "assign an accountable owner": "指定可追責的負責人",
+    "remove autonomous final decisions and enterprise actions": (
+        "移除自主最終決策與企業系統執行"
+    ),
+    "complete qualified professional review": "完成合格專業人工覆核",
+    "remove autonomous final-decision authority": "移除自主最終決策權限",
+    "require a qualified human final decision": "要求合格人員做最終決策",
+    "use an approved local or private endpoint": "使用核准的本機或私有端點",
+    "define data minimization": "定義資料最小化措施",
+    "define retention and deletion controls": "定義保存與刪除控制措施",
+    "enforce least-privilege access control": "強制執行最小權限存取控制",
+    "approve required security controls": "核准必要的安全控制措施",
+    "approve required governance controls": "核准必要的治理控制措施",
+    "enable required audit controls": "啟用必要的稽核控制措施",
+    "make required data available": "提供必要資料",
+    "digitize or OCR source material": "將來源資料數位化或進行 OCR 擷取",
+    "create a representative validation sample": "建立具代表性的驗證樣本",
+    "required controls": "必要控制措施",
+    "opportunity": "機會類型",
 }
 
 
@@ -78,7 +124,10 @@ def readable_value(value: object) -> str:
 def _readable_text(value: object) -> str:
     """Hide evidence tokens, which are internal audit references rather than UI text."""
 
-    return re.sub(r"\s*\(?F\d{3}\)?", "", str(value)).strip()
+    text = re.sub(r"\s*\(?F\d{3}\)?", "", str(value)).strip()
+    for source, target in _TEXT_REPLACEMENTS.items():
+        text = text.replace(source, target)
+    return text
 
 
 def _readable_items(value: object) -> list[str]:
@@ -160,6 +209,127 @@ def analysis_overview(analysis: dict[str, Any]) -> dict[str, Any]:
         ],
         "overall_risks": _readable_items(analysis.get("overall_risks", [])),
         "unresolved_gaps": _readable_items(analysis.get("unresolved_gaps", [])),
+        "case_centered": case_centered_overview(analysis),
+    }
+
+
+def case_centered_overview(analysis: dict[str, Any]) -> dict[str, Any]:
+    """Expose only business-readable fields from the canonical result."""
+
+    result = analysis.get("case_centered")
+    if not isinstance(result, dict):
+        return {}
+    cases: list[dict[str, Any]] = []
+    for match in result.get("matched_cases", []):
+        if not isinstance(match, dict) or not isinstance(match.get("case"), dict):
+            continue
+        case = match["case"]
+        reference = match.get("reference_value", {})
+        fit = match.get("project_fit", {})
+        gaps = match.get("gaps", {})
+        cases.append(
+            {
+                "title": case.get("title", "未命名案例"),
+                "organization": case.get("organization", "未記錄"),
+                "reference_level": readable_value(reference.get("level", "")),
+                "reference_score": reference.get("score"),
+                "reference_basis": _readable_items(reference.get("basis", [])),
+                "reference_unknown": _readable_items(
+                    reference.get("unknown_items", [])
+                ),
+                "fit_level": readable_value(fit.get("level", "")),
+                "fit_score": fit.get("score"),
+                "similarities": _readable_items(fit.get("similarities", [])),
+                "differences": _readable_items(fit.get("key_differences", [])),
+                "needs_confirmation": _readable_items(
+                    fit.get("needs_confirmation", [])
+                ),
+                "ready_conditions": _readable_items(gaps.get("ready_conditions", [])),
+                "missing_conditions": _readable_items(
+                    gaps.get("missing_conditions", [])
+                ),
+                "not_directly_transferable": _readable_items(
+                    gaps.get("not_directly_transferable", [])
+                ),
+                "gap_confirmation": _readable_items(gaps.get("needs_confirmation", [])),
+                "sources": [
+                    {
+                        "label": source.get("label", "來源"),
+                        "url": source.get("url", ""),
+                    }
+                    for source in case.get("source_references", [])
+                    if isinstance(source, dict)
+                ],
+            }
+        )
+    practices = [
+        {
+            "name": item.get("name", "未命名做法"),
+            "source_case_titles": _readable_items(item.get("source_case_titles", [])),
+            "case_evidence": _readable_text(item.get("case_evidence", "")),
+            "transferable_part": _readable_text(item.get("transferable_part", "")),
+            "required_adjustments": _readable_items(
+                item.get("required_adjustments", [])
+            ),
+            "current_stage": _readable_text(item.get("current_stage", "")),
+            "prerequisites": _readable_items(item.get("prerequisites", [])),
+            "not_applicable_scope": _readable_items(
+                item.get("not_applicable_scope", [])
+            ),
+        }
+        for item in result.get("transferable_practices", [])
+        if isinstance(item, dict)
+    ]
+    gates = [
+        {
+            "disposition": readable_value(item.get("disposition", "")),
+            "affected_stage": _readable_text(item.get("affected_stage", "")),
+            "limits": _readable_items(item.get("limits", [])),
+            "does_not_limit": _readable_items(item.get("does_not_limit", [])),
+            "release_conditions": _readable_items(item.get("release_conditions", [])),
+        }
+        for item in result.get("gate_impacts", [])
+        if isinstance(item, dict)
+    ]
+    phases = [
+        {
+            key: _readable_items(item.get(key, []))
+            if key
+            in {
+                "actions",
+                "inputs",
+                "outputs",
+                "users",
+                "not_doing",
+                "remaining_gaps",
+                "acceptance_criteria",
+            }
+            else _readable_text(item.get(key, ""))
+            for key in (
+                "phase_name",
+                "description",
+                "actions",
+                "inputs",
+                "outputs",
+                "users",
+                "human_decision_boundary",
+                "not_doing",
+                "remaining_gaps",
+                "acceptance_criteria",
+            )
+        }
+        for item in result.get("phased_path", [])
+        if isinstance(item, dict)
+    ]
+    return {
+        "matching_status": readable_value(result.get("matching_status", "")),
+        "no_case_reason": _readable_text(result.get("no_case_reason", "")),
+        "recommendation_title": _readable_text(result.get("recommendation_title", "")),
+        "recommendation_basis": _readable_items(result.get("recommendation_basis", [])),
+        "cases": cases,
+        "practices": practices,
+        "gates": gates,
+        "phases": phases,
     }
 
 

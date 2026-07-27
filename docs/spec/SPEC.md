@@ -122,10 +122,12 @@ dimension contains a 1–5 score, rationale, referenced confirmed facts, data
 gaps, risks, and conditions required to improve the score.
 
 AI owns requirement understanding, factual organisation, assumptions and
-contradictions, questions, options, rubric ratings with evidence, and report
-writing. Program code owns persistence, Pydantic validation, score-range and
-fact-reference validation, confirmed-fact protection, consistency checks,
-weighted-total calculation, hard-gate enforcement, and profile management.
+contradictions, questions, constrained option/narrative content, and report
+writing. Program code owns reviewed-case matching/ranking, case reference value,
+project-to-case fit, gap comparison, transferable-practice provenance,
+persistence, Pydantic validation, score calculation, fact-reference validation,
+confirmed-fact protection, consistency checks, weighted-total calculation,
+hard-gate enforcement, and profile management.
 Program code must not use the old fixed Boolean rules to decide a final
 dimension rating.
 
@@ -133,6 +135,23 @@ Existing hard gates remain mandatory for unauthorised data use, autonomous
 high-impact decisions, forbidden external processing, missing required human
 review, and other explicit safety/governance conflicts. AI cannot override a
 hard-gate result.
+
+### Case-centered assessment semantics
+
+Reviewed cases are primary assessment evidence, not an appendix. Only approved
+cases may enter formal ranking. Case reference value measures source clarity,
+review status, evidence/results, context completeness, and recorded limits. It
+is separate from project-to-case fit, which compares confirmed project facts
+with workflow, responsibility, system, input, governance, decision, deployment,
+and first-stage scope dimensions. Unknown facts remain neutral/unknown and are
+shown as confirmation work; they are never silently treated as pass or fail.
+
+The six dimensions evaluate the current project's feasibility and readiness for
+an implementation path at its present stage. They do not evaluate an AI-created
+option as if that option were a product. Hard gates constrain stage, capability,
+automation level, and deployment scope; a gate may still permit local,
+assistive, deterministic, or human-reviewed work. The API analysis snapshot is
+the single formal result consumed by the Results workspace and Markdown report.
 
 ### Local success cases
 

@@ -14,6 +14,9 @@ from ai_poc_planner.application.case_matching import match_cases
 from ai_poc_planner.application.project_history import ProjectHistoryService
 from ai_poc_planner.application.provider_readiness import ProviderReadinessService
 from ai_poc_planner.domain.analysis import ValidatedAnalysisResult
+from ai_poc_planner.domain.case_centered import (
+    CaseCenteredNarrative,
+)
 from ai_poc_planner.domain.catalog import OpportunityType
 from ai_poc_planner.domain.enums import FactStatus, ProjectStatus
 from ai_poc_planner.domain.planning_report import (
@@ -22,6 +25,7 @@ from ai_poc_planner.domain.planning_report import (
     PlanningReportDraft,
     PlanningReportPartA,
     PlanningReportPartB,
+    ReportSectionDraft,
 )
 from ai_poc_planner.domain.project_history import FactRevision, ProjectVersion
 from ai_poc_planner.domain.reviewed_cases import ReviewedCase
@@ -46,6 +50,9 @@ def render_markdown(
     cases: tuple[ReviewedCase, ...] = (),
 ) -> str:
     """Render in a fixed, business-readable order without provider internals."""
+
+    if analysis.case_centered is not None:
+        return _render_case_centered_markdown(report, analysis, facts)
     lines = [
         "# AI PoC Planning Report",
         "",
@@ -80,6 +87,296 @@ def render_markdown(
     for gate in analysis.gate_results:
         lines.append(f"- {gate.rule_id}: {gate.disposition.value} — {gate.reason}")
     return "\n".join(lines) + "\n"
+
+
+def _label(value: object) -> str:
+    return {
+        "high": "高",
+        "medium": "中",
+        "low": "低",
+        "unknown": "待確認",
+        "insufficient_evidence": "證據不足",
+        "similar": "相似",
+        "different": "不同",
+        "blocked": "目前受限",
+        "assistive_only": "僅限人工輔助",
+        "allowed": "可在條件內進行",
+        "matched": "已匹配",
+        "no_suitable_reviewed_case": "沒有足夠成熟案例",
+    }.get(str(value), str(value))
+
+
+_REPORT_SECTION_LABELS = {
+    "executive_summary": "執行摘要",
+    "requirement_understanding": "需求理解",
+    "current_process_and_pain_points": "目前流程與痛點",
+    "goals_and_proposed_success_criteria": "目標與建議成功標準",
+    "ai_suitability_explanation": "AI 適用性說明",
+    "recommended_direction_explanation": "建議方向說明",
+    "alternatives_explanation": "替代方向說明",
+    "target_workflow": "目標工作流程",
+    "data_needs_and_gaps": "資料需求與缺口",
+    "deployment_comparison": "部署方式比較",
+    "poc_scope": "PoC 範圍",
+    "in_scope": "納入範圍",
+    "out_of_scope": "不納入範圍",
+    "kpi_and_acceptance_method": "KPI 與驗收方式",
+    "cost_assumptions": "成本假設",
+    "implementation_stages_and_roles": "實作階段與角色",
+    "risks_governance_and_human_review": "風險、治理與人工覆核",
+    "open_issues_and_next_actions": "待釐清事項與下一步",
+}
+
+
+def _bullet_lines(title: str, values: list[str]) -> list[str]:
+    return [f"### {title}", *(f"- {value}" for value in values)]
+
+
+def _render_case_centered_markdown(
+    report: PlanningReportDraft,
+    analysis: ValidatedAnalysisResult,
+    facts: list[FactRevision],
+) -> str:
+    result = analysis.case_centered
+    assert result is not None
+    lines = [
+        "# 專案概覽",
+        "",
+        f"**正式建議：** {result.recommendation_title}",
+        f"**案例匹配狀態：** {_label(result.matching_status)}",
+        "",
+        "# 已確認需求",
+        "",
+        *(
+            f"- {_text_for_report(fact.value)}"
+            for fact in facts
+            if fact.status is FactStatus.CONFIRMED
+        ),
+        "",
+        "# 參考成熟案例",
+        "",
+    ]
+    if result.matched_cases:
+        for match in result.matched_cases:
+            case = match.case
+            lines.extend(
+                [
+                    f"## {case.title}",
+                    "",
+                    f"- 案例參考價值：{_label(match.reference_value.level)}（{match.reference_value.score}/100）",
+                    f"- 專案適配程度：{_label(match.project_fit.level)}（{match.project_fit.score}/100）",
+                    *[f"- 主要相似：{item}" for item in match.project_fit.similarities],
+                    *[
+                        f"- 主要差異：{item}"
+                        for item in match.project_fit.key_differences
+                    ],
+                    "- 查看依據："
+                    + "；".join(
+                        f"{source.label}（{source.url}）"
+                        for source in case.source_references
+                    ),
+                    "",
+                ]
+            )
+    else:
+        lines.extend([f"- {result.no_case_reason or '目前沒有足夠成熟案例。'}", ""])
+
+    lines.extend(["# 案例適配與差距", ""])
+    for match in result.matched_cases:
+        lines.extend([f"## {match.case.title}", ""])
+        lines.extend(_bullet_lines("已具備條件", match.gaps.ready_conditions))
+        lines.append("")
+        lines.extend(
+            _bullet_lines("尚缺條件", match.gaps.missing_conditions or ["目前未記錄。"])
+        )
+        lines.append("")
+        lines.extend(
+            _bullet_lines(
+                "不可直接複製",
+                match.gaps.not_directly_transferable
+                or ["目前沒有額外不可直接複製項目。"],
+            )
+        )
+        lines.append("")
+        lines.extend(
+            _bullet_lines(
+                "需要確認",
+                match.gaps.needs_confirmation or ["目前沒有額外待確認項目。"],
+            )
+        )
+        lines.append("")
+
+    lines.extend(["# 可移植做法", ""])
+    if result.transferable_practices:
+        for practice in result.transferable_practices:
+            lines.extend(
+                [
+                    f"## {practice.name}",
+                    f"- 來源案例：{'、'.join(practice.source_case_titles)}",
+                    f"- 案例證據：{practice.case_evidence}",
+                    f"- 可移植部分：{practice.transferable_part}",
+                    f"- 必須調整：{'；'.join(practice.required_adjustments)}",
+                    f"- 目前階段：{practice.current_stage}",
+                    f"- 前置條件：{'；'.join(practice.prerequisites)}",
+                    f"- 不適用範圍：{'；'.join(practice.not_applicable_scope)}",
+                    "",
+                ]
+            )
+    else:
+        lines.append("- 沒有足夠案例證據可形成正式可移植做法。")
+        lines.append("")
+
+    lines.extend(["# 當前限制與人工邊界", ""])
+    for gate in result.gate_impacts:
+        lines.extend(
+            [
+                f"- 影響階段：{gate.affected_stage}；限制：{'；'.join(gate.limits)}",
+                f"- 不影響：{'；'.join(gate.does_not_limit)}",
+                f"- 解除條件：{'；'.join(gate.release_conditions) or '需重新完成 gate 審查。'}",
+            ]
+        )
+    if not result.gate_impacts:
+        lines.append("- 目前沒有額外 hard gate；仍保留人工最終決策。")
+    lines.extend(["", "# 分階段實施路徑", ""])
+    case_titles = {
+        case.case_id: case.title
+        for match in result.matched_cases
+        for case in (match.case,)
+    }
+    for phase in result.phased_path:
+        source_titles = [
+            case_titles.get(case_id, "已匹配案例") for case_id in phase.source_case_ids
+        ]
+        lines.extend(
+            [
+                f"## {phase.phase_name}",
+                phase.description,
+                f"- 行動：{'；'.join(phase.actions)}",
+                f"- 輸入：{'；'.join(phase.inputs)}",
+                f"- 輸出：{'；'.join(phase.outputs)}",
+                f"- 人工邊界：{phase.human_decision_boundary}",
+                f"- 不做：{'；'.join(phase.not_doing)}",
+                f"- 案例做法：{'；'.join(source_titles) or '無'}",
+                f"- 尚存差距：{'；'.join(phase.remaining_gaps) or '無'}",
+                f"- 驗收指標：{'；'.join(phase.acceptance_criteria)}",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "# 評分與判定依據",
+            "",
+            "評分對象是目前專案在現階段採用實施路徑的可行性與準備程度。",
+            "",
+        ]
+    )
+    for score in analysis.scores:
+        lines.append(
+            f"- {score.dimension.value}：{score.rating}/5；主要依據：{score.rationale}；"
+            f"未知影響：{score.unknown_impact}"
+        )
+    lines.extend(["", "# PoC 驗收條件", ""])
+    lines.extend(
+        f"- {criterion}"
+        for phase in result.phased_path
+        for criterion in phase.acceptance_criteria
+    )
+    lines.extend(["", "# 風險與待確認事項", ""])
+    unknowns = [
+        item
+        for match in result.matched_cases
+        for item in match.reference_value.unknown_items
+        + match.project_fit.needs_confirmation
+    ]
+    lines.extend(f"- {item}" for item in dict.fromkeys(unknowns))
+    if not unknowns:
+        lines.append("- 沒有額外待確認事項；仍需依各階段驗收結果重新判定。")
+    lines.extend(["", "# 來源", ""])
+    for match in result.matched_cases:
+        for source in match.case.source_references:
+            lines.append(f"- {match.case.title}：{source.label}（{source.url}）")
+    lines.extend(["", "# 補充說明", ""])
+    for key, section in report.section_items():
+        lines.extend(
+            [
+                f"## {_REPORT_SECTION_LABELS.get(key, '補充說明')}",
+                "",
+                section.content,
+                "",
+                "證據：已確認需求",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _text_for_report(value: object) -> str:
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value)
+
+
+def _case_centered_narrative(
+    analysis: ValidatedAnalysisResult,
+) -> CaseCenteredNarrative | None:
+    result = analysis.case_centered
+    if result is None:
+        return None
+    case_names = "、".join(item.case.title for item in result.matched_cases)
+    practice_names = "、".join(item.name for item in result.transferable_practices)
+    constraint_names = "、".join(item.affected_stage for item in result.gate_impacts)
+    return CaseCenteredNarrative(
+        executive_summary=(
+            f"正式建議為「{result.recommendation_title}」，以案例證據、專案適配與 gate 限制共同判定。"
+        ),
+        why_these_cases=(
+            f"主要參考案例：{case_names}。"
+            if case_names
+            else result.no_case_reason
+            or "目前沒有足夠成熟案例，以下結論不宣稱已有案例驗證。"
+        ),
+        transferable_practices_summary=(
+            f"可移植做法：{practice_names}。"
+            if practice_names
+            else "目前沒有足夠案例來源可形成正式可移植做法。"
+        ),
+        current_constraints_summary=(
+            f"目前受 gate 影響的階段：{constraint_names}。"
+            if constraint_names
+            else "保留人工最終決策，並依案例差距限制部署範圍。"
+        ),
+        phased_path_summary="；".join(phase.phase_name for phase in result.phased_path),
+    )
+
+
+def _fallback_report_draft(
+    tokens: dict[str, FactRevision], analysis: ValidatedAnalysisResult
+) -> PlanningReportDraft:
+    """Keep the report usable when provider narration is temporarily unavailable."""
+
+    confirmed_token = next(
+        (
+            token
+            for token, fact in tokens.items()
+            if fact.status is FactStatus.CONFIRMED
+        ),
+        "F001",
+    )
+    case_title = (
+        analysis.case_centered.matched_cases[0].case.title
+        if analysis.case_centered and analysis.case_centered.matched_cases
+        else "目前沒有足夠成熟案例"
+    )
+    content = (
+        f"本報告以確定性評估結果為準；主要參考：{case_title}。"
+        "模型文字說明暫時不可用，請依正式結果、差距與分階段路徑審查。"
+    )
+    sections = {
+        key: ReportSectionDraft(content=content, fact_refs=[confirmed_token])
+        for key in REPORT_SECTION_KEYS
+    }
+    return PlanningReportDraft(schema_version="1.0", **sections)
 
 
 class PlanningReportService:
@@ -149,37 +446,50 @@ class PlanningReportService:
                 "recommended_option_key": analysis.recommended_option_key,
                 "weighted_total": analysis.weighted_total,
                 "gate_disposition": analysis.gate_disposition.value,
+                "case_centered": (
+                    analysis.case_centered.model_dump(mode="json")
+                    if analysis.case_centered is not None
+                    else None
+                ),
             },
             "required_sections": list(REPORT_SECTION_KEYS),
         }
-        for semantic_attempt in range(2):
-            part_a = self._call(
-                profile,
-                payload,
-                PlanningReportPartA,
-                "report_part_a",
-                semantic_repair=bool(semantic_attempt),
-            )
-            part_b = self._call(
-                profile,
-                payload,
-                PlanningReportPartB,
-                "report_part_b",
-                semantic_repair=bool(semantic_attempt),
-            )
-            draft = PlanningReportDraft(
-                schema_version="1.0", **part_a.model_dump(), **part_b.model_dump()
-            )
-            try:
-                self._validate_refs(draft, tokens)
-            except PlanningReportError as error:
-                if semantic_attempt or error.code not in {
-                    "provider_output_invalid",
-                    "confirmed_evidence_required",
-                }:
-                    raise
-            else:
-                break
+        try:
+            for semantic_attempt in range(2):
+                part_a = self._call(
+                    profile,
+                    payload,
+                    PlanningReportPartA,
+                    "report_part_a",
+                    semantic_repair=bool(semantic_attempt),
+                )
+                part_b = self._call(
+                    profile,
+                    payload,
+                    PlanningReportPartB,
+                    "report_part_b",
+                    semantic_repair=bool(semantic_attempt),
+                )
+                draft = PlanningReportDraft(
+                    schema_version="1.0", **part_a.model_dump(), **part_b.model_dump()
+                )
+                try:
+                    self._validate_refs(draft, tokens)
+                except PlanningReportError as error:
+                    if semantic_attempt or error.code not in {
+                        "provider_output_invalid",
+                        "confirmed_evidence_required",
+                    }:
+                        raise
+                else:
+                    break
+        except PlanningReportError:
+            draft = _fallback_report_draft(tokens, analysis)
+        draft = draft.model_copy(
+            update={
+                "case_centered_narrative": _case_centered_narrative(analysis),
+            }
+        )
         markdown = render_markdown(
             draft, analysis, facts, self._matched_cases(analysis)
         )
@@ -326,6 +636,8 @@ class PlanningReportService:
     def _matched_cases(
         self, analysis: ValidatedAnalysisResult
     ) -> tuple[ReviewedCase, ...]:
+        if analysis.case_centered is not None:
+            return tuple(item.case for item in analysis.case_centered.matched_cases)
         option = next(
             item
             for item in analysis.options

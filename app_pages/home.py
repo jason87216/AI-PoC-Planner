@@ -67,5 +67,5 @@ else:
         for project in projects[:5]
     ]
     st.dataframe(recent_rows, hide_index=True)
-    if st.button("查看歷史專案", icon=":material/history:"):
+    if st.button("查看歷史專案", icon=":material/history:", key="home_recent_history"):
         open_history()

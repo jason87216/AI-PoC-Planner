@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import Field, StringConstraints, model_validator
 
+from ai_poc_planner.domain.case_centered import CaseCenteredAssessment
 from ai_poc_planner.domain.catalog import NonAiAlternativeDirection, OpportunityType
 from ai_poc_planner.domain.enums import (
     AnalysisConclusion,
@@ -177,6 +178,9 @@ class ProgramScore(ContractModel):
     data_gaps: list[NonEmptyStr] = Field(default_factory=list)
     risks: list[NonEmptyStr] = Field(default_factory=list)
     improvement_conditions: list[NonEmptyStr] = Field(default_factory=list)
+    evaluation_subject: NonEmptyStr = "目前專案在現階段採用實施路徑的可行性與準備程度"
+    unknown_fact_refs: list[FactToken] = Field(default_factory=list)
+    unknown_impact: NonEmptyStr = "未知資料不視為通過；需在後續階段確認。"
 
 
 class ProgramGateResult(ContractModel):
@@ -185,13 +189,18 @@ class ProgramGateResult(ContractModel):
     reason: NonEmptyStr
     required_controls: list[NonEmptyStr] = Field(default_factory=list)
     human_review_required: bool
+    affected_stage: NonEmptyStr = "目前 PoC 階段"
+    does_not_limit: list[NonEmptyStr] = Field(
+        default_factory=lambda: ["流程整理、規則檢查與人工輔助仍可進行。"]
+    )
+    release_conditions: list[NonEmptyStr] = Field(default_factory=list)
 
 
 class ValidatedAnalysisResult(ContractModel):
     id: UUID
     version_id: UUID
     rubric_version: Literal["1.0"]
-    hard_gate_version: Literal["legacy-1"]
+    hard_gate_version: Literal["legacy-1", "case-centered-1"]
     requirement_summary: NonEmptyStr
     options: list[AnalysisOptionDraft] = Field(min_length=2, max_length=4)
     recommended_option_key: OptionKey
@@ -205,3 +214,4 @@ class ValidatedAnalysisResult(ContractModel):
     overall_risks: list[NonEmptyStr] = Field(default_factory=list)
     unresolved_gaps: list[NonEmptyStr] = Field(default_factory=list)
     created_at: UtcDateTime
+    case_centered: CaseCenteredAssessment | None = None

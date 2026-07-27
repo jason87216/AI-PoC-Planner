@@ -11,6 +11,7 @@ from ai_poc_planner.domain.analysis import (
     ProgramScore,
     ValidatedAnalysisResult,
 )
+from ai_poc_planner.domain.case_centered import CaseCenteredAssessment
 from ai_poc_planner.domain.catalog import NonAiAlternativeDirection, OpportunityType
 from ai_poc_planner.domain.enums import (
     AnalysisConclusion,
@@ -48,7 +49,10 @@ class AssessedSnapshotFixture:
 
 
 def build_assessed_snapshot(
-    connection, selected_model_snapshot: SelectedModelSnapshot
+    connection,
+    selected_model_snapshot: SelectedModelSnapshot,
+    *,
+    case_centered: CaseCenteredAssessment | None = None,
 ) -> AssessedSnapshotFixture:
     now = datetime.now(UTC)
     history = SQLiteProjectHistoryRepository(connection)
@@ -169,6 +173,7 @@ def build_assessed_snapshot(
         ],
         gate_disposition=GateDisposition.ASSISTIVE_ONLY,
         created_at=now,
+        case_centered=case_centered,
     )
     with history.transaction():
         analyses.create(analysis, tokens)
