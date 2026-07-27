@@ -87,7 +87,7 @@
 
 ### 自動測試
 
-初始 golden 測試：7 passed。完整自動測試最後結果：待文件 commit 後執行並填入；既有 P6.4、P6.5、P7.1 測試均納入同一套完整 pytest。
+初始 golden 測試：7 passed。完整自動測試最後結果：579 passed、6 skipped（既有 opt-in provider integration tests；未啟用秘密環境變數）；Ruff check、format check、`git diff --check` 均通過；`.pytest-tmp` 已清理。既有 P6.4、P6.5、P7.1 測試均納入同一套完整 pytest。
 
 ### Headed Chrome UAT
 
@@ -97,4 +97,4 @@
 
 ### Baseline 結論
 
-四個場景均達到 16 分以上，沒有 critical failure；因此 NVIDIA baseline acceptance 通過，等待人工 review。通過不代表案例庫已完整，也不代表供應商相容性已完成；P7.2 仍需用相同 golden scenarios 驗證雲端／本地 provider。完整測試、CI success 與 runtime stopped 會在 PR handoff 前補上最終狀態。
+四個場景均達到 16 分以上，沒有 critical failure；因此 NVIDIA baseline acceptance 通過，等待人工 review。通過不代表案例庫已完整，也不代表供應商相容性已完成；P7.2 仍需用相同 golden scenarios 驗證雲端／本地 provider。本地完整測試已通過，UAT runtime 已 stopped；CI 狀態於 Draft PR 建立後確認。
