@@ -17,6 +17,7 @@ from ai_poc_planner.application.case_centered_assessment import (
     build_case_centered_assessment,
     build_deterministic_gate_evaluation,
     build_deterministic_scores,
+    derive_recommendation_category,
     infer_opportunity_types,
 )
 from ai_poc_planner.application.discovery_interview import (
@@ -30,6 +31,7 @@ from ai_poc_planner.domain.analysis import (
     ProgramGateResult,
     ValidatedAnalysisResult,
 )
+from ai_poc_planner.domain.case_centered import RecommendationCategory
 from ai_poc_planner.domain.enums import (
     DataBoundary,
     DecisionAuthority,
@@ -599,7 +601,10 @@ class EvidenceAnalysisService:
         # Matching is deliberately independent from model-generated options.
         # Only confirmed project facts may select the reviewed-case catalogue.
         opportunity_types = list(infer_opportunity_types(facts))
-        recommendation_title = self._recommendation_title(selected, opportunity_types)
+        recommendation_category = derive_recommendation_category(facts, gates)
+        recommendation_title = self._recommendation_title(
+            selected, opportunity_types, recommendation_category
+        )
         from ai_poc_planner.infrastructure.local_case_repository import (
             LocalCaseRepository,
         )
@@ -634,7 +639,17 @@ class EvidenceAnalysisService:
         )
 
     @staticmethod
-    def _recommendation_title(selected, opportunity_types) -> str:
+    def _recommendation_title(
+        selected,
+        opportunity_types,
+        category: RecommendationCategory,
+    ) -> str:
+        if category is RecommendationCategory.RULES_FIRST:
+            return "流程標準化與規則檢查路線"
+        if category is RecommendationCategory.READINESS_FIRST:
+            return "資料基礎建設優先路線"
+        if category is RecommendationCategory.GOVERNED_ASSISTIVE:
+            return "權限申請標準化與人工審核輔助"
         if selected.option_kind.value == "foundations_first":
             return "資料基礎建設優先路線"
         if selected.option_kind.value == "non_ai":

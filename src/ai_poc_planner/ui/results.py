@@ -64,6 +64,10 @@ _VALUE_LABELS = {
     "user_adoption": "使用者採用度",
     "matched": "已匹配",
     "no_suitable_reviewed_case": "沒有足夠成熟案例",
+    "ai_hybrid": "AI 與人工輔助混合路線",
+    "rules_first": "規則與流程標準化優先",
+    "governed_assistive": "治理限制下的人工輔助",
+    "readiness_first": "資料基礎建設優先",
 }
 
 _TEXT_REPLACEMENTS = {
@@ -325,6 +329,9 @@ def case_centered_overview(analysis: dict[str, Any]) -> dict[str, Any]:
         "matching_status": readable_value(result.get("matching_status", "")),
         "no_case_reason": _readable_text(result.get("no_case_reason", "")),
         "recommendation_title": _readable_text(result.get("recommendation_title", "")),
+        "recommendation_category": readable_value(
+            result.get("recommendation_category", "")
+        ),
         "recommendation_basis": _readable_items(result.get("recommendation_basis", [])),
         "cases": cases,
         "practices": practices,
