@@ -16,6 +16,7 @@ from ai_poc_planner.ui.discovery import (
 from ai_poc_planner.ui.navigation import (
     open_history,
     open_new_project,
+    workspace_route_key,
     workspace_target_from_query,
 )
 from ai_poc_planner.ui.presentation import show_api_error
@@ -41,12 +42,22 @@ def _target() -> tuple[str, int] | None:
         return target["project_id"], target["version_number"]
     query_target = workspace_target_from_query()
     if query_target is not None:
-        project_id, version_number = query_target
+        route_key, version_number = query_target
+        try:
+            project = next(
+                project
+                for project in load_projects()
+                if workspace_route_key(str(project.get("project_id"))) == route_key
+                and project.get("version_number") == version_number
+            )
+        except (ApiClientError, StopIteration):
+            return None
+        project_id = str(project["project_id"])
         st.session_state["selected_project"] = {
             "project_id": project_id,
             "version_number": version_number,
         }
-        return query_target
+        return project_id, version_number
     return None
 
 
