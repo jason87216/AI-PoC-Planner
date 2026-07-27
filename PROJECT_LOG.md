@@ -3,8 +3,9 @@
 ## Current goal
 
 PR #20 contains the P6.4 project-centred navigation and model-binding closeout.
-PR #21 remains its stacked P7.1 runtime prerequisite. Both PRs remain open;
-Chrome UAT is the remaining acceptance step. P6.5 has not started.
+PR #21 remains its stacked P7.1 runtime prerequisite. Both PRs remain open.
+Headed Chrome UAT passed for the new-project refresh, model readiness, project
+workspace, discovery, history, and copy flow. P6.5 has not started.
 
 ## Current status
 
