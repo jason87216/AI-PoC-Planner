@@ -12,20 +12,36 @@ from ai_poc_planner.domain.enums import FactStatus
 from ai_poc_planner.domain.models import ContractModel
 
 _FIXTURE_PATH = Path(__file__).with_name("scenarios.json")
-_INITIAL_BRIEF_FIELDS = (
+_INITIAL_BRIEF_FIELDS = {
     "project_name",
     "current_workflow_problem",
     "desired_outcome",
     "available_data",
     "users_and_owners",
     "known_constraints",
+}
+_RUBRIC_DIMENSIONS = (
+    ("requirement_understanding", "需求理解準確性"),
+    ("human_boundary", "責任與人工決策邊界"),
+    ("interview_value", "訪談問題價值"),
+    ("case_relevance", "案例相關性"),
+    ("case_reference_value", "案例參考價值解釋"),
+    ("fit_and_gaps", "專案適配與差距"),
+    ("practice_traceability", "可移植做法可追溯性"),
+    ("hard_gate_explanation", "hard gates 解釋"),
+    ("phased_path", "分階段實施路徑"),
+    ("output_consistency", "UI／API／Markdown 一致性"),
 )
 
 
-class AcceptanceFact(ContractModel):
-    """A deterministic fact used to validate a synthetic scenario."""
+class FrozenFixture(ContractModel):
+    """Strict immutable base for checked-in acceptance data."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class AcceptanceFact(FrozenFixture):
+    """A deterministic fact used to validate a synthetic scenario."""
 
     fact_key: str = Field(min_length=1)
     value: Any | None
@@ -33,18 +49,16 @@ class AcceptanceFact(ContractModel):
 
     @model_validator(mode="after")
     def value_matches_status(self) -> AcceptanceFact:
-        if self.status in {FactStatus.CONFIRMED, FactStatus.ASSUMPTION}:
-            if self.value is None:
-                raise ValueError("confirmed and assumption facts require a value")
-        elif self.value is not None:
+        requires_value = self.status in {FactStatus.CONFIRMED, FactStatus.ASSUMPTION}
+        if requires_value and self.value is None:
+            raise ValueError("confirmed and assumption facts require a value")
+        if not requires_value and self.value is not None:
             raise ValueError("unknown and missing facts require a null value")
         return self
 
 
-class AcceptanceBrief(ContractModel):
+class AcceptanceBrief(FrozenFixture):
     """Exactly the six fields used by the new-project brief."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     project_name: str = Field(min_length=1)
     current_workflow_problem: str = Field(min_length=1)
@@ -54,19 +68,15 @@ class AcceptanceBrief(ContractModel):
     known_constraints: str = Field(min_length=1)
 
 
-class AcceptanceInterviewAnswer(ContractModel):
+class AcceptanceInterviewAnswer(FrozenFixture):
     """A standard answer keyed by the purpose of an interview question."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     question_purpose: str = Field(min_length=1)
     answer: str = Field(min_length=1)
 
 
-class AcceptanceExpectation(ContractModel):
+class AcceptanceExpectation(FrozenFixture):
     """Non-exact expected outcomes for deterministic and human review."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     recommendation_category: Literal[
         "ai_hybrid", "rules_first", "governed_assistive", "readiness_first"
@@ -80,10 +90,8 @@ class AcceptanceExpectation(ContractModel):
     must_not_have_conclusions: list[str] = Field(min_length=1)
 
 
-class AcceptanceScenario(ContractModel):
+class AcceptanceScenario(FrozenFixture):
     """A repeatable synthetic input and its review invariants."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     scenario_id: str = Field(pattern=r"^[a-z0-9_]+$")
     name: str = Field(min_length=1)
@@ -98,24 +106,20 @@ class AcceptanceScenario(ContractModel):
         fact_keys = [item.fact_key for item in self.facts]
         if len(fact_keys) != len(set(fact_keys)):
             raise ValueError("scenario facts must not repeat fact_key")
-        if set(self.initial_brief.model_dump()) != set(_INITIAL_BRIEF_FIELDS):
+        if set(self.initial_brief.model_dump()) != _INITIAL_BRIEF_FIELDS:
             raise ValueError("initial brief must contain exactly six required fields")
         return self
 
 
-class AcceptanceRubricDimension(ContractModel):
+class AcceptanceRubricDimension(FrozenFixture):
     """One human-scored acceptance dimension."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     key: str = Field(pattern=r"^[a-z_]+$")
     label: str = Field(min_length=1)
 
 
-class AcceptanceRubric(ContractModel):
+class AcceptanceRubric(FrozenFixture):
     """The common 0–2 scorecard used for all four baseline scenarios."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     dimensions: tuple[AcceptanceRubricDimension, ...] = Field(min_length=10)
     minimum_passing_score: int = Field(ge=0)
@@ -127,23 +131,9 @@ class AcceptanceRubric(ContractModel):
 
 
 ACCEPTANCE_RUBRIC = AcceptanceRubric(
-    dimensions=(
-        AcceptanceRubricDimension(
-            key="requirement_understanding", label="需求理解準確性"
-        ),
-        AcceptanceRubricDimension(key="human_boundary", label="責任與人工決策邊界"),
-        AcceptanceRubricDimension(key="interview_value", label="訪談問題價值"),
-        AcceptanceRubricDimension(key="case_relevance", label="案例相關性"),
-        AcceptanceRubricDimension(key="case_reference_value", label="案例參考價值解釋"),
-        AcceptanceRubricDimension(key="fit_and_gaps", label="專案適配與差距"),
-        AcceptanceRubricDimension(
-            key="practice_traceability", label="可移植做法可追溯性"
-        ),
-        AcceptanceRubricDimension(key="hard_gate_explanation", label="hard gates 解釋"),
-        AcceptanceRubricDimension(key="phased_path", label="分階段實施路徑"),
-        AcceptanceRubricDimension(
-            key="output_consistency", label="UI／API／Markdown 一致性"
-        ),
+    dimensions=tuple(
+        AcceptanceRubricDimension(key=key, label=label)
+        for key, label in _RUBRIC_DIMENSIONS
     ),
     minimum_passing_score=16,
     critical_dimension_keys=(
