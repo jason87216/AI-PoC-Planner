@@ -152,6 +152,39 @@ def test_safe_error_never_exposes_api_error_payload_or_connection_address() -> N
     assert "raw-provider-detail" not in caught.value.user_message
 
 
+def test_project_model_binding_sends_only_a_profile_reference() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "id": "10000000-0000-0000-0000-000000000004",
+                "project_id": "10000000-0000-0000-0000-000000000001",
+                "version_number": 1,
+                "status": "draft",
+                "selected_model": None,
+                "created_at": "2026-07-25T00:00:00Z",
+                "updated_at": "2026-07-25T00:00:00Z",
+                "completed_at": None,
+            },
+        )
+
+    api = _client(handler)
+    api.bind_project_model_profile(
+        "10000000-0000-0000-0000-000000000001",
+        1,
+        "10000000-0000-0000-0000-000000000002",
+    )
+
+    assert requests[0].method == "POST"
+    assert requests[0].url.path.endswith("/versions/1/model-profile")
+    assert json.loads(requests[0].content) == {
+        "model_profile_id": "10000000-0000-0000-0000-000000000002"
+    }
+
+
 def test_natural_language_feedback_uses_the_public_discovery_endpoint() -> None:
     requests: list[httpx.Request] = []
 

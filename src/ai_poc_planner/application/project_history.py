@@ -88,6 +88,24 @@ class ProjectHistoryService:
     def get_version(self, project_id: UUID, version_number: int) -> ProjectVersion:
         return self._repository.get_version(project_id, version_number)
 
+    def bind_model_profile(
+        self,
+        project_id: UUID,
+        version_number: int,
+        profile: ModelProfile,
+    ) -> ProjectVersion:
+        """Persist a tested profile identity without changing existing content."""
+
+        version = self._require_mutable_latest(project_id, version_number)
+        timestamp = self._clock()
+        bound = version.model_copy(
+            update={
+                "selected_model": self._snapshot_for(profile),
+                "updated_at": timestamp,
+            }
+        )
+        return self._repository.update_version(bound, timestamp)
+
     def complete_version(self, project_id: UUID, version_number: int) -> ProjectVersion:
         version = self._require_latest(project_id, version_number)
         if version.status is ProjectStatus.COMPLETE:

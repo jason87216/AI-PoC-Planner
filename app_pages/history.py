@@ -14,6 +14,19 @@ def _selection_label(project: dict[str, object]) -> str:
     return f"{project.get('project_name')} · 第 {project.get('version_number')} 版"
 
 
+def _action_label(status: object) -> str:
+    return {
+        "draft": "繼續處理",
+        "interviewing": "繼續處理",
+        "clarification_required": "繼續處理",
+        "ready_for_assessment": "繼續評估",
+        "assessed": "查看專案",
+        "proposal_generated": "查看專案",
+        "complete": "查看專案",
+        "failed": "查看問題",
+    }.get(str(status), "查看專案")
+
+
 if st.button("重新整理歷史", icon=":material/refresh:"):
     refresh_api_data()
     st.rerun()
@@ -40,7 +53,7 @@ else:
             )
             st.write("可回看既有需求與目前工作階段。")
             if st.button(
-                "繼續處理" if project.get("status") != "complete" else "查看專案",
+                _action_label(project.get("status")),
                 key=f"open_project_{project.get('project_id')}",
                 icon=":material/folder_open:",
             ):

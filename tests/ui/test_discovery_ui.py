@@ -228,6 +228,21 @@ def test_discovery_ui_hides_fact_governance_and_forbidden_imports() -> None:
     assert "ai_poc_planner.providers" not in source
 
 
+def test_discovery_has_no_second_project_creation_flow() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "discovery.py").read_text(encoding="utf-8")
+
+    assert "_legacy_brief" not in source
+    assert "_provider_ready" not in source
+    assert 'st.form("create_project")' not in source
+    assert "建立專案並整理需求" not in source
+    assert "尚未選取專案" in source
+    assert "前往新建專案" in source
+    assert "前往專案歷史" in source
+    assert "discovery_create_mode" not in source
+    assert "discovery_return_target" not in source
+
+
 def test_new_project_route_is_independent_of_discovery_session_flags() -> None:
     root = Path(__file__).parents[2]
     source = (root / "app_pages" / "new_project.py").read_text(encoding="utf-8")
@@ -272,3 +287,18 @@ def test_discovery_page_generates_the_next_round_after_answers() -> None:
     next_generation = source.index("generate_interview_round", submission)
     assert submission < next_generation
     assert "正在整理需要進一步確認的重點……" in source
+
+
+def test_history_maps_project_statuses_to_safe_actions() -> None:
+    root = Path(__file__).parents[2]
+    source = (root / "app_pages" / "history.py").read_text(encoding="utf-8")
+
+    assert '"draft": "繼續處理"' in source
+    assert '"interviewing": "繼續處理"' in source
+    assert '"clarification_required": "繼續處理"' in source
+    assert '"ready_for_assessment": "繼續評估"' in source
+    assert '"assessed": "查看專案"' in source
+    assert '"proposal_generated": "查看專案"' in source
+    assert '"complete": "查看專案"' in source
+    assert '"failed": "查看問題"' in source
+    assert "raw" not in source.lower()

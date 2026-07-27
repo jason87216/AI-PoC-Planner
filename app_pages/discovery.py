@@ -12,9 +12,8 @@ from ai_poc_planner.ui.discovery import (
     facts_summary,
     interview_payload,
     question_details,
-    select_active_project,
 )
-from ai_poc_planner.ui.presentation import profile_label, show_api_error
+from ai_poc_planner.ui.presentation import show_api_error
 from ai_poc_planner.ui.runtime import (
     get_api_client,
     load_current_facts,
@@ -22,14 +21,9 @@ from ai_poc_planner.ui.runtime import (
     load_interview_questions,
     load_profiles,
     load_projects,
-    load_provider_status,
     load_visible_messages,
     refresh_api_data,
 )
-
-
-def _select_target(project_id: str, version_number: int) -> None:
-    select_active_project(st.session_state, project_id, version_number)
 
 
 def _target() -> tuple[str, int] | None:
@@ -40,18 +34,6 @@ def _target() -> tuple[str, int] | None:
         and isinstance(target.get("version_number"), int)
     ):
         return target["project_id"], target["version_number"]
-    try:
-        for project in load_projects():
-            project_id, number = (
-                project.get("project_id"),
-                project.get("version_number"),
-            )
-            if isinstance(project_id, str) and isinstance(number, int):
-                load_discovery_session(project_id, number)
-                _select_target(project_id, number)
-                return project_id, number
-    except ApiClientError:
-        return None
     return None
 
 
@@ -60,6 +42,116 @@ def _refresh(*keys: str) -> None:
         st.session_state.pop(key, None)
     refresh_api_data()
     st.rerun()
+
+
+def _workspace_profile_label(profile: dict[str, Any] | None) -> str:
+    if profile is None:
+        return "請選擇模型"
+    enabled = "可使用" if profile.get("is_enabled") else "已停用"
+    return (
+        f"{profile.get('profile_name', '未命名設定')}｜"
+        f"{profile.get('model_name', '')}｜{enabled}"
+    )
+
+
+def _model_binding(
+    project_id: str, version_number: int, version: dict[str, Any]
+) -> None:
+    snapshot = version.get("selected_model")
+    try:
+        profiles = load_profiles()
+    except ApiClientError as error:
+        show_api_error(error)
+        return
+    bound_id = str(snapshot.get("profile_id")) if isinstance(snapshot, dict) else None
+    bound_name = str(snapshot.get("model_name")) if isinstance(snapshot, dict) else None
+    bound_profile = next(
+        (profile for profile in profiles if str(profile.get("id")) == bound_id), None
+    )
+    binding_valid = bool(
+        bound_profile
+        and bound_profile.get("is_enabled")
+        and bound_profile.get("model_name") == bound_name
+    )
+    edit_key = f"workspace_model_edit_{project_id}_{version_number}"
+    if binding_valid and not st.session_state.get(edit_key):
+        st.caption(
+            f"本專案使用的模型：{bound_profile.get('profile_name')}｜{bound_profile.get('model_name')}"
+        )
+        if st.button("更換模型", key=f"change_model_{project_id}_{version_number}"):
+            st.session_state[edit_key] = True
+            st.rerun()
+        return
+
+    st.subheader("更換模型" if snapshot else "選擇模型")
+    if isinstance(snapshot, dict) and not bound_profile:
+        st.warning("原本綁定的模型設定已不存在；請明確選擇新的模型。")
+    elif isinstance(snapshot, dict) and not binding_valid:
+        st.warning("原本綁定的模型設定已停用或內容已變更；請重新測試後再保存。")
+    if not profiles:
+        st.warning("尚未建立可用模型設定，請先前往模型設定。")
+        if st.button(
+            "前往模型設定", key=f"model_settings_{project_id}_{version_number}"
+        ):
+            st.switch_page("app_pages/model_settings.py")
+        return
+
+    default_index = next(
+        (
+            index
+            for index, profile in enumerate(profiles)
+            if str(profile.get("id")) == bound_id
+        ),
+        None,
+    )
+    choice = st.selectbox(
+        "本專案使用的模型",
+        profiles,
+        index=default_index,
+        format_func=_workspace_profile_label,
+        key=f"workspace_profile_{project_id}_{version_number}",
+    )
+    if choice is None:
+        return
+    profile_id = str(choice["id"])
+    try:
+        readiness = get_api_client().profile_status(profile_id)
+    except ApiClientError as error:
+        show_api_error(error)
+        return
+    if readiness.get("formal_analysis_allowed"):
+        st.success("此模型已完成本次 runtime 連線測試。")
+    else:
+        st.warning("請先測試此模型連線；測試成功後才能保存本專案模型。")
+        if st.button(
+            "測試連線", key=f"test_workspace_profile_{project_id}_{version_number}"
+        ):
+            try:
+                tested = get_api_client().test_profile(profile_id)
+            except ApiClientError as error:
+                show_api_error(error)
+            else:
+                if tested.get("formal_analysis_allowed"):
+                    refresh_api_data()
+                    st.rerun()
+                else:
+                    st.error("模型連線未成功，請檢查設定後再試。")
+        return
+    if st.button(
+        "保存本專案模型",
+        type="primary",
+        key=f"save_workspace_profile_{project_id}_{version_number}",
+    ):
+        try:
+            get_api_client().bind_project_model_profile(
+                project_id, version_number, profile_id
+            )
+        except ApiClientError as error:
+            show_api_error(error)
+        else:
+            st.session_state.pop(edit_key, None)
+            refresh_api_data()
+            st.rerun()
 
 
 def _project_heading(
@@ -92,16 +184,7 @@ def _project_heading(
     except ApiClientError as error:
         show_api_error(error)
     else:
-        selected_model = version.get("selected_model")
-        if isinstance(selected_model, dict):
-            profile_name = selected_model.get("profile_name")
-            model_name = selected_model.get("model_name")
-            if profile_name and model_name:
-                st.caption(f"本專案使用的模型：{profile_name}｜{model_name}")
-            else:
-                st.warning("本專案尚未指定可用模型；需要 AI 操作時請重新選擇模型。")
-        else:
-            st.warning("本專案尚未指定可用模型；需要 AI 操作時請重新選擇模型。")
+        _model_binding(project_id, version_number, version)
     st.caption(f"第 {version_number} 版 · {phase}")
     if st.button("建立其他專案", icon=":material/add:"):
         st.switch_page("app_pages/new_project.py")
@@ -133,106 +216,13 @@ def _understanding(
     return None
 
 
-def _provider_ready() -> tuple[bool, str]:
-    try:
-        status, profiles = load_provider_status(), load_profiles()
-    except ApiClientError as error:
-        show_api_error(error)
-        return False, ""
-    if not status.get("formal_analysis_allowed"):
-        return False, ""
-    selected = next(
-        (profile for profile in profiles if profile.get("is_selected")), None
-    )
-    return selected is not None, profile_label(selected) if selected else ""
-
-
-def _legacy_brief() -> None:
-    st.warning("請從「新建專案」建立新的規劃。")
-    if st.button("前往新建專案", icon=":material/add:"):
-        st.switch_page("app_pages/new_project.py")
-    return
-    ready, model = _provider_ready()
-    if ready:
-        st.success(f"目前使用模型：{model}（已通過本次啟動的連線測試）")
-    else:
-        st.warning("請先在模型設定建立、選擇並測試可用模型，才能整理需求。")
-        if st.button("前往模型設定", icon=":material/tune:"):
-            st.switch_page("app_pages/model_settings.py")
-    with st.form("create_project"):
-        project_name = st.text_input(
-            "專案名稱",
-            key="brief_project_name",
-            placeholder="例如：內部請購與費用核准流程改善",
-        )
-        current = st.text_area(
-            "目前流程與問題",
-            key="brief_current_workflow_problem",
-            help="說明目前怎麼做、卡在哪裡。",
-            placeholder="例如：Excel、紙本與 Email 分散，附件與進度難以追蹤。",
-            height=140,
-        )
-        outcome = st.text_area(
-            "希望改善的成果",
-            key="brief_desired_outcome",
-            help="描述希望改變的工作成果。",
-            placeholder="例如：先統一流程與規則檢查，再評估 AI 是否有幫助。",
-            height=120,
-        )
-        data = st.text_area(
-            "現有資料與文件",
-            key="brief_available_data",
-            help="可描述文件、歷史紀錄、Excel、資料庫、品質與限制；也可填目前不清楚。",
-            placeholder="例如：有紙本、Excel 和 Email，但格式不一致。",
-            height=120,
-        )
-        owners = st.text_area(
-            "使用者與負責人",
-            key="brief_users_and_owners",
-            placeholder="例如：申請人、部門主管、財務人員與資訊部門。",
-        )
-        constraints = st.text_area(
-            "已知限制",
-            key="brief_known_constraints",
-            placeholder="例如：正式核准必須由授權主管決定，優先使用 Microsoft 365。",
-        )
-        submitted = st.form_submit_button(
-            "建立專案並整理需求", type="primary", disabled=not ready
-        )
-    if submitted:
-        try:
-            created = get_api_client().create_discovery_project(
-                {
-                    "project_name": project_name,
-                    "current_workflow_problem": current,
-                    "desired_outcome": outcome,
-                    "available_data": data,
-                    "users_and_owners": owners or None,
-                    "known_constraints": constraints or None,
-                }
-            )
-            project, version = created["project"], created["version"]
-            _select_target(str(project["id"]), int(version["version_number"]))
-            try:
-                get_api_client().generate_understanding(
-                    str(project["id"]), int(version["version_number"])
-                )
-            except ApiClientError:
-                st.warning(
-                    "專案已建立，但需求理解尚未生成。請使用下方按鈕重新整理需求。"
-                )
-                refresh_api_data()
-            else:
-                _refresh()
-        except ApiClientError as error:
-            show_api_error(error)
-
-
 def _brief() -> None:
-    """Direct creation belongs to the independent new-project route."""
-    st.warning("請從新建專案頁建立專案。")
+    """Show navigation only; creation belongs to the independent new-project route."""
+    st.info("尚未選取專案。")
     if st.button("前往新建專案", icon=":material/add:"):
         st.switch_page("app_pages/new_project.py")
+    if st.button("前往專案歷史", icon=":material/history:"):
+        st.switch_page("app_pages/history.py")
 
 
 def _generation(project_id: str, number: int) -> None:

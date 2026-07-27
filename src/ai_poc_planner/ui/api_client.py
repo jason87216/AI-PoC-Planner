@@ -214,6 +214,17 @@ class ApiClient:
             self._request("GET", self._version_path(project_id, version_number))
         )
 
+    def bind_project_model_profile(
+        self, project_id: str, version_number: int, profile_id: str
+    ) -> dict[str, Any]:
+        return self._object(
+            self._request(
+                "POST",
+                self._version_path(project_id, version_number, "model-profile"),
+                {"model_profile_id": profile_id},
+            )
+        )
+
     def create_analysis(self, project_id: str, version_number: int) -> dict[str, Any]:
         return self._object(
             self._request(
