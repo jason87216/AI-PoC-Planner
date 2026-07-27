@@ -177,9 +177,14 @@ unknown answer, proactive fact addition, bounded completion, and refresh
  technical diagnostics out of the UI. A real NVIDIA browser UAT covered
  assessment creation, Report Part A/Part B, completed-state refresh, and
  Markdown download. Phase 6.4 closes out the Discovery experience with natural-
- language correction, free supplementary input, bounded material questions,
- human-readable summaries, and explicit Traditional Chinese output. P6.5
- navigation/results/error-state closeout and Phase 7 have not started.
+language correction, free supplementary input, bounded material questions,
+human-readable summaries, and explicit Traditional Chinese output. The product
+now enters work through four global pages only: Home, New project, Project
+history, and Model settings. Discovery, assessment, and reports are rendered
+inside the selected project's workspace. New-project routing remains stable on
+refresh; the selected model profile is persisted safely with the project, and
+copying a project prefills only its initial brief. P6.5 assessment redesign has
+not started.
 
 The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
 API using `json_schema`, `reasoning_effort=low`, and temporary local state. The

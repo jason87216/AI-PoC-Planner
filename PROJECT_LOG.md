@@ -2,7 +2,9 @@
 
 ## Current goal
 
-P6.4 Discovery UX closeout is complete; P6.5 is next.
+PR #20 contains the P6.4 project-centred navigation and model-binding closeout.
+PR #21 remains its stacked P7.1 runtime prerequisite. Both PRs remain open;
+Chrome UAT is the remaining acceptance step. P6.5 has not started.
 
 ## Current status
 
@@ -117,10 +119,15 @@ P6.4 Discovery UX closeout is complete; P6.5 is next.
   unstarted: its documented direction is case-centred assessment, separating
   case reference value, project-case fit, and critical gaps rather than having
   AI score its own generated option.
-- The Discovery sidebar label is 「需求訪談」. Creating another project is an
-  explicit create-mode action, not an implicit side effect of visiting the page;
-  this preserves refresh recovery because Streamlit navigation has no reliable
-  fresh-entry signal.
+- Project-centred navigation replaces the old global Discovery/Results pages.
+  The four global entry points are Home, New project, Project history, and
+  Model settings. The workspace is an internal route: it owns requirement
+  confirmation, interview, assessment, and report views for one selected
+  project. A new project always starts on its own route, survives refresh there,
+  persists a safe model-profile reference on its version, and never silently
+  adopts a different global profile. Copying a project prefills only the initial
+  brief; it does not create a version or copy AI/interview/assessment/report
+  outputs. P6.5 remains unstarted.
 
 ## UAT findings recorded from PR #8
 

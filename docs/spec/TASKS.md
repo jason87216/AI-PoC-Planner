@@ -270,10 +270,13 @@ scoring, reports, and the Streamlit product UI remain pending.
   understanding in a bordered card with confirmation/modification actions, and
   generates interview questions inline after confirmation or a saved answer.
   Prompts request complete Traditional Chinese understanding and prioritize
-  reviewed-case matching/gap inputs over fact completion. The sidebar calls the
-  page 「需求訪談」 rather than implying every navigation click creates a project;
-  explicit creation is the page's 「建立其他專案」 action because Streamlit
-  navigation does not provide a reliable fresh-entry event.
+  reviewed-case matching/gap inputs over fact completion. Project-centred
+  navigation now provides four global entry points only: Home, New project,
+  Project history, and Model settings. Discovery, assessment, and reports are
+  internal project-workspace stages rather than global features. New-project
+  routing survives refresh, binds a selected tested model profile to the saved
+  version, and project copy pre-fills only the initial brief. No new-version
+  feature is implemented.
 
 ### [Must] P6.5 Navigation, Results and Error-State Closeout
 
