@@ -14,7 +14,7 @@
 | model name | `openai/gpt-oss-20b` |
 | runtime mode | `uat` |
 | 執行日期 | 2026-07-27 |
-| 驗收 commit SHA | `996c71f`（matching 修正載入前的驗收程式碼） |
+| 驗收 commit SHA | `996c71f`（四個場景修正後重跑的評估程式碼基準；後續文件 commit 未改變評估邏輯） |
 | artifact 目錄 | `artifacts/product_acceptance/20260727-140758/`（被 gitignore） |
 | 執行次數 | 場景一 1 次；場景二 1 次完整執行（同一專案補答超出初始 runner 輪數）；場景三 2 個修正前證據與 1 個修正後完整執行；場景四 1 個修正前證據與 1 個修正後完整執行 |
 
