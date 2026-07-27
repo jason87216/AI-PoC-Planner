@@ -97,4 +97,4 @@
 
 ### Baseline 結論
 
-四個場景均達到 16 分以上，沒有 critical failure；因此 NVIDIA baseline acceptance 通過，等待人工 review。通過不代表案例庫已完整，也不代表供應商相容性已完成；P7.2 仍需用相同 golden scenarios 驗證雲端／本地 provider。本地完整測試已通過，UAT runtime 已 stopped；CI 狀態於 Draft PR 建立後確認。
+四個場景均達到 16 分以上，沒有 critical failure；因此 NVIDIA baseline acceptance 通過，等待人工 review。通過不代表案例庫已完整，也不代表供應商相容性已完成；P7.2 仍需用相同 golden scenarios 驗證雲端／本地 provider。本地完整測試已通過，UAT runtime 已 stopped；Draft PR #23 的 GitHub Actions CI run #54 已成功。
