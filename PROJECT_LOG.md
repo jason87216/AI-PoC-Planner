@@ -1,5 +1,18 @@
 # Project Log
 
+## P6.6 product acceptance closeout (2026-07-27)
+
+- PR #23 remains Draft on `codex/p6-6-product-acceptance-baseline`; no P7.2
+  provider adapter work or case-library expansion was started.
+- Four synthetic Traditional Chinese golden scenarios now drive parameterized
+  formal-result invariants. Deterministic recommendation categories, explicit
+  employment high-impact signals, fact-scoped validation negation, and
+  rules-first opportunity suppression were regression-tested.
+- The NVIDIA UAT baseline completed headed Chrome acceptance for all four
+  scenarios, including Markdown, refresh, history re-entry, and no duplicate
+  assessment observation. Full tests passed with 601 passed and 6 skipped;
+  the UAT runtime was stopped. See `docs/uat/P6_6_PRODUCT_ACCEPTANCE.md`.
+
 ## Current goal
 
 PR #20 contains the P6.4 project-centred navigation and model-binding closeout.
