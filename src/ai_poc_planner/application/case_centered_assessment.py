@@ -194,6 +194,19 @@ def _contains(facts: Mapping[str, FactRevision], *words: str) -> bool:
     return any(word.casefold() in text for word in words)
 
 
+def _contains_positive(facts: Mapping[str, FactRevision], *words: str) -> bool:
+    """Find a positive signal without treating a nearby negation as evidence."""
+
+    text = _confirmed_text(facts)
+    negations = ("沒有", "無", "尚未", "未", "缺少", "不足")
+    for word in words:
+        for match in re.finditer(re.escape(word.casefold()), text):
+            context = text[max(0, match.start() - 8) : match.start()]
+            if not any(marker in context for marker in negations):
+                return True
+    return False
+
+
 def build_deterministic_assessment_facts(
     facts: Iterable[FactRevision],
     *,
@@ -206,10 +219,16 @@ def build_deterministic_assessment_facts(
     confirmed_ids = [
         fact.id for fact in by_key.values() if fact.status is FactStatus.CONFIRMED
     ]
-    text = _confirmed_text(by_key)
     has_owner = _confirmed(by_key, "users_and_owners", "process_owner", "owner")
+    data_text = " ".join(
+        _text(fact.value)
+        for key, fact in by_key.items()
+        if key in {"available_data", "data_sources"}
+        and fact.status is FactStatus.CONFIRMED
+    ).casefold()
     has_data = _confirmed(by_key, "available_data", "data_sources") and not any(
-        marker in text for marker in ("none", "not available", "沒有", "無資料")
+        marker in data_text
+        for marker in ("none", "not available", "沒有資料", "無資料", "尚無資料")
     )
     digitization = (
         DigitizationLevel.COMPLETE
@@ -244,7 +263,7 @@ def build_deterministic_assessment_facts(
             quality_known=_contains(by_key, "quality", "品質", "資料品質"),
             quality_sampled=_contains(by_key, "sample", "抽樣", "樣本"),
             quality_measured=_contains(by_key, "measured", "量測", "衡量"),
-            validation_sample_available=_contains(
+            validation_sample_available=_contains_positive(
                 by_key, "validation", "驗證集", "驗證樣本"
             ),
             representative_validation_sample=_contains(
@@ -333,7 +352,7 @@ def build_deterministic_assessment_facts(
             prohibited_use=_contains(by_key, "prohibited", "禁止用途"),
             high_impact_domain=(
                 HighImpactDomain.EMPLOYMENT
-                if _contains(by_key, "employment", "人事", "招募")
+                if _contains(by_key, "employment", "人事", "員工", "招募")
                 else HighImpactDomain.NONE
             ),
             autonomous_final_decision=selected_authority
