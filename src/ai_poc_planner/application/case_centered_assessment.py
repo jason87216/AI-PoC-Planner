@@ -1135,10 +1135,6 @@ def build_case_centered_assessment(
                 ],
             }
         )
-    # Provider option kinds are input evidence only.  The formal route is
-    # derived from confirmed facts and gates, so user-facing basis text must
-    # not echo a provider-selected hybrid label.
-    option_kind = recommendation_title
     return CaseCenteredAssessment(
         matching_status="matched" if matches else "no_suitable_reviewed_case",
         matched_cases=list(matches),
@@ -1156,5 +1152,7 @@ def build_case_centered_assessment(
         recommendation_basis=case_basis
         + fact_basis
         + (["hard gate 只限制目前階段與自動化能力。"] if constrained else [])
-        + ([f"採用 {option_kind} 實施路徑的保守範圍。"] if not matches else []),
+        + (
+            [f"採用 {recommendation_title} 實施路徑的保守範圍。"] if not matches else []
+        ),
     )
