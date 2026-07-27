@@ -452,6 +452,7 @@ def create_app(
                     SQLiteProjectHistoryRepository(connection),
                     selected_profile_getter=profile_repository.get_selected,
                 ),
+                sessions=SQLiteDiscoveryRepository(connection),
                 analyses=SQLiteAnalysisRepository(connection),
                 reports=SQLitePlanningReportRepository(connection),
                 readiness=readiness,

@@ -151,6 +151,29 @@ was not performed after the owner lost access to a usable local UI session. It i
 **deferred, not claimed as passed**, and is included in P8.1. P6 implementation work is
 otherwise closed; P6.6 is an acceptance baseline, not another product feature.
 
+### P6.7 Results Narrative and Comparison Redesign — Complete on feature branch
+
+Delivered:
+
+- a continuous enterprise assessment article with the executive conclusion before
+  technical score and gate details;
+- persisted interview findings, current/target comparison, candidate-option comparison,
+  reviewed-case comparison, recommendation, roadmap, boundaries, next actions, and a
+  safe evaluation-basis appendix;
+- human-maintained Chinese reviewed-case display titles and summaries;
+- one canonical `ReportSynthesis` consumed by both the Results UI and Markdown;
+- deterministic fallback composition when provider narrative generation is unavailable;
+- regression tests for safe interview tracing, formal recommendation categories,
+  provider fallback, no rerun on re-entry, UI/Markdown parity, and appendix-only scores
+  and hard-gate identifiers.
+
+Verification:
+
+- `611 passed, 6 skipped`;
+- Ruff, formatting, and diff checks passed;
+- headed Chrome loaded the Local UI. No completed project existed in the Local runtime,
+  so the existing-project re-entry check was not performed.
+
 ### Checkpoint P6
 
 - P6.1–P6.6 implementation and technical acceptance are complete.

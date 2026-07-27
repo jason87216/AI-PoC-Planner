@@ -65,6 +65,8 @@ class ReviewedCase(ContractModel):
     case_id: CaseId = Field(pattern=r"^case-[0-9]{2}$")
     organization: NonEmptyStr
     title: NonEmptyStr
+    display_title_zh: NonEmptyStr | None = None
+    summary_zh: NonEmptyStr | None = None
     organization_type: NonEmptyStr | None = None
     applicable_context: list[NonEmptyStr] = Field(default_factory=list)
     opportunity_types: list[OpportunityType] = Field(min_length=1)

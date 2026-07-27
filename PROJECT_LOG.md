@@ -4,6 +4,15 @@
 
 PR #23 completes the P6.6 technical product-acceptance baseline and closes Phase 6 implementation. The next planned implementation is P7.2 provider compatibility and local inference; it has not started.
 
+## Results Narrative and Comparison Redesign
+
+- The feature branch `codex/results-narrative-comparison-redesign` implements the readable report article, deterministic comparison tables, safe interview findings, and the technical/evidence appendix.
+- The main report also exposes human-readable hard-gate boundaries before the technical appendix; gate IDs remain appendix-only.
+- The same persisted `ReportSynthesis` is used by the Results UI and Markdown renderer; Streamlit continues to access report data through the FastAPI boundary.
+- Deterministic matching, recommendation categories, scoring, hard gates, idempotency, reviewed-case approval, provider adapters, and P7.1 runtime behavior were not changed.
+- Automated verification passed: `611 passed, 6 skipped`, Ruff, formatting, and diff checks.
+- Headed Chrome smoke verification loaded the Local UI successfully and confirmed the Results empty state has no accordion elements. The local runtime had zero projects, so no existing completed project was re-entered or re-run during this change.
+
 ## Current status
 
 - PR #20 (P6.4), PR #21 (P7.1), and PR #22 (P6.5) are merged into `main`.

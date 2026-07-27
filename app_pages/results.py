@@ -1,8 +1,7 @@
-"""Hidden project results workspace; all data comes through the FastAPI client."""
+"""Readable project results report; all data comes through the FastAPI client."""
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import streamlit as st
@@ -11,9 +10,8 @@ from ai_poc_planner.ui.api_client import ApiClientError
 from ai_poc_planner.ui.presentation import show_api_error, status_label
 from ai_poc_planner.ui.results import (
     analysis_overview,
-    case_centered_overview,
     markdown_download_name,
-    report_sections,
+    report_synthesis_view,
     result_view_for_status,
 )
 from ai_poc_planner.ui.runtime import (
@@ -84,173 +82,185 @@ def _render_header(
         f"{project_name} · 第 {version_number} 版 · "
         f"{status_label(version.get('status'))} · 模型：{model_name or '未記錄'}"
     )
-    left, right = st.columns(2)
-    with left:
+    with st.container(horizontal=True):
         if st.button("返回專案工作區", icon=":material/arrow_back:"):
             st.switch_page("app_pages/discovery.py")
-    with right:
         if st.button("返回專案歷史", icon=":material/history:"):
             st.switch_page("app_pages/history.py")
 
 
-def _render_conclusion(analysis: dict[str, Any]) -> dict[str, Any]:
-    view = analysis_overview(analysis)
-    case_view = case_centered_overview(analysis)
-    st.header("本次評估結論")
-    if case_view:
-        st.subheader(case_view["recommendation_title"])
-        st.write("；".join(case_view["recommendation_basis"]))
-        if case_view["matching_status"] != "已匹配":
-            st.info(
-                case_view["no_case_reason"]
-                or "目前沒有足夠成熟案例；以下仍保留 deterministic readiness 與差距。"
-            )
-    else:
-        st.subheader(view["conclusion"])
-        st.write(view["conclusion_rationale"])
-    return case_view
-
-
-def _render_cases(case_view: dict[str, Any]) -> None:
-    st.header("最相關成熟案例")
-    cases = case_view.get("cases", [])
-    if not cases:
-        st.info(
-            case_view.get("no_case_reason")
-            or "目前沒有通過審核且與需求相符的成熟案例。"
-        )
+def _table(rows: list[dict[str, Any]], fields: tuple[tuple[str, str], ...]) -> None:
+    if not rows:
+        st.caption("目前未記錄。")
         return
-    for case in cases:
-        with st.container(border=True):
-            st.subheader(case["title"])
-            st.caption(case["organization"])
-            first, second = st.columns(2)
-            first.metric("案例參考價值", case["reference_level"])
-            second.metric("專案適配程度", case["fit_level"])
-            st.markdown("**主要相似點**")
-            _items(case["similarities"])
-            st.markdown("**主要差距**")
-            _items(case["differences"])
-            with st.expander("查看依據"):
-                st.markdown("**參考價值依據**")
-                _items(case["reference_basis"])
-                st.markdown("**尚未確認**")
-                _items(case["reference_unknown"])
-                for source in case["sources"]:
-                    st.markdown(f"- [{source['label']}]({source['url']})")
+    st.table(
+        [
+            {
+                label: (
+                    "；".join(value)
+                    if isinstance(value := row.get(key), list)
+                    else value
+                )
+                for key, label in fields
+            }
+            for row in rows
+        ]
+    )
 
 
-def _render_gaps(case_view: dict[str, Any]) -> None:
-    st.header("案例比較與關鍵差距")
-    for case in case_view.get("cases", []):
-        with st.expander(case["title"], expanded=True):
-            columns = st.columns(4)
-            labels = (
-                ("已具備條件", "ready_conditions"),
-                ("尚缺條件", "missing_conditions"),
-                ("不可直接複製", "not_directly_transferable"),
-                ("需要確認", "gap_confirmation"),
-            )
-            for column, (label, key) in zip(columns, labels, strict=True):
-                with column:
-                    st.markdown(f"**{label}**")
-                    _items(case[key])
-
-
-def _render_practices(case_view: dict[str, Any]) -> None:
-    st.header("可移植做法")
-    practices = case_view.get("practices", [])
-    if not practices:
-        st.info("沒有足夠案例來源可形成正式可移植做法。")
-        return
-    for practice in practices:
-        with st.container(border=True):
-            st.subheader(practice["name"])
-            st.caption("來源案例：" + "、".join(practice["source_case_titles"]))
-            st.write(practice["case_evidence"])
-            st.markdown(f"**可移植部分：** {practice['transferable_part']}")
-            st.markdown("**必須調整**")
-            _items(practice["required_adjustments"])
-            st.markdown(f"**目前階段：** {practice['current_stage']}")
-            st.markdown("**前置條件**")
-            _items(practice["prerequisites"])
-            st.markdown("**不適用範圍**")
-            _items(practice["not_applicable_scope"])
-
-
-def _render_constraints(case_view: dict[str, Any]) -> None:
-    st.header("當前限制與人工邊界")
-    gates = case_view.get("gates", [])
-    if not gates:
-        st.info("目前沒有額外 hard gate；仍保留人工最終決策。")
-    for gate in gates:
-        with st.container(border=True):
-            st.subheader(gate["affected_stage"])
-            st.caption(gate["disposition"])
-            st.markdown("**這個 gate 限制**")
-            _items(gate["limits"])
-            st.markdown("**這個 gate 不限制**")
-            _items(gate["does_not_limit"])
-            st.markdown("**解除限制需要**")
-            _items(gate["release_conditions"])
-
-
-def _render_path(case_view: dict[str, Any]) -> None:
-    st.header("分階段實施路線")
-    for phase in case_view.get("phases", []):
-        with st.expander(
-            phase["phase_name"], expanded=phase["phase_name"] == "第一階段 PoC"
-        ):
-            st.write(phase["description"])
-            for label, key in (
-                ("行動", "actions"),
-                ("輸入", "inputs"),
-                ("輸出", "outputs"),
-                ("使用者", "users"),
-                ("不做什麼", "not_doing"),
-                ("尚存差距", "remaining_gaps"),
-                ("驗收指標", "acceptance_criteria"),
-            ):
-                st.markdown(f"**{label}**")
-                _items(phase[key])
-            st.markdown(f"**人工決策邊界：** {phase['human_decision_boundary']}")
-
-
-def _render_scores(analysis: dict[str, Any]) -> None:
-    view = analysis_overview(analysis)
-    st.header("評分與判定依據")
-    st.caption("評分對象：目前專案在現階段採用實施路徑的可行性與準備程度。")
-    for score in view["scores"]:
-        with st.expander(score["dimension"]):
-            st.write(score["rationale"])
-            st.caption(
-                f"{score['rating']}/5；權重 {score['weight']}；"
-                f"加權點數 {score['weighted_points']}"
-            )
-            st.markdown("**資料未知的影響**")
-            _items(score.get("data_gaps"))
-            st.markdown("**改善條件**")
-            _items(score.get("improvement_conditions"))
-
-
-def _render_report(
+def _render_synthesis(
     report: dict[str, Any], project_name: str, version_number: int
 ) -> None:
-    st.header("正式報告")
-    markdown = str(report.get("markdown", ""))
-    if markdown:
-        with st.expander("查看 Markdown 報告", expanded=True):
-            st.markdown(re.sub(r"\s*\(?F\d{3}\)?", "", markdown))
-    for section in report_sections(report):
-        with st.expander(section["title"]):
-            st.write(section["content"])
+    view = report_synthesis_view(report)
+    if not view:
+        st.warning("這份舊版報告沒有文章式 synthesis；以下顯示已保存的 Markdown。")
+        markdown = str(report.get("markdown", ""))
+        if markdown:
+            st.markdown(markdown)
+        return
+
+    st.header("1. 專案評估摘要")
+    st.write(view["executive_narrative"])
     st.download_button(
         "下載 Markdown 報告",
-        data=markdown.encode("utf-8"),
+        data=str(report.get("markdown", "")).encode("utf-8"),
         file_name=markdown_download_name(project_name, version_number),
         mime="text/markdown",
         icon=":material/download:",
     )
+
+    st.header("2. 需求與訪談發現")
+    st.write(view["project_context_narrative"])
+    _table(
+        view["interview_findings"],
+        (
+            ("topic", "主題"),
+            ("initial_understanding", "初始理解"),
+            ("clarification", "追問後澄清"),
+            ("assessment_impact", "對評估的影響"),
+        ),
+    )
+
+    st.header("3. 目前狀態與目標狀態")
+    _table(
+        view["current_target_comparison"],
+        (
+            ("aspect", "面向"),
+            ("current_state", "目前狀態"),
+            ("target_state", "目標狀態"),
+            ("main_gap", "主要差距"),
+            ("treatment", "處理方式"),
+        ),
+    )
+
+    st.header("4. 候選方案比較")
+    option_rows = [
+        {
+            **row,
+            "option": (
+                ("正式推薦：" if row.get("recommended") else "")
+                + str(row.get("option", ""))
+            ),
+        }
+        for row in view["option_comparison"]
+    ]
+    _table(
+        option_rows,
+        (
+            ("option", "方案"),
+            ("suitable_reason", "適合原因"),
+            ("benefits", "效益"),
+            ("limitations_risks", "限制／風險"),
+            ("prerequisites", "前置條件"),
+            ("conclusion", "結論"),
+        ),
+    )
+
+    st.header("5. 成熟案例橫向比較")
+    _table(
+        view["case_comparison"],
+        (
+            ("display_title_zh", "中文案例名稱"),
+            ("original_title", "原始英文名稱"),
+            ("organization", "組織"),
+            ("why_relevant", "為什麼相關"),
+            ("transferable_practice", "可移植做法"),
+            ("cannot_copy", "不能直接複製"),
+            ("adaptation_conclusion", "專案適配結論"),
+        ),
+    )
+    if not view["case_comparison"]:
+        st.caption("目前沒有足夠成熟案例作為正式案例依據。")
+
+    st.header("6. 推薦方案與理由")
+    st.write(view["recommendation_narrative"])
+
+    st.header("7. 分階段實施路線")
+    for phase in view["implementation_roadmap"]:
+        st.subheader(phase["phase"])
+        st.write(phase["description"])
+        for label, key in (
+            ("行動", "actions"),
+            ("輸入", "inputs"),
+            ("輸出", "outputs"),
+            ("不做什麼", "not_doing"),
+            ("尚存差距", "remaining_gaps"),
+            ("驗收條件", "acceptance_criteria"),
+        ):
+            st.markdown(f"**{label}**")
+            _items(phase[key])
+        st.markdown(f"**人工決策邊界：** {phase['human_decision_boundary']}")
+
+    st.header("8. 風險、人工邊界與暫不實施事項")
+    st.write(view["risk_and_boundary_summary"])
+    _table(
+        view["hard_gate_summary"],
+        (
+            ("limit_content", "限制內容"),
+            ("affected_stage", "影響階段"),
+            ("currently_possible", "目前可做事項"),
+            ("release_condition", "解除條件"),
+        ),
+    )
+
+    st.header("9. 下一步")
+    _items(view["next_actions"])
+
+    st.header("10. 評估依據附錄")
+    appendix = view["appendix"]
+    st.subheader("六維評分")
+    _table(
+        appendix["scores"],
+        (
+            ("dimension", "維度"),
+            ("judgement", "判斷"),
+            ("main_basis", "主要依據"),
+            ("improvement_condition", "改善條件"),
+        ),
+    )
+    st.subheader("Hard gate 明細")
+    _table(
+        appendix["hard_gates"],
+        (
+            ("gate_id", "編號"),
+            ("limit_content", "限制內容"),
+            ("affected_stage", "影響階段"),
+            ("currently_possible", "目前可做事項"),
+            ("release_condition", "解除條件"),
+        ),
+    )
+    st.subheader("安全化原始問答")
+    _table(
+        appendix["safe_interview_qa"],
+        (
+            ("question", "問題"),
+            ("why_it_matters", "為什麼重要"),
+            ("user_answer", "使用者回答"),
+            ("assessment_impact", "影響的評估判斷"),
+        ),
+    )
+    st.subheader("證據依據")
+    _items(appendix["evidence_basis"])
 
 
 def _refresh_after_write() -> None:
@@ -270,29 +280,16 @@ def _render_ready(project_id: str, version_number: int) -> None:
             _refresh_after_write()
 
 
-def _load_and_render_assessment(
-    project_id: str, version_number: int
-) -> dict[str, Any] | None:
+def _render_assessed(project_id: str, version_number: int) -> None:
     try:
         analysis = load_analysis(project_id, version_number)
     except ApiClientError as error:
         show_api_error(error)
-        return None
-    case_view = _render_conclusion(analysis)
-    if case_view:
-        _render_cases(case_view)
-        _render_gaps(case_view)
-        _render_practices(case_view)
-        _render_constraints(case_view)
-        _render_path(case_view)
-    _render_scores(analysis)
-    return analysis
-
-
-def _render_assessed(project_id: str, version_number: int) -> None:
-    _load_and_render_assessment(project_id, version_number)
-    st.header("正式報告")
-    st.info("評估結果已保存；可產生一份與本次評估共用資料的 Markdown 報告。")
+        return
+    view = analysis_overview(analysis)
+    st.header("評估結果已保存")
+    st.write(view["conclusion_rationale"])
+    st.info("產生正式報告後，頁面會以文章、比較表與附錄呈現完整結果。")
     if st.button("產生正式報告", type="primary", icon=":material/article:"):
         try:
             with st.spinner("正在整理正式報告…"):
@@ -304,16 +301,17 @@ def _render_assessed(project_id: str, version_number: int) -> None:
 
 
 def _render_complete(project_id: str, version_number: int, project_name: str) -> None:
-    _load_and_render_assessment(project_id, version_number)
     try:
         report = load_report(project_id, version_number)
     except ApiClientError as error:
         show_api_error(error)
         return
-    _render_report(report, project_name, version_number)
+    _render_synthesis(report, project_name, version_number)
 
 
-st.set_page_config(page_title="評估結果", page_icon="📊", layout="wide")
+st.set_page_config(
+    page_title="評估結果", page_icon=":material/article:", layout="centered"
+)
 
 target = _target_from_state()
 if target is None:

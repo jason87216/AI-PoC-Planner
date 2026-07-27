@@ -11,6 +11,7 @@ from ai_poc_planner.ui.results import (
     analysis_overview,
     markdown_download_name,
     report_sections,
+    report_synthesis_view,
     result_view_for_status,
     reviewed_case_sources,
 )
@@ -188,3 +189,58 @@ def test_results_ui_does_not_expose_internal_details_or_forbidden_layers() -> No
     assert "st.json" not in source
     assert "base_url" not in source
     assert "traceback" not in source.casefold()
+    assert "st.expander" not in source
+    assert "report_synthesis_view" in source
+
+
+def test_report_synthesis_view_keeps_safe_article_fields_only() -> None:
+    view = report_synthesis_view(
+        {
+            "synthesis": {
+                "executive_narrative": "先顯示結論。",
+                "project_context_narrative": "目前已確認流程。",
+                "interview_findings": [
+                    {
+                        "topic": "人工責任",
+                        "initial_understanding": "尚未確認。",
+                        "clarification": "主管最終核准。",
+                        "assessment_impact": "限制自動化範圍。",
+                        "source_question": "誰最終核准？",
+                        "answer_summary": "主管最終核准。",
+                        "question_uuid": "hidden-question-id",
+                    }
+                ],
+                "current_target_comparison": [],
+                "option_comparison": [],
+                "case_comparison": [],
+                "hard_gate_summary": [
+                    {
+                        "limit_content": "不得自動核准。",
+                        "affected_stage": "第一階段",
+                        "currently_possible": "可先做欄位檢查。",
+                        "release_condition": "完成治理審查。",
+                        "gate_id": "hidden-gate-id",
+                    }
+                ],
+                "recommendation_narrative": "人工輔助。",
+                "implementation_roadmap": [],
+                "risk_and_boundary_summary": "保留人工邊界。",
+                "next_actions": ["建立驗證集。"],
+                "appendix": {
+                    "scores": [],
+                    "hard_gates": [],
+                    "safe_interview_qa": [],
+                    "evidence_basis": [],
+                    "fact_key": "hidden-fact-key",
+                },
+            }
+        }
+    )
+
+    assert view["executive_narrative"] == "先顯示結論。"
+    assert view["interview_findings"][0]["source_question"] == "誰最終核准？"
+    assert view["hard_gate_summary"][0]["currently_possible"] == "可先做欄位檢查。"
+    assert "question_uuid" not in repr(view)
+    assert "hidden-question-id" not in repr(view)
+    assert "hidden-gate-id" not in repr(view)
+    assert "fact_key" not in repr(view)

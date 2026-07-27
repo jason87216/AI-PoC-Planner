@@ -13,11 +13,16 @@ from uuid import UUID, uuid4
 from ai_poc_planner.application.case_matching import match_cases
 from ai_poc_planner.application.project_history import ProjectHistoryService
 from ai_poc_planner.application.provider_readiness import ProviderReadinessService
+from ai_poc_planner.application.report_synthesis import (
+    build_report_synthesis,
+    render_synthesis_markdown,
+)
 from ai_poc_planner.domain.analysis import ValidatedAnalysisResult
 from ai_poc_planner.domain.case_centered import (
     CaseCenteredNarrative,
 )
 from ai_poc_planner.domain.catalog import OpportunityType
+from ai_poc_planner.domain.discovery import InterviewQuestion
 from ai_poc_planner.domain.enums import FactStatus, ProjectStatus
 from ai_poc_planner.domain.planning_report import (
     REPORT_SECTION_KEYS,
@@ -26,11 +31,18 @@ from ai_poc_planner.domain.planning_report import (
     PlanningReportPartA,
     PlanningReportPartB,
     ReportSectionDraft,
+    ReportSynthesis,
 )
-from ai_poc_planner.domain.project_history import FactRevision, ProjectVersion
+from ai_poc_planner.domain.project_history import (
+    FactRevision,
+    ProjectVersion,
+    VisibleConversationMessage,
+)
 from ai_poc_planner.domain.reviewed_cases import ReviewedCase
 from ai_poc_planner.infrastructure.local_case_repository import LocalCaseRepository
 from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
+from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
+from ai_poc_planner.persistence.errors import InterviewSessionNotFoundError
 from ai_poc_planner.persistence.report import SQLitePlanningReportRepository
 from ai_poc_planner.providers.json_schema import normalize_provider_schema
 from ai_poc_planner.providers.openai_compatible import JSONSchemaResponseFormat
@@ -48,11 +60,16 @@ def render_markdown(
     analysis: ValidatedAnalysisResult,
     facts: list[FactRevision],
     cases: tuple[ReviewedCase, ...] = (),
+    *,
+    synthesis: ReportSynthesis | None = None,
 ) -> str:
     """Render in a fixed, business-readable order without provider internals."""
 
     if analysis.case_centered is not None:
-        return _render_case_centered_markdown(report, analysis, facts)
+        return render_synthesis_markdown(
+            synthesis
+            or build_report_synthesis(analysis=analysis, facts=facts, report=report)
+        )
     lines = [
         "# AI PoC Planning Report",
         "",
@@ -384,6 +401,7 @@ class PlanningReportService:
         self,
         *,
         history: ProjectHistoryService,
+        sessions: SQLiteDiscoveryRepository | None = None,
         analyses: SQLiteAnalysisRepository,
         reports: SQLitePlanningReportRepository,
         readiness: ProviderReadinessService,
@@ -399,6 +417,7 @@ class PlanningReportService:
             reports,
             readiness,
         )
+        self._sessions = sessions
         (
             self._selected_profile_getter,
             self._profile_getter,
@@ -490,9 +509,17 @@ class PlanningReportService:
                 "case_centered_narrative": _case_centered_narrative(analysis),
             }
         )
-        markdown = render_markdown(
-            draft, analysis, facts, self._matched_cases(analysis)
+        questions, messages = self._interview_records(
+            version.id, project_id, version_number
         )
+        synthesis = build_report_synthesis(
+            analysis=analysis,
+            facts=facts,
+            report=draft,
+            interview_questions=questions,
+            messages=messages,
+        )
+        markdown = render_synthesis_markdown(synthesis)
         result = PersistedPlanningReport(
             id=uuid4(),
             version_id=version.id,
@@ -500,6 +527,7 @@ class PlanningReportService:
             report=draft,
             markdown=markdown,
             created_at=self._clock(),
+            synthesis=synthesis,
         )
         with self._history._repository.transaction():
             if self._reports.get_by_version(version.id) is not None:
@@ -651,3 +679,20 @@ class PlanningReportService:
             OpportunityType(reference.opportunity_type),
             option.option_kind.value,
         )
+
+    def _interview_records(
+        self, version_id: UUID, project_id: UUID, version_number: int
+    ) -> tuple[list[InterviewQuestion], list[VisibleConversationMessage]]:
+        """Read visible interview records through the report application boundary."""
+
+        if self._sessions is None:
+            return [], []
+        try:
+            session = self._sessions.get_session_for_version(version_id)
+            questions = self._sessions.list_questions(session.id)
+            messages = self._history.list_messages(project_id, version_number)
+        except InterviewSessionNotFoundError:
+            # Older assessed snapshots may predate the interview tables. Their
+            # deterministic report remains usable without pretending findings exist.
+            return [], []
+        return questions, messages

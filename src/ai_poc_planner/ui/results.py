@@ -151,6 +151,157 @@ def report_sections(report: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
+def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
+    """Project the persisted canonical synthesis into safe UI fields only."""
+
+    synthesis = report.get("synthesis")
+    if not isinstance(synthesis, dict):
+        return {}
+
+    def rows(
+        key: str, fields: tuple[str, ...], source: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        values = (source or synthesis).get(key)
+        if not isinstance(values, list):
+            return []
+        result: list[dict[str, Any]] = []
+        for value in values:
+            if not isinstance(value, dict):
+                continue
+            result.append(
+                {
+                    field: (
+                        _readable_items(value.get(field, []))
+                        if field
+                        in {
+                            "benefits",
+                            "limitations_risks",
+                            "prerequisites",
+                            "cannot_copy",
+                            "actions",
+                            "inputs",
+                            "outputs",
+                            "not_doing",
+                            "remaining_gaps",
+                            "acceptance_criteria",
+                        }
+                        else _readable_text(value.get(field, ""))
+                    )
+                    for field in fields
+                }
+            )
+        return result
+
+    appendix = synthesis.get("appendix")
+    if not isinstance(appendix, dict):
+        appendix = {}
+    return {
+        "executive_narrative": _readable_text(synthesis.get("executive_narrative", "")),
+        "project_context_narrative": _readable_text(
+            synthesis.get("project_context_narrative", "")
+        ),
+        "interview_findings": rows(
+            "interview_findings",
+            (
+                "topic",
+                "initial_understanding",
+                "clarification",
+                "assessment_impact",
+                "source_question",
+                "answer_summary",
+            ),
+        ),
+        "current_target_comparison": rows(
+            "current_target_comparison",
+            ("aspect", "current_state", "target_state", "main_gap", "treatment"),
+        ),
+        "option_comparison": rows(
+            "option_comparison",
+            (
+                "option",
+                "suitable_reason",
+                "benefits",
+                "limitations_risks",
+                "prerequisites",
+                "conclusion",
+                "recommended",
+            ),
+        ),
+        "case_comparison": rows(
+            "case_comparison",
+            (
+                "display_title_zh",
+                "original_title",
+                "organization",
+                "why_relevant",
+                "transferable_practice",
+                "cannot_copy",
+                "adaptation_conclusion",
+            ),
+        ),
+        "recommendation_narrative": _readable_text(
+            synthesis.get("recommendation_narrative", "")
+        ),
+        "implementation_roadmap": rows(
+            "implementation_roadmap",
+            (
+                "phase",
+                "description",
+                "actions",
+                "inputs",
+                "outputs",
+                "human_decision_boundary",
+                "not_doing",
+                "remaining_gaps",
+                "acceptance_criteria",
+            ),
+        ),
+        "hard_gate_summary": rows(
+            "hard_gate_summary",
+            (
+                "limit_content",
+                "affected_stage",
+                "currently_possible",
+                "release_condition",
+            ),
+        ),
+        "risk_and_boundary_summary": _readable_text(
+            synthesis.get("risk_and_boundary_summary", "")
+        ),
+        "next_actions": _readable_items(synthesis.get("next_actions", [])),
+        "appendix": {
+            "scores": rows(
+                "scores",
+                ("dimension", "judgement", "main_basis", "improvement_condition"),
+                appendix,
+            )
+            if isinstance(appendix.get("scores"), list)
+            else [],
+            "hard_gates": rows(
+                "hard_gates",
+                (
+                    "gate_id",
+                    "limit_content",
+                    "affected_stage",
+                    "currently_possible",
+                    "release_condition",
+                ),
+                appendix,
+            )
+            if isinstance(appendix.get("hard_gates"), list)
+            else [],
+            "safe_interview_qa": rows(
+                "safe_interview_qa",
+                ("question", "why_it_matters", "user_answer", "assessment_impact"),
+                appendix,
+            )
+            if isinstance(appendix.get("safe_interview_qa"), list)
+            else [],
+            "evidence_basis": _readable_items(appendix.get("evidence_basis", [])),
+        },
+    }
+
+
 def analysis_overview(analysis: dict[str, Any]) -> dict[str, Any]:
     """Keep only the business-readable assessment data for rendering."""
 
