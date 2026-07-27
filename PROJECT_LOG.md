@@ -15,16 +15,26 @@
 
 ## Current goal
 
-PR #20 contains the P6.4 project-centred navigation and model-binding closeout.
-PR #21 remains its stacked P7.1 runtime prerequisite. Both PRs remain open.
-Headed Chrome UAT passed for the new-project refresh, model readiness, project
-workspace, discovery, history, and copy flow. P6.5 implementation is in progress;
-the final integrated headed Chrome run remains pending.
+PR #23 is the current Draft PR for the P6.6 product acceptance baseline closeout.
+The NVIDIA-compatible baseline acceptance has passed. The next candidate is P7.2
+provider compatibility and local inference, but that work has not started.
 
 ## Current status
 
-- `main` has the first Streamlit product surface, but is not yet a complete
-  viable end-user product.
+- PR #20 (P6.4), PR #21 (P7.1), and PR #22 (P6.5) are merged into `main`.
+- P6.4 project navigation/model binding, P6.5 case-centred assessment results,
+  and P7.1 local runtime/UAT tooling are complete.
+- PR #23 remains open as a Draft; P6.6 baseline acceptance passed after the
+  full deterministic regression suite and four-scenario headed Chrome UAT.
+- The known follow-up items are provider narrative fallback behaviour, six
+  opt-in provider integration tests, and insufficient reviewed-case coverage.
+- P7.2 is only a candidate next phase. No Ollama, LM Studio, vLLM adapter,
+  local-model installation, or multi-provider refactor has started.
+
+### Historical phase records
+
+以下內容保留各階段當時的決策與驗收脈絡，不代表目前分支、`main` 或 PR 狀態。
+
 - PR #8 passed automated validation but failed manual product UAT.
 - The failure is not a single implementation bug: the previous MVP acceptance
   standard incorrectly treated a repeatable fake-model vertical slice as product
