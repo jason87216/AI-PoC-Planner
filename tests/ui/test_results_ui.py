@@ -189,43 +189,69 @@ def test_results_ui_does_not_expose_internal_details_or_forbidden_layers() -> No
     assert "st.json" not in source
     assert "base_url" not in source
     assert "traceback" not in source.casefold()
-    assert "st.expander" not in source
+    assert source.count("st.expander") == 1
     assert "report_synthesis_view" in source
 
 
-def test_report_synthesis_view_keeps_safe_article_fields_only() -> None:
+def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> None:
     view = report_synthesis_view(
         {
             "synthesis": {
+                "schema_version": "2.1",
                 "executive_narrative": "先顯示結論。",
-                "project_context_narrative": "目前已確認流程。",
                 "interview_findings": [
                     {
                         "topic": "人工責任",
-                        "initial_understanding": "尚未確認。",
-                        "clarification": "主管最終核准。",
+                        "confirmed_content": "主管最終核准。",
                         "assessment_impact": "限制自動化範圍。",
                         "source_question": "誰最終核准？",
-                        "answer_summary": "主管最終核准。",
                         "question_uuid": "hidden-question-id",
                     }
                 ],
-                "current_target_comparison": [],
-                "option_comparison": [],
-                "case_comparison": [],
-                "hard_gate_summary": [
+                "comparison_narrative": "先說明比較範圍。\n\n再說明案例限制。",
+                "current_target_comparison": [
                     {
-                        "limit_content": "不得自動核准。",
-                        "affected_stage": "第一階段",
-                        "currently_possible": "可先做欄位檢查。",
-                        "release_condition": "完成治理審查。",
-                        "gate_id": "hidden-gate-id",
+                        "aspect": "人工責任",
+                        "current_state": "主管最終核准。",
+                        "target_state": "AI 提供草稿，主管確認。",
+                        "main_gap": "覆核流程待確認。",
+                        "treatment": "保留確認步驟。",
                     }
                 ],
-                "recommendation_narrative": "人工輔助。",
-                "implementation_roadmap": [],
-                "risk_and_boundary_summary": "保留人工邊界。",
-                "next_actions": ["建立驗證集。"],
+                "option_comparison": [
+                    {
+                        "option": "AI 檢索與人工確認",
+                        "positioning": "先檢索核准內容，再由人員確認。",
+                        "supporting_cases": ["Morgan Stanley：知識檢索與人工修訂"],
+                        "case_evidence": "案例支持檢索與人工修訂。",
+                        "transferable_practice": "保留來源與修改紀錄。",
+                        "cannot_copy": ["不可照搬自動化程度。"],
+                        "conclusion": "正式推薦。",
+                        "recommended": True,
+                        "option_key": "hidden-option-id",
+                    },
+                    {
+                        "option": "規則與流程標準化",
+                        "positioning": "以固定規則檢查。",
+                        "supporting_cases": [],
+                        "case_evidence": "目前沒有直接案例支持。",
+                        "transferable_practice": "保留人工確認。",
+                        "cannot_copy": [],
+                        "conclusion": "比較基線。",
+                        "recommended": False,
+                    },
+                ],
+                "recommendation_narrative": "完整推薦理由。",
+                "implementation_roadmap": [
+                    {
+                        "phase": "準備階段（立即行動）",
+                        "actions": ["整理核准資料。"],
+                        "outputs": ["測試樣本。"],
+                        "human_decision_boundary": "人員確認。",
+                        "acceptance_criteria": ["可追溯。"],
+                    }
+                ],
+                "major_risks_and_boundaries": ["不自動對外發送。"],
                 "appendix": {
                     "scores": [],
                     "hard_gates": [],
@@ -238,9 +264,19 @@ def test_report_synthesis_view_keeps_safe_article_fields_only() -> None:
     )
 
     assert view["executive_narrative"] == "先顯示結論。"
-    assert view["interview_findings"][0]["source_question"] == "誰最終核准？"
-    assert view["hard_gate_summary"][0]["currently_possible"] == "可先做欄位檢查。"
+    assert view["interview_findings"][0]["confirmed_content"] == "主管最終核准。"
+    assert view["comparison_narrative"].startswith("先說明")
+    assert view["option_comparison"][0]["supporting_cases"] == [
+        "Morgan Stanley：知識檢索與人工修訂"
+    ]
+    assert [item["recommended"] for item in view["option_comparison"]] == [
+        True,
+        False,
+    ]
     assert "question_uuid" not in repr(view)
     assert "hidden-question-id" not in repr(view)
-    assert "hidden-gate-id" not in repr(view)
+    assert "hidden-option-id" not in repr(view)
     assert "fact_key" not in repr(view)
+    assert "source_question" not in repr(view)
+    assert "safe_interview_qa" not in repr(view)
+    assert "evidence_basis" not in repr(view)

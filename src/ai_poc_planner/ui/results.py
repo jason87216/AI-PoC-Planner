@@ -155,7 +155,7 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
     """Project the persisted canonical synthesis into safe UI fields only."""
 
     synthesis = report.get("synthesis")
-    if not isinstance(synthesis, dict):
+    if not isinstance(synthesis, dict) or synthesis.get("schema_version") != "2.1":
         return {}
 
     def rows(
@@ -171,21 +171,20 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
             result.append(
                 {
                     field: (
-                        _readable_items(value.get(field, []))
-                        if field
-                        in {
-                            "benefits",
-                            "limitations_risks",
-                            "prerequisites",
-                            "cannot_copy",
-                            "actions",
-                            "inputs",
-                            "outputs",
-                            "not_doing",
-                            "remaining_gaps",
-                            "acceptance_criteria",
-                        }
-                        else _readable_text(value.get(field, ""))
+                        bool(value.get(field, False))
+                        if field == "recommended"
+                        else (
+                            _readable_items(value.get(field, []))
+                            if field
+                            in {
+                                "supporting_cases",
+                                "cannot_copy",
+                                "actions",
+                                "outputs",
+                                "acceptance_criteria",
+                            }
+                            else _readable_text(value.get(field, ""))
+                        )
                     )
                     for field in fields
                 }
@@ -197,19 +196,19 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
         appendix = {}
     return {
         "executive_narrative": _readable_text(synthesis.get("executive_narrative", "")),
-        "project_context_narrative": _readable_text(
-            synthesis.get("project_context_narrative", "")
+        "recommendation_narrative": _readable_text(
+            synthesis.get("recommendation_narrative", "")
         ),
         "interview_findings": rows(
             "interview_findings",
             (
                 "topic",
-                "initial_understanding",
-                "clarification",
+                "confirmed_content",
                 "assessment_impact",
-                "source_question",
-                "answer_summary",
             ),
+        ),
+        "comparison_narrative": _readable_text(
+            synthesis.get("comparison_narrative", "")
         ),
         "current_target_comparison": rows(
             "current_target_comparison",
@@ -219,56 +218,28 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
             "option_comparison",
             (
                 "option",
-                "suitable_reason",
-                "benefits",
-                "limitations_risks",
-                "prerequisites",
+                "positioning",
+                "supporting_cases",
+                "case_evidence",
+                "transferable_practice",
+                "cannot_copy",
                 "conclusion",
                 "recommended",
             ),
-        ),
-        "case_comparison": rows(
-            "case_comparison",
-            (
-                "display_title_zh",
-                "original_title",
-                "organization",
-                "why_relevant",
-                "transferable_practice",
-                "cannot_copy",
-                "adaptation_conclusion",
-            ),
-        ),
-        "recommendation_narrative": _readable_text(
-            synthesis.get("recommendation_narrative", "")
         ),
         "implementation_roadmap": rows(
             "implementation_roadmap",
             (
                 "phase",
-                "description",
                 "actions",
-                "inputs",
                 "outputs",
                 "human_decision_boundary",
-                "not_doing",
-                "remaining_gaps",
                 "acceptance_criteria",
             ),
         ),
-        "hard_gate_summary": rows(
-            "hard_gate_summary",
-            (
-                "limit_content",
-                "affected_stage",
-                "currently_possible",
-                "release_condition",
-            ),
+        "major_risks_and_boundaries": _readable_items(
+            synthesis.get("major_risks_and_boundaries", [])
         ),
-        "risk_and_boundary_summary": _readable_text(
-            synthesis.get("risk_and_boundary_summary", "")
-        ),
-        "next_actions": _readable_items(synthesis.get("next_actions", [])),
         "appendix": {
             "scores": rows(
                 "scores",
@@ -280,7 +251,6 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
             "hard_gates": rows(
                 "hard_gates",
                 (
-                    "gate_id",
                     "limit_content",
                     "affected_stage",
                     "currently_possible",
@@ -290,14 +260,6 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
             )
             if isinstance(appendix.get("hard_gates"), list)
             else [],
-            "safe_interview_qa": rows(
-                "safe_interview_qa",
-                ("question", "why_it_matters", "user_answer", "assessment_impact"),
-                appendix,
-            )
-            if isinstance(appendix.get("safe_interview_qa"), list)
-            else [],
-            "evidence_basis": _readable_items(appendix.get("evidence_basis", [])),
         },
     }
 

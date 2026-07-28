@@ -609,8 +609,8 @@ def test_api_ui_and_markdown_share_the_same_case_centered_result() -> None:
     ]
     assert result.case_centered.recommendation_title in markdown
     assert all(
-        item.case.title in markdown for item in result.case_centered.matched_cases
+        item.case.organization in markdown
+        for item in result.case_centered.matched_cases
     )
-    assert all(
-        phase.phase_name in markdown for phase in result.case_centered.phased_path
-    )
+    assert "準備階段（立即行動）" in markdown
+    assert "第一階段 PoC" in markdown

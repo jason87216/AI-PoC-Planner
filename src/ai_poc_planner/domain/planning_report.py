@@ -41,14 +41,17 @@ class ReportSectionDraft(ContractModel):
 
 
 class InterviewFinding(ContractModel):
-    """A safe, report-oriented explanation of one persisted interview turn."""
+    """A compact, report-oriented interview finding without the raw prompt."""
 
     topic: NonEmptyStr
-    initial_understanding: NonEmptyStr
-    clarification: NonEmptyStr
+    confirmed_content: NonEmptyStr = "尚待確認。"
     assessment_impact: NonEmptyStr
-    source_question: NonEmptyStr
-    answer_summary: NonEmptyStr
+    # Retain these legacy fields only so an already persisted 2.0 report stays
+    # readable. New 2.1 synthesis payloads deliberately omit them.
+    initial_understanding: str = Field(default="", exclude=True)
+    clarification: str = Field(default="", exclude=True)
+    source_question: str = Field(default="", exclude=True)
+    answer_summary: str = Field(default="", exclude=True)
 
 
 class SafeInterviewQuestionAnswer(ContractModel):
@@ -70,12 +73,19 @@ class CurrentTargetComparison(ContractModel):
 
 class OptionComparison(ContractModel):
     option: NonEmptyStr
-    suitable_reason: NonEmptyStr
-    benefits: list[NonEmptyStr] = Field(default_factory=list)
-    limitations_risks: list[NonEmptyStr] = Field(default_factory=list)
-    prerequisites: list[NonEmptyStr] = Field(default_factory=list)
     conclusion: NonEmptyStr
     recommended: bool = False
+    positioning: NonEmptyStr = "尚待比較。"
+    supporting_cases: list[NonEmptyStr] = Field(default_factory=list)
+    case_evidence: NonEmptyStr = "目前沒有直接案例支持。"
+    transferable_practice: NonEmptyStr = "尚待確認可移植做法。"
+    cannot_copy: list[NonEmptyStr] = Field(default_factory=list)
+    # Legacy columns are accepted for old persisted reports but are not part of
+    # the redesigned report payload.
+    suitable_reason: str = Field(default="", exclude=True)
+    benefits: list[NonEmptyStr] = Field(default_factory=list, exclude=True)
+    limitations_risks: list[NonEmptyStr] = Field(default_factory=list, exclude=True)
+    prerequisites: list[NonEmptyStr] = Field(default_factory=list, exclude=True)
 
 
 class CaseComparison(ContractModel):
@@ -127,26 +137,36 @@ class GateBoundarySummary(ContractModel):
 class ReportAppendix(ContractModel):
     scores: list[ScoreAppendixRow] = Field(default_factory=list)
     hard_gates: list[GateAppendixRow] = Field(default_factory=list)
-    safe_interview_qa: list[SafeInterviewQuestionAnswer] = Field(default_factory=list)
-    evidence_basis: list[NonEmptyStr] = Field(default_factory=list)
+    # These two fields are legacy-only. Raw Q&A and evidence traces are no
+    # longer retained in a user-facing ReportSynthesis payload.
+    safe_interview_qa: list[SafeInterviewQuestionAnswer] = Field(
+        default_factory=list, exclude=True
+    )
+    evidence_basis: list[NonEmptyStr] = Field(default_factory=list, exclude=True)
 
 
 class ReportSynthesis(ContractModel):
     """Canonical article view model shared by the API response and Markdown export."""
 
-    schema_version: Literal["2.0"] = "2.0"
+    schema_version: Literal["2.0", "2.1"] = "2.1"
     executive_narrative: NonEmptyStr
-    project_context_narrative: NonEmptyStr
+    recommendation_narrative: NonEmptyStr
     interview_findings: list[InterviewFinding] = Field(default_factory=list)
     current_target_comparison: list[CurrentTargetComparison] = Field(min_length=1)
     option_comparison: list[OptionComparison] = Field(min_length=1)
-    case_comparison: list[CaseComparison] = Field(default_factory=list)
-    recommendation_narrative: NonEmptyStr
+    comparison_narrative: NonEmptyStr = "本章整合比較候選方案、案例與專案差距。"
     implementation_roadmap: list[RoadmapPhase] = Field(min_length=1)
-    hard_gate_summary: list[GateBoundarySummary] = Field(default_factory=list)
-    risk_and_boundary_summary: NonEmptyStr
-    next_actions: list[NonEmptyStr] = Field(min_length=1)
+    major_risks_and_boundaries: list[NonEmptyStr] = Field(default_factory=list)
     appendix: ReportAppendix
+    # Legacy fields preserve backwards-compatible parsing for saved 2.0
+    # reports. New reports do not serialise or render these fields.
+    project_context_narrative: str = Field(default="", exclude=True)
+    case_comparison: list[CaseComparison] = Field(default_factory=list, exclude=True)
+    hard_gate_summary: list[GateBoundarySummary] = Field(
+        default_factory=list, exclude=True
+    )
+    risk_and_boundary_summary: str = Field(default="", exclude=True)
+    next_actions: list[NonEmptyStr] = Field(default_factory=list, exclude=True)
 
 
 class PlanningReportDraft(ContractModel):

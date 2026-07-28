@@ -1,26 +1,24 @@
-"""Compose the canonical, article-oriented report view model."""
+"""Compose the canonical, reader-oriented assessment report."""
 
 # ruff: noqa: E501
 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 
 from ai_poc_planner.domain.analysis import ValidatedAnalysisResult
 from ai_poc_planner.domain.discovery import InterviewQuestion
 from ai_poc_planner.domain.enums import FactStatus
 from ai_poc_planner.domain.planning_report import (
-    CaseComparison,
     CurrentTargetComparison,
     GateAppendixRow,
-    GateBoundarySummary,
     InterviewFinding,
     OptionComparison,
     ReportAppendix,
     ReportSynthesis,
     RoadmapPhase,
-    SafeInterviewQuestionAnswer,
     ScoreAppendixRow,
 )
 from ai_poc_planner.domain.project_history import (
@@ -30,12 +28,19 @@ from ai_poc_planner.domain.project_history import (
 
 _FACT_LABELS = {
     "current_workflow_problem": "目前流程",
-    "desired_outcome": "期望成果",
+    "desired_outcome": "預期成果",
     "available_data": "可用資料",
     "users_and_owners": "使用者與負責人",
     "known_constraints": "已知限制",
     "human_final_decision": "人工最終決策",
     "processing_boundary": "資料處理邊界",
+    "first_phase_scope": "第一階段範圍",
+    "auditability_requirements": "追溯與稽核",
+    "governance_and_risk": "治理與風險",
+    "validation_metric": "驗收指標",
+    "success_conditions": "驗收條件",
+    "process_scope": "第一階段範圍",
+    "audit_trail_detail": "追溯與稽核",
     "validation_sample": "驗證樣本",
     "fault_labels": "故障標籤",
 }
@@ -47,17 +52,53 @@ _SCORE_LABELS = {
     "governance_readiness": "治理就緒度",
     "user_adoption": "使用者採用度",
 }
-_REFERENCE_LABELS = {
-    "high": "高參考價值，但專案環境差異大",
-    "medium": "中度適配，可移植部分流程",
-    "low": "低適配，只能作為方向性參考",
-    "unknown": "證據不足，不作正式案例依據",
+_CATEGORY_TITLES = {
+    "ai_hybrid": "AI 輔助與人工確認",
+    "rules_first": "規則與流程標準化",
+    "governed_assistive": "治理下的人工輔助",
+    "readiness_first": "資料與驗證基礎建設",
 }
-_CATEGORY_COPY = {
-    "ai_hybrid": "可採用 AI 輔助，但以檢索、草稿或建議為主，保留人工最終決策。",
-    "rules_first": "規則與表單驗證是推薦方案，生成式 AI 不是主要方案。",
-    "governed_assistive": "先在治理限制下提供人工輔助，不自動核准或執行高風險動作。",
-    "readiness_first": "先建立資料、標籤與驗證基礎，不承諾模型準確率或 PoC 成功。",
+_CATEGORY_POSITIONING = {
+    "ai_hybrid": "以核准內容的自然語言檢索、來源引用與回覆草稿協助人員，最終由人員確認。",
+    "rules_first": "將明確規則與例外轉成可檢查流程，先提升一致性，再評估是否需要 AI。",
+    "governed_assistive": "在受控資料與權限內提供整理、提醒與檢查，不取代高影響決策。",
+    "readiness_first": "先建立資料、標籤與驗證基礎，再決定後續模型或系統方案。",
+}
+_CATEGORY_BENEFITS = {
+    "ai_hybrid": "縮短資訊查找時間、提高回覆一致性，並讓每次草稿保留可追溯的來源。",
+    "rules_first": "降低漏填與規則漏檢，讓例外情形回到可被人員判斷的流程。",
+    "governed_assistive": "減少格式與流程遺漏，同時維持主管與專責人員的決策責任。",
+    "readiness_first": "把後續投資建立在可驗證的資料與標註基礎上，避免過早承諾模型成果。",
+}
+_CATEGORY_PREREQUISITES = {
+    "ai_hybrid": "先確認可使用的文件範圍、版本責任與代表性驗證問題，並指定人工確認與例外交接方式。",
+    "rules_first": "先整理規則、例外、表單欄位與財務責任，讓規則結果可以由人員覆核。",
+    "governed_assistive": "先確認核准資料、權限範圍、保存方式與人工核准流程，再擴大任何系統整合。",
+    "readiness_first": "先由領域人員定義標籤與判定基準，收集代表性樣本並保留獨立驗證集。",
+}
+_CATEGORY_HUMAN_BOUNDARIES = {
+    "ai_hybrid": "AI 只提出檢索結果與草稿；負責人確認內容、修改例外並決定是否對外使用。",
+    "rules_first": "系統只執行已核准的規則；例外、最終審核與責任判斷仍由人員負責。",
+    "governed_assistive": "AI 只整理與提示；主管或具責任的人員保留核准、拒絕與高風險操作的最終權限。",
+    "readiness_first": "領域人員與工程負責人保留資料標註、故障判定與驗收結論的責任。",
+}
+_TOPIC_IMPACTS = {
+    "current_workflow_problem": "用來確認第一階段要優先改善的流程痛點。",
+    "desired_outcome": "用來設定 PoC 的可觀察效益與驗收方式。",
+    "available_data": "決定可納入的資料範圍與驗證樣本準備方式。",
+    "users_and_owners": "用來界定使用者、品質責任與例外交接。",
+    "known_constraints": "用來限制第一階段範圍與部署方式。",
+    "human_final_decision": "明確保留人工確認與對外回覆責任。",
+    "processing_boundary": "用來限定資料可在何種受控環境中處理。",
+    "first_phase_scope": "用來限制第一階段的工作範圍。",
+    "auditability_requirements": "用來保留追溯、覆核與例外處理紀錄。",
+    "governance_and_risk": "用來確認資料、權限與人工責任的限制。",
+    "validation_metric": "用來設定可觀察的驗收指標。",
+    "success_conditions": "用來定義第一階段的通過條件。",
+    "process_scope": "用來限制第一階段的工作範圍。",
+    "audit_trail_detail": "用來保留追溯、覆核與例外處理紀錄。",
+    "validation_sample": "提醒驗證樣本仍待確認，不能視為已具備。",
+    "fault_labels": "提醒標籤定義仍待確認，不能直接承諾模型成果。",
 }
 
 
@@ -67,25 +108,78 @@ def _display_value(value: object) -> str:
     return str(value)
 
 
-def _unique(values: Sequence[str], *, empty: str = "目前未記錄。") -> list[str]:
+def _unique(values: Sequence[str], *, empty: str = "目前尚待確認。") -> list[str]:
     result = list(dict.fromkeys(item.strip() for item in values if item.strip()))
     return result or [empty]
 
 
+def _has_english_sentence(value: str) -> bool:
+    return bool(re.search(r"[A-Za-z]{4,}(?:\s+[A-Za-z]{2,}){2,}", value))
+
+
+def _natural_text(value: object, *, fallback: str) -> str:
+    """Keep the report Chinese even when an internal rationale is English."""
+
+    text = "" if value is None else _display_value(value)
+    text = re.sub(r"\bF\d{3}\b|\bSC-\d+\b", "", text).strip()
+    text = re.sub(r"\s+", " ", text)
+    for source, target in {
+        "Email": "電子郵件",
+        "Excel": "試算表",
+        "audit trail": "稽核紀錄",
+        "Manual Knowledge Base Consolidation": "傳統知識庫整合",
+        "Foundations-First Knowledge Graph": "先建立資料基礎的知識關係整理",
+        "Customer-service assistance": "客服輔助",
+        "Generative AI assistance": "生成式 AI 輔助",
+        "Governance and risk": "治理與風險",
+        "success_conditions": "驗收條件",
+        "required controls": "必要控制措施",
+    }.items():
+        text = text.replace(source, target)
+    text = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", "", text)
+    return fallback if not text or _has_english_sentence(text) else text
+
+
+def _phrase(value: str) -> str:
+    return value.rstrip("。；;. ")
+
+
 def _fact_display(fact: FactRevision | None) -> str:
     if fact is None:
-        return "尚未記錄。"
+        return "待確認。"
     if fact.status is FactStatus.CONFIRMED:
-        return _display_value(fact.value)
-    if fact.status is FactStatus.UNKNOWN:
-        return "尚未確認。"
-    if fact.status is FactStatus.MISSING:
-        return "尚未提供。"
-    return f"待核實假設：{_display_value(fact.value)}"
+        return _natural_text(fact.value, fallback="已確認內容需以中文補充說明。")
+    if fact.status in {FactStatus.UNKNOWN, FactStatus.MISSING}:
+        return "待確認。"
+    return "待核實。"
 
 
 def _fact_map(facts: Sequence[FactRevision]) -> dict[str, FactRevision]:
     return {fact.fact_key.strip().casefold(): fact for fact in facts}
+
+
+def _fact(facts: dict[str, FactRevision], key: str) -> str:
+    return _fact_display(facts.get(key))
+
+
+def _joined(values: Sequence[str], *, empty: str = "目前尚待確認。") -> str:
+    return "；".join(_unique(values, empty=empty))
+
+
+def _formal_route(analysis: ValidatedAnalysisResult) -> tuple[str, str]:
+    if analysis.case_centered is not None:
+        result = analysis.case_centered
+        category = result.recommendation_category.value
+        return category, _natural_text(
+            result.recommendation_title,
+            fallback=_CATEGORY_TITLES.get(category, "建議先採有限範圍方案"),
+        )
+    category = {
+        "hybrid_ai_and_non_ai": "ai_hybrid",
+        "better_suited_to_non_ai": "rules_first",
+        "establish_non_ai_foundations_before_ai": "readiness_first",
+    }.get(analysis.conclusion.value, "governed_assistive")
+    return category, _CATEGORY_TITLES[category]
 
 
 def build_interview_findings(
@@ -93,225 +187,276 @@ def build_interview_findings(
     questions: Sequence[InterviewQuestion],
     messages: Sequence[VisibleConversationMessage],
     facts: Sequence[FactRevision],
-) -> tuple[list[InterviewFinding], list[SafeInterviewQuestionAnswer]]:
-    """Build safe findings from durable question and visible answer records."""
+) -> list[InterviewFinding]:
+    """Summarise confirmed interview content without emitting the raw question."""
 
     answers = {str(message.id): message.content for message in messages}
     fact_by_key = _fact_map(facts)
     findings: list[InterviewFinding] = []
-    appendix: list[SafeInterviewQuestionAnswer] = []
     for question in sorted(
         questions, key=lambda item: (item.round_number, item.position)
     ):
-        answer = answers.get(str(question.answer_message_id), "尚未提供回答。")
-        topic = _FACT_LABELS.get(
-            question.fact_key.strip().casefold(),
-            question.fact_key.replace("_", " ").strip().capitalize(),
-        )
+        key = question.fact_key.strip().casefold()
+        answer = answers.get(str(question.answer_message_id))
         findings.append(
             InterviewFinding(
-                topic=topic,
-                initial_understanding=_fact_display(
-                    fact_by_key.get(question.fact_key.strip().casefold())
+                topic=_FACT_LABELS.get(key, "其他已確認事項"),
+                confirmed_content=_natural_text(
+                    answer or _fact_display(fact_by_key.get(key)),
+                    fallback="待確認。",
                 ),
-                clarification=answer,
-                assessment_impact=question.affected_judgement,
-                source_question=question.question,
-                answer_summary=answer,
+                assessment_impact=_TOPIC_IMPACTS.get(
+                    key, "用來調整第一階段範圍與驗收方式。"
+                ),
             )
         )
-        appendix.append(
-            SafeInterviewQuestionAnswer(
-                question=question.question,
-                why_it_matters=question.why_it_matters,
-                user_answer=answer,
-                assessment_impact=question.affected_judgement,
-            )
-        )
-    return findings, appendix
+    return findings
 
 
-def _formal_route(analysis: ValidatedAnalysisResult) -> tuple[str, str]:
-    if analysis.case_centered is not None:
-        result = analysis.case_centered
-        return result.recommendation_category.value, result.recommendation_title
-    option = next(
-        item
-        for item in analysis.options
-        if item.option_key == analysis.recommended_option_key
-    )
-    return analysis.conclusion.value, option.title
-
-
-def _formal_option(category: str, title: str) -> OptionComparison:
-    details = {
-        "ai_hybrid": (
-            title,
-            "需求涉及知識整理或建議，但仍需用人工覆核控制對外或高影響動作。",
-            ["縮短查找或整理時間", "保留人工確認與例外處理"],
-            ["案例與本專案環境有差異", "需要代表性資料與驗收設計"],
-            ["確認人工責任邊界", "建立可追溯的驗證資料"],
-        ),
-        "rules_first": (
-            "規則與表單驗證",
-            "規則明確、輸入結構固定，先用 deterministic 規則處理最直接。",
-            ["規則命中結果容易驗證", "降低漏填與超限檢查負擔"],
-            ["複雜例外仍需人工判斷", "非結構化附件可留待後續探索"],
-            ["整理規則與例外", "確認表單欄位與財務責任"],
-        ),
-        "governed_assistive": (
-            "治理下人工輔助",
-            "存在高影響權限或個資處理邊界，先標準化流程並由主管最終核准。",
-            ["減少漏項與格式差異", "保留人工核准與 audit trail"],
-            ["不得自動核准或開通高風險權限", "未核准資料不得送外部模型"],
-            ["建立職位—權限範本", "完成治理、資安與資料處理審查"],
-        ),
-        "readiness_first": (
-            "資料與驗證基礎建設",
-            "目前資料、標籤或驗證集不足，先建立資料與判定基準才可評估模型。",
-            ["讓後續 PoC 有可驗證的資料基礎", "先確認問題是否可被可靠評估"],
-            ["不能承諾準確率或 PoC 成功", "目前不進入生產部署"],
-            ["建立標籤規則", "收集代表性樣本並留出驗證集"],
-        ),
+def _option_title(option: object, *, index: int) -> str:
+    kind = getattr(getattr(option, "option_kind", None), "value", "")
+    formal_title = str(getattr(option, "title", "")).casefold()
+    for fragment, label in (
+        ("manual review workflow", "規則檢查與人工核准流程"),
+        ("standardized email", "標準化申請格式與預處理"),
+        ("excel", "試算表追蹤與條件檢查"),
+        ("knowledge graph", "知識關係整理優先"),
+        ("knowledge base", "傳統知識庫整合"),
+        ("retrieval", "AI 檢索與人工確認"),
+    ):
+        if fragment in formal_title:
+            return label
+    titles = {
+        "hybrid": "AI 輔助與人工確認",
+        "non_ai": "規則與流程標準化",
+        "foundations_first": "資料與驗證基礎建設",
+        "ai": "AI 輔助分析",
     }
-    option, reason, benefits, risks, prerequisites = details.get(
-        category,
-        (title, "依正式評估結果保留保守實施範圍。", [], [], []),
-    )
-    return OptionComparison(
-        option=option,
-        suitable_reason=reason,
-        benefits=benefits,
-        limitations_risks=risks,
-        prerequisites=prerequisites,
-        conclusion="正式推薦方案",
-        recommended=True,
+    return titles.get(kind, f"候選方向 {index}")
+
+
+def _case_support(
+    analysis: ValidatedAnalysisResult,
+) -> tuple[list[str], str, str, list[str]]:
+    result = analysis.case_centered
+    if result is None or not result.matched_cases:
+        return (
+            [],
+            "目前沒有直接案例支持；此方向以專案自身已確認需求與有限範圍驗證為主。",
+            "先以專案內部資料與人工確認流程驗證，不主張直接套用外部案例。",
+            ["案例的使用者、資料與責任邊界不同，不能直接複製。"],
+        )
+
+    practices = {
+        case_id: practice
+        for practice in result.transferable_practices
+        for case_id in practice.source_case_ids
+    }
+    names: list[str] = []
+    evidence: list[str] = []
+    transferable: list[str] = []
+    cannot_copy: list[str] = []
+    for match in result.matched_cases:
+        case = match.case
+        case_title = case.display_title_zh or "受控 AI 輔助案例"
+        names.append(f"{case.organization}：{case_title}")
+        evidence.append(
+            f"{case.organization} 顯示{_natural_text(case.summary_zh or '', fallback='受控的 AI 輔助與人工確認可作為方向性參考。')}"
+        )
+        practice = practices.get(case.case_id)
+        transferable.append(
+            _phrase(
+                _natural_text(
+                    practice.transferable_part if practice is not None else "",
+                    fallback="採用受控資料、來源保留與人工確認的工作方式。",
+                )
+            )
+        )
+        cannot_copy.extend(
+            _natural_text(
+                item,
+                fallback="案例的使用者、資料與責任邊界不同，不能直接複製。",
+            )
+            for item in [
+                *match.project_fit.key_differences,
+                *match.gaps.not_directly_transferable,
+            ]
+        )
+    return (
+        _unique(names),
+        _joined(evidence),
+        _joined(transferable, empty="採用受控資料、來源保留與人工確認的工作方式。"),
+        _unique(
+            cannot_copy,
+            empty="案例的使用者、資料與責任邊界不同，不能直接複製。",
+        ),
     )
 
 
 def _option_comparison(
     analysis: ValidatedAnalysisResult, category: str, title: str
 ) -> list[OptionComparison]:
-    rows = [_formal_option(category, title)]
-    for option in analysis.options:
+    case_names, case_evidence, transferable, cannot_copy = _case_support(analysis)
+    rows = [
+        OptionComparison(
+            option=title,
+            positioning=_CATEGORY_POSITIONING[category],
+            supporting_cases=case_names,
+            case_evidence=case_evidence,
+            transferable_practice=transferable,
+            cannot_copy=cannot_copy,
+            conclusion="正式推薦；適合以有限範圍 PoC 驗證。",
+            recommended=True,
+        )
+    ]
+    for index, option in enumerate(analysis.options, start=1):
         if option.option_key == analysis.recommended_option_key:
             continue
+        option_title = _option_title(option, index=index)
+        if any(item.option == option_title for item in rows):
+            option_title = f"{option_title}（替代做法 {index}）"
         rows.append(
             OptionComparison(
-                option=option.title,
-                suitable_reason=option.summary,
-                benefits=list(option.expected_benefits),
-                limitations_risks=[*option.limitations, *option.risks],
-                prerequisites=list(option.prerequisites),
-                conclusion="候選方向，須符合正式路徑與人工邊界。",
+                option=option_title,
+                positioning={
+                    "規則與流程標準化": "先用明確規則處理固定輸入與例外提醒。",
+                    "資料與驗證基礎建設": "先補足資料與驗證條件，再判斷是否進入系統實作。",
+                    "AI 輔助與人工確認": "以 AI 協助整理或草稿，但仍要設定資料範圍與人工確認。",
+                    "AI 輔助分析": "以有限資料進行分析輔助，不取代正式決策。",
+                }.get(option_title, "作為比較基線，檢視是否能以更小範圍處理需求。"),
+                case_evidence="目前沒有直接案例支持；此方向僅作為比較基線。",
+                transferable_practice="可先保留資料整理、人工確認與驗證紀錄，但不足以支持直接採用。",
+                cannot_copy=["沒有直接對應的成熟案例，不應推定外部做法可直接套用。"],
+                conclusion="可作為比較基線，暫不列為正式推薦。",
             )
         )
     return rows
 
 
-def _case_comparison(analysis: ValidatedAnalysisResult) -> list[CaseComparison]:
-    result = analysis.case_centered
-    if result is None:
-        return []
-    practices = {
-        case_id: practice
-        for practice in result.transferable_practices
-        for case_id in practice.source_case_ids
-    }
-    rows: list[CaseComparison] = []
-    for match in result.matched_cases:
-        case = match.case
-        practice = practices.get(case.case_id)
-        rows.append(
-            CaseComparison(
-                display_title_zh=case.display_title_zh or f"{case.organization} 案例",
-                original_title=case.title,
-                organization=case.organization,
-                why_relevant=(
-                    case.summary_zh
-                    or "；".join(match.project_fit.similarities)
-                    or case.business_problem
-                ),
-                transferable_practice=(
-                    practice.transferable_part
-                    if practice is not None
-                    else case.solution_pattern or case.implementation_method
-                ),
-                cannot_copy=_unique(
-                    [
-                        *match.project_fit.key_differences,
-                        *match.gaps.not_directly_transferable,
-                    ]
-                ),
-                adaptation_conclusion=_REFERENCE_LABELS.get(
-                    match.reference_value.level.value,
-                    "證據不足，不作正式案例依據",
-                ),
-            )
-        )
-    return rows
-
-
-def _current_target_comparison(
-    analysis: ValidatedAnalysisResult, facts: Sequence[FactRevision]
-) -> list[CurrentTargetComparison]:
-    fact_by_key = _fact_map(facts)
-    result = analysis.case_centered
-    phases = result.phased_path if result is not None else ()
-    first = phases[0] if phases else None
-    second = phases[1] if len(phases) > 1 else first
-    gates = result.gate_impacts if result is not None else ()
-    limits = [item for gate in gates for item in gate.limits]
-    releases = [item for gate in gates for item in gate.release_conditions]
+def _comparison_narrative(
+    analysis: ValidatedAnalysisResult,
+    facts: Sequence[FactRevision],
+    options: Sequence[OptionComparison],
+    title: str,
+) -> str:
+    names = "、".join(item.option for item in options)
+    recommended = next(item for item in options if item.recommended)
     unknowns = [
-        _FACT_LABELS.get(fact.fact_key, "資料")
+        _FACT_LABELS.get(fact.fact_key, "重要資訊")
         for fact in facts
         if fact.status in {FactStatus.UNKNOWN, FactStatus.MISSING}
     ]
+    case_sentence = (
+        "、".join(recommended.supporting_cases)
+        if recommended.supporting_cases
+        else "目前沒有直接對應的成熟案例"
+    )
+    gap_sentence = (
+        "、".join(dict.fromkeys(unknowns)) or "實際資料版本、責任分工與驗證樣本"
+    )
+    return "\n\n".join(
+        [
+            f"本次主要比較{names}等方向；比較的目的不是重新排名，而是確認哪一種做法最能回應已確認的專案問題與限制。",
+            f"成熟案例方面，本次以{case_sentence}作為{title}中特定做法的參考。它們支持受控的資料使用、內容檢索或人工確認，但不代表本專案可以照搬相同的自動化程度。",
+            f"本專案與案例之間最大的差距在於{gap_sentence}仍須逐項確認。因此，案例只用來說明可移植的流程做法，不能取代本專案的資料、權限與驗收判斷。",
+            f"綜合已確認需求、人工責任與可驗證範圍後，仍選擇「{title}」作為正式推薦；下表先呈現方案與案例的關係，再說明推薦方案會如何改變目前狀態。",
+        ]
+    )
+
+
+def _target_copy(category: str) -> tuple[str, str, str, str, str, str]:
+    values = {
+        "ai_hybrid": (
+            "透過單一入口檢索核准內容、顯示來源並產生回覆草稿。",
+            "AI 提供候選內容；人員確認、修改並決定是否使用。",
+            "建立可追溯的知識來源與代表性驗證集。",
+            "只在核准環境與明確資料範圍內提供內部輔助。",
+            "依明確權限使用核准資料，保留人工覆核與修改紀錄。",
+            "以代表性問題比較搜尋時間、來源正確性與人工修改情形。",
+        ),
+        "rules_first": (
+            "在固定流程中檢查欄位、金額、附件與已定義規則。",
+            "系統提示規則結果；人員處理例外與最終審核。",
+            "將核准規則與例外整理成可追溯的規則集。",
+            "先在既有內部流程中運作，不擴大到未確認的整合。",
+            "由規則負責人維護變更紀錄，保留人工例外判斷。",
+            "以規則命中、漏檢情形與人工檢查時間驗收。",
+        ),
+        "governed_assistive": (
+            "在受控流程中整理申請內容、提示缺項並交由具責任人員核准。",
+            "AI 僅整理與提示；主管保留核准、拒絕與高風險操作權限。",
+            "使用經核准的資料與權限範本，建立可追溯的申請紀錄。",
+            "只在核准或脫敏環境中試行，不直接寫入高風險系統。",
+            "以最小權限、保存規則與人工覆核紀錄限制使用範圍。",
+            "以漏項減少、人工覆核可追溯性與例外處理品質驗收。",
+        ),
+        "readiness_first": (
+            "先盤點資料、定義標籤與建立可驗證的工作流程。",
+            "領域人員確認標籤、判定基準與後續是否進入模型評估。",
+            "形成可追溯的資料清單、標註規則與保留驗證集。",
+            "只進行受控的資料準備與驗證設計，不進入生產部署。",
+            "由領域與工程負責人共同確認資料用途、版本與驗收紀錄。",
+            "以樣本代表性、標註一致性與驗證設計完整度驗收。",
+        ),
+    }
+    return values[category]
+
+
+def _current_target_comparison(
+    analysis: ValidatedAnalysisResult,
+    facts: Sequence[FactRevision],
+    category: str,
+) -> list[CurrentTargetComparison]:
+    fact_by_key = _fact_map(facts)
+    targets = _target_copy(category)
+    current_human = _fact(fact_by_key, "human_final_decision")
+    if current_human == "待確認。":
+        current_human = _fact(fact_by_key, "users_and_owners")
+    current_system = _fact(fact_by_key, "processing_boundary")
+    if current_system == "待確認。":
+        current_system = _fact(fact_by_key, "known_constraints")
     rows = [
         (
             "流程",
-            _fact_display(fact_by_key.get("current_workflow_problem")),
-            "；".join(first.actions) if first else analysis.requirement_summary,
-            "；".join(analysis.unresolved_gaps) or "需要轉成可驗收的有限範圍。",
-            "先確認責任邊界，再依第一階段路線驗證。",
+            _fact(fact_by_key, "current_workflow_problem"),
+            targets[0],
+            "流程步驟、資料入口或版本尚未統一。",
+            "先整理可用範圍，再依推薦方案建立受控的第一階段流程。",
         ),
         (
             "人工責任",
-            _fact_display(fact_by_key.get("users_and_owners")),
-            first.human_decision_boundary if first else "人工保留最終決策。",
-            "；".join(limits) or "例外與最終決策責任需要明確記錄。",
-            "把人工覆核點列入流程與驗收紀錄。",
+            current_human,
+            targets[1],
+            "覆核順序、例外交接或最終責任仍待確認。",
+            "把人工確認設為必要步驟，並保留修改與例外紀錄。",
         ),
         (
             "資料",
-            _fact_display(fact_by_key.get("available_data")),
-            "；".join(first.inputs) if first else "建立可驗證的資料輸入。",
-            "；".join(unknowns) or "仍需確認資料代表性與驗證方式。",
-            "先整理資料樣本、標籤與驗證集。",
+            _fact(fact_by_key, "available_data"),
+            targets[2],
+            "資料代表性、版本與品質仍待確認。",
+            "先整理核准樣本、資料版本與驗證集，再納入推薦方案。",
         ),
         (
-            "系統／部署",
-            _fact_display(fact_by_key.get("processing_boundary"))
-            + "；"
-            + _fact_display(fact_by_key.get("known_constraints")),
-            "；".join(second.not_doing) if second else "只在核准環境內進行。",
-            "；".join(limits) or "部署邊界與系統依賴尚需確認。",
-            "先限於脫敏或核准環境，不直接寫入真實企業系統。",
+            "系統與部署",
+            current_system,
+            targets[3],
+            "可用環境、串接範圍與資料流向仍待確認。",
+            "第一階段只在受控環境中提供輔助，不直接擴大系統整合。",
         ),
         (
             "治理",
-            _fact_display(fact_by_key.get("known_constraints")),
-            "；".join(releases) or "由人工 reviewer 依條件審查。",
-            "；".join(limits) or "治理控制與 audit trail 仍需落實。",
-            "完成必要的資安、治理與資料處理審查。",
+            _fact(fact_by_key, "known_constraints"),
+            targets[4],
+            "權限、保存、稽核與責任安排仍待確認。",
+            "以核准資料、明確權限與人工覆核紀錄限制 PoC 範圍。",
         ),
         (
             "驗收方式",
-            _fact_display(fact_by_key.get("desired_outcome")),
-            "；".join(first.acceptance_criteria) if first else "建立代表性驗證條件。",
-            "；".join(unknowns) or "驗收條件需要與人工責任和資料品質連結。",
-            "以流程指標、人工覆核結果與可追溯紀錄驗收。",
+            _fact(fact_by_key, "desired_outcome"),
+            targets[5],
+            "驗證樣本、通過門檻與錯誤分類仍待確認。",
+            "先建立代表性測試，再以推薦方案的實際結果與人工覆核紀錄驗收。",
         ),
     ]
     return [
@@ -326,112 +471,172 @@ def _current_target_comparison(
     ]
 
 
-def _roadmap(analysis: ValidatedAnalysisResult) -> list[RoadmapPhase]:
-    if analysis.case_centered is not None:
-        return [
-            RoadmapPhase(
-                phase=phase.phase_name,
-                description=phase.description,
-                actions=list(phase.actions),
-                inputs=list(phase.inputs),
-                outputs=list(phase.outputs),
-                human_decision_boundary=phase.human_decision_boundary,
-                not_doing=list(phase.not_doing),
-                remaining_gaps=list(phase.remaining_gaps),
-                acceptance_criteria=list(phase.acceptance_criteria),
-            )
-            for phase in analysis.case_centered.phased_path
-        ]
-    return [
-        RoadmapPhase(
-            phase="第一階段 PoC",
-            description="以有限範圍驗證需求、資料與人工責任。",
-            actions=["確認流程範圍", "建立驗證資料"],
-            inputs=["已確認需求", "核准資料"],
-            outputs=["可追蹤的輔助結果"],
-            human_decision_boundary="人工保留最終決策。",
-            not_doing=["不自主執行高風險動作"],
-            remaining_gaps=list(analysis.unresolved_gaps),
-            acceptance_criteria=["所有例外可回到人工處理。"],
-        )
-    ]
-
-
-def _appendix(
-    analysis: ValidatedAnalysisResult,
-    facts: Sequence[FactRevision],
-    interview_qa: list[SafeInterviewQuestionAnswer],
-) -> ReportAppendix:
-    scores = [
-        ScoreAppendixRow(
-            dimension=_SCORE_LABELS.get(score.dimension.value, score.dimension.value),
-            judgement=f"{score.rating}/5；加權點數 {score.weighted_points}",
-            main_basis=score.rationale,
-            improvement_condition="；".join(score.improvement_conditions)
-            or "依後續驗證結果更新。",
-        )
-        for score in analysis.scores
-    ]
-    if analysis.case_centered is not None:
-        gates = [
-            GateAppendixRow(
-                gate_id=gate.rule_id,
-                limit_content="；".join(gate.limits),
-                affected_stage=gate.affected_stage,
-                currently_possible="；".join(gate.does_not_limit),
-                release_condition="；".join(gate.release_conditions)
-                or "重新完成 gate 審查。",
-            )
-            for gate in analysis.case_centered.gate_impacts
-        ]
-    else:
-        gates = [
-            GateAppendixRow(
-                gate_id=gate.rule_id,
-                limit_content=gate.reason,
-                affected_stage=gate.affected_stage,
-                currently_possible="；".join(gate.does_not_limit),
-                release_condition="；".join(gate.release_conditions)
-                or "重新完成 gate 審查。",
-            )
-            for gate in analysis.gate_results
-        ]
-    evidence = [
-        f"{_FACT_LABELS.get(fact.fact_key, '需求資料')}：{_fact_display(fact)}"
-        for fact in facts
-    ]
-    return ReportAppendix(
-        scores=scores,
-        hard_gates=gates,
-        safe_interview_qa=interview_qa,
-        evidence_basis=evidence,
+def _phase_defaults(
+    category: str, index: int
+) -> tuple[list[str], list[str], str, list[str]]:
+    common = {
+        "ai_hybrid": (
+            ["盤點核准文件與 FAQ", "建立代表性問題與標準答案的測試樣本"],
+            ["可追溯的知識清單與測試樣本"],
+            "人員確認納入範圍、內容版本與例外處理方式。",
+            ["資料來源可追溯，測試問題可由人員覆核。"],
+        ),
+        "rules_first": (
+            ["整理規則、例外與表單欄位", "確認規則負責人與覆核流程"],
+            ["可檢查的規則清單與例外處理方式"],
+            "人員確認規則變更與所有例外判斷。",
+            ["主要規則與例外可由人員逐項覆核。"],
+        ),
+        "governed_assistive": (
+            ["整理申請流程與權限範本", "確認核准資料與受控環境"],
+            ["可追溯的流程範本與試行資料範圍"],
+            "主管保留核准與高風險操作的最終權限。",
+            ["流程範本、權限範圍與人工覆核方式已確認。"],
+        ),
+        "readiness_first": (
+            ["盤點資料來源與樣本", "定義標籤與驗證規則"],
+            ["資料清單、標註規則與保留驗證集"],
+            "領域人員確認標籤與驗收結論。",
+            ["樣本、標籤與驗證設計可由領域人員覆核。"],
+        ),
+    }[category]
+    if index == 0:
+        return common
+    return (
+        ["在有限範圍內執行 PoC", "記錄人工修改、例外與驗證結果"],
+        ["可檢視的 PoC 結果與改善清單"],
+        common[2],
+        ["結果可回溯到資料、人工確認與驗證紀錄。"],
     )
 
 
-def _hard_gate_summary(analysis: ValidatedAnalysisResult) -> list[GateBoundarySummary]:
-    """Project deterministic gate impacts into the report's human-facing layer."""
-
-    if analysis.case_centered is not None:
-        return [
-            GateBoundarySummary(
-                limit_content="；".join(gate.limits),
-                affected_stage=gate.affected_stage,
-                currently_possible="；".join(gate.does_not_limit),
-                release_condition="；".join(gate.release_conditions)
-                or "重新完成 gate 審查。",
+def _roadmap(analysis: ValidatedAnalysisResult, category: str) -> list[RoadmapPhase]:
+    phases = analysis.case_centered.phased_path if analysis.case_centered else ()
+    count = max(2, len(phases))
+    names = ["準備階段（立即行動）", "第一階段 PoC"]
+    rows: list[RoadmapPhase] = []
+    for index in range(count):
+        actions, outputs, boundary, acceptance = _phase_defaults(category, index)
+        phase = phases[index] if index < len(phases) else None
+        rows.append(
+            RoadmapPhase(
+                phase=names[index] if index < len(names) else "擴大前檢視",
+                description="以有限範圍完成可驗證的準備與試行。",
+                actions=actions,
+                inputs=["已確認需求與核准資料"],
+                outputs=outputs,
+                human_decision_boundary=boundary,
+                not_doing=["不在驗證前擴大自動化或直接執行高影響動作。"],
+                remaining_gaps=(
+                    ["依第一階段結果確認是否具備擴大條件。"]
+                    if phase is None
+                    else ["依 PoC 紀錄確認資料、流程與驗收差距。"]
+                ),
+                acceptance_criteria=acceptance,
             )
-            for gate in analysis.case_centered.gate_impacts
-        ]
-    return [
-        GateBoundarySummary(
-            limit_content=gate.reason,
-            affected_stage=gate.affected_stage,
-            currently_possible="；".join(gate.does_not_limit),
-            release_condition="；".join(gate.release_conditions)
-            or "重新完成 gate 審查。",
         )
-        for gate in analysis.gate_results
+    return rows
+
+
+def _major_risks(category: str) -> list[str]:
+    common = [
+        "資料代表性、版本與驗證樣本未確認前，不把試行結果視為正式成效。",
+        "第一階段不擴大到未核准資料、未確認串接或自主執行。",
     ]
+    specific = {
+        "ai_hybrid": [
+            "AI 只提供檢索與草稿；人員仍負責確認內容與對外使用。",
+            "來源不清楚或版本過期時，結果必須回到人工查核。",
+        ],
+        "rules_first": [
+            "規則未定義或出現例外時，系統只提示，不取代人員審核。",
+            "第一階段不把固定規則延伸為未驗證的 AI 判斷。",
+        ],
+        "governed_assistive": [
+            "主管保留核准與高風險操作權限；系統不得直接執行。",
+            "未核准資料或權限範圍不納入試行。",
+        ],
+        "readiness_first": [
+            "資料與標籤不足時，不承諾模型準確率或進入生產部署。",
+            "領域人員未確認判定基準前，不擴大資料收集結論。",
+        ],
+    }
+    return _unique([*specific[category], *common])[:5]
+
+
+def _score_improvement(dimension: str) -> str:
+    return {
+        "business_value": "以第一階段實際節省時間與一致性結果補強。",
+        "data_readiness": "補足資料版本、代表性與驗證樣本。",
+        "technical_fit": "以有限範圍試行確認技術可行性。",
+        "architecture_controllability": "確認受控環境、權限與可追溯紀錄。",
+        "governance_readiness": "補足責任、保存與稽核安排。",
+        "user_adoption": "以使用者試行回饋與人工修改紀錄確認。",
+    }.get(dimension, "依第一階段驗證結果更新。")
+
+
+def _appendix(analysis: ValidatedAnalysisResult) -> ReportAppendix:
+    scores = [
+        ScoreAppendixRow(
+            dimension=_SCORE_LABELS.get(score.dimension.value, "評估面向"),
+            judgement=f"{score.rating}/5 分；加權點數 {score.weighted_points}",
+            main_basis="依已確認的專案資訊與固定評估規則判斷。",
+            improvement_condition=_score_improvement(score.dimension.value),
+        )
+        for score in analysis.scores
+    ]
+    gate_source = (
+        analysis.case_centered.gate_impacts
+        if analysis.case_centered is not None
+        else analysis.gate_results
+    )
+    gates = [
+        GateAppendixRow(
+            gate_id="內部檢核項目",
+            limit_content=_natural_text(
+                "；".join(getattr(gate, "limits", []) or [getattr(gate, "reason", "")]),
+                fallback="此項限制要求維持受控範圍。",
+            ),
+            affected_stage=_natural_text(
+                getattr(gate, "affected_stage", ""), fallback="目前階段與第一階段 PoC"
+            ),
+            currently_possible=_natural_text(
+                "；".join(getattr(gate, "does_not_limit", [])),
+                fallback="可先在受控範圍內完成資料、流程與人工確認準備。",
+            ),
+            release_condition=_natural_text(
+                "；".join(getattr(gate, "release_conditions", [])),
+                fallback="待相關條件確認後再重新評估。",
+            ),
+        )
+        for gate in gate_source
+    ]
+    return ReportAppendix(scores=scores, hard_gates=gates)
+
+
+def _recommendation_narrative(
+    *,
+    facts: Sequence[FactRevision],
+    category: str,
+    title: str,
+    options: Sequence[OptionComparison],
+) -> str:
+    fact_by_key = _fact_map(facts)
+    recommended = next(item for item in options if item.recommended)
+    case_support = (
+        "；".join(recommended.supporting_cases)
+        if recommended.supporting_cases
+        else "目前沒有直接對應的成熟案例"
+    )
+    return "\n\n".join(
+        [
+            f"專案問題在於{_phrase(_fact(fact_by_key, 'current_workflow_problem'))}；期待達成的成果是{_phrase(_fact(fact_by_key, 'desired_outcome'))}。目前可用資料為{_phrase(_fact(fact_by_key, 'available_data'))}，因此第一階段不應從抽象的技術選型開始，而應先把可驗證的資料、流程與責任範圍固定下來。",
+            f"推薦方向是「{title}」。這是正式評估結果所指定的方向：{_CATEGORY_POSITIONING[category]}其主要效益是{_phrase(_CATEGORY_BENEFITS[category])}；相較於只堆疊文件或直接追求高度自動化，這個方向能先回應已確認的問題，同時把不確定性留在可控制的 PoC 範圍內。",
+            f"成熟案例支持的是其中可移植的做法，而不是另一套排名。{case_support}提供的參考是{_phrase(recommended.case_evidence)}。本專案可採用{_phrase(recommended.transferable_practice)}；但案例的使用者、資料、部署環境與責任邊界並不相同，{_joined(recommended.cannot_copy)}，所以不能直接複製其自動化程度或對外使用權限。",
+            f"人工責任必須維持清楚：{_CATEGORY_HUMAN_BOUNDARIES[category]}第一階段範圍聚焦於受控資料、有限流程與可回溯的試行，不包含未確認的系統整合、自主核准或直接對外執行。前置條件是{_CATEGORY_PREREQUISITES[category]}",
+            f"PoC 驗收不以通用宣稱代替實測，而是依推薦方案檢查流程是否可追溯、人工覆核是否確實發生，以及{_target_copy(category)[5]}若資料、責任或驗證條件仍待確認，結果只用來決定下一階段是否補足準備，不把未知內容寫成既有能力。",
+        ]
+    )
 
 
 def build_report_synthesis(
@@ -442,68 +647,28 @@ def build_report_synthesis(
     interview_questions: Sequence[InterviewQuestion] = (),
     messages: Sequence[VisibleConversationMessage] = (),
 ) -> ReportSynthesis:
-    """Build one deterministic, readable result model for UI and Markdown."""
+    """Build one deterministic synthesis shared verbatim by UI and Markdown."""
 
+    del report  # Provider prose is not a source of truth for the final report.
     category, title = _formal_route(analysis)
-    findings, interview_qa = build_interview_findings(
-        questions=interview_questions,
-        messages=messages,
-        facts=facts,
-    )
-    route_copy = _CATEGORY_COPY.get(category, "依正式評估結果保留保守實施範圍。")
-    confirmed = [
-        f"{_FACT_LABELS.get(fact.fact_key, '需求資料')}：{_fact_display(fact)}"
-        for fact in facts
-        if fact.status is FactStatus.CONFIRMED
-    ]
-    uncertain = [
-        _FACT_LABELS.get(fact.fact_key, "資料")
-        for fact in facts
-        if fact.status in {FactStatus.UNKNOWN, FactStatus.MISSING}
-    ]
-    provider_section = getattr(report, "executive_summary", None)
-    provider_summary = getattr(provider_section, "content", "")
-    if "模型文字說明暫時不可用" in provider_summary:
-        provider_summary = ""
-    context = "目前已確認：" + "；".join(confirmed or ["尚未記錄足夠需求資料。"])
-    if uncertain:
-        context += "。仍有未確認資訊：" + "、".join(dict.fromkeys(uncertain)) + "。"
-    executive = f"本次評估結論是「{title}」。{route_copy}"
-    if provider_summary:
-        executive += f"補充說明：{provider_summary}"
-    recommendation = f"正式推薦「{title}」。{route_copy}"
-    if analysis.case_centered is not None and analysis.case_centered.gate_impacts:
-        recommendation += (
-            "目前 gate 只限制受控範圍與自動化程度，不代表所有準備工作都不能進行。"
-        )
-    if analysis.case_centered is not None:
-        risk_summary = "；".join(
-            f"{gate.affected_stage}：{'；'.join(gate.limits)}"
-            for gate in analysis.case_centered.gate_impacts
-        )
-    else:
-        risk_summary = ""
-    risk_summary = risk_summary or "目前沒有額外 hard gate；仍保留人工最終決策。"
-    if uncertain:
-        risk_summary += "尚未確認的資料不視為已通過，需在後續階段補足。"
-    roadmap = _roadmap(analysis)
-    next_actions = _unique(
-        [*roadmap[0].actions, *roadmap[0].remaining_gaps, *analysis.unresolved_gaps],
-        empty="依第一階段驗收結果重新判定下一步。",
-    )
+    options = _option_comparison(analysis, category, title)
     return ReportSynthesis(
-        executive_narrative=executive,
-        project_context_narrative=context,
-        interview_findings=findings,
-        current_target_comparison=_current_target_comparison(analysis, facts),
-        option_comparison=_option_comparison(analysis, category, title),
-        case_comparison=_case_comparison(analysis),
-        recommendation_narrative=recommendation,
-        implementation_roadmap=roadmap,
-        hard_gate_summary=_hard_gate_summary(analysis),
-        risk_and_boundary_summary=risk_summary,
-        next_actions=next_actions,
-        appendix=_appendix(analysis, facts, interview_qa),
+        executive_narrative=(
+            f"本次評估建議採用「{title}」。{_CATEGORY_BENEFITS[category]}"
+            "第一階段將以受控範圍驗證，不把未確認事項視為既有條件。"
+        ),
+        recommendation_narrative=_recommendation_narrative(
+            facts=facts, category=category, title=title, options=options
+        ),
+        interview_findings=build_interview_findings(
+            questions=interview_questions, messages=messages, facts=facts
+        ),
+        current_target_comparison=_current_target_comparison(analysis, facts, category),
+        option_comparison=options,
+        comparison_narrative=_comparison_narrative(analysis, facts, options, title),
+        implementation_roadmap=_roadmap(analysis, category),
+        major_risks_and_boundaries=_major_risks(category),
+        appendix=_appendix(analysis),
     )
 
 
@@ -511,12 +676,8 @@ def _cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ").strip()
 
 
-def _joined(values: Sequence[str], *, empty: str = "目前未記錄。") -> str:
-    return "；".join(values) if values else empty
-
-
 def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
-    """Render the exact synthesis object used by the API response."""
+    """Render the exact canonical synthesis supplied to the UI response."""
 
     lines = [
         "# 專案評估報告",
@@ -525,36 +686,60 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
         "",
         synthesis.executive_narrative,
         "",
-        "## 2. 需求與訪談發現",
+        "## 2. 推薦方案與理由",
         "",
-        synthesis.project_context_narrative,
+        synthesis.recommendation_narrative,
+        "",
+        "## 3. 需求與訪談發現",
+        "",
     ]
     if synthesis.interview_findings:
-        lines.extend(
-            ["", "| 主題 | 初始理解 | 追問後澄清 | 對評估的影響 |", "|---|---|---|---|"]
-        )
+        lines.extend(["| 主題 | 已確認內容 | 對方案的影響 |", "|---|---|---|"])
         lines.extend(
             "| "
             + " | ".join(
                 _cell(getattr(item, field))
-                for field in (
-                    "topic",
-                    "initial_understanding",
-                    "clarification",
-                    "assessment_impact",
-                )
+                for field in ("topic", "confirmed_content", "assessment_impact")
             )
             + " |"
             for item in synthesis.interview_findings
         )
     else:
-        lines.extend(["", "目前沒有可安全呈現的追問紀錄。"])
+        lines.append("目前沒有新增的訪談發現；後續確認事項會直接更新此表。")
     lines.extend(
         [
             "",
-            "## 3. 目前狀態與目標狀態",
+            "## 4. 方案、成熟案例與專案差距比較",
             "",
-            "| 面向 | 目前狀態 | 目標狀態 | 主要差距 | 處理方式 |",
+            synthesis.comparison_narrative,
+            "",
+            "| 方案 | 方案定位 | 支持此方案的成熟案例 | 案例能證明什麼 | 可移植到本專案的做法 | 本專案不可直接複製的部分 | 綜合判斷 |",
+            "|---|---|---|---|---|---|---|",
+        ]
+    )
+    lines.extend(
+        "| "
+        + " | ".join(
+            _cell(value)
+            for value in (
+                ("正式推薦：" if item.recommended else "") + item.option,
+                item.positioning,
+                _joined(item.supporting_cases, empty="目前沒有直接案例支持。"),
+                item.case_evidence,
+                item.transferable_practice,
+                _joined(item.cannot_copy),
+                item.conclusion,
+            )
+        )
+        + " |"
+        for item in synthesis.option_comparison
+    )
+    lines.extend(
+        [
+            "",
+            "### 目前狀態、目標狀態與主要差距",
+            "",
+            "| 面向 | 目前狀態 | 採用推薦方案後的目標狀態 | 主要差距 | 方案如何處理 |",
             "|---|---|---|---|---|",
         ]
     )
@@ -576,10 +761,10 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
     lines.extend(
         [
             "",
-            "## 4. 候選方案比較",
+            "## 5. 實施路線、風險與驗收",
             "",
-            "| 方案 | 適合原因 | 效益 | 限制／風險 | 前置條件 | 結論 |",
-            "|---|---|---|---|---|---|",
+            "| 階段 | 主要工作 | 交付成果 | 人工邊界 | 通過條件 |",
+            "|---|---|---|---|---|",
         ]
     )
     lines.extend(
@@ -587,104 +772,19 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
         + " | ".join(
             _cell(value)
             for value in (
-                ("正式推薦：" if item.recommended else "") + item.option,
-                item.suitable_reason,
-                _joined(item.benefits),
-                _joined(item.limitations_risks),
-                _joined(item.prerequisites),
-                item.conclusion,
+                phase.phase,
+                _joined(phase.actions),
+                _joined(phase.outputs),
+                phase.human_decision_boundary,
+                _joined(phase.acceptance_criteria),
             )
         )
         + " |"
-        for item in synthesis.option_comparison
+        for phase in synthesis.implementation_roadmap
     )
-    lines.extend(["", "## 5. 成熟案例橫向比較", ""])
-    if synthesis.case_comparison:
-        lines.extend(
-            [
-                "| 中文案例名稱 | 原始英文名稱 | 組織 | 為什麼相關 | 可移植做法 | 不能直接複製 | 專案適配結論 |",
-                "|---|---|---|---|---|---|---|",
-            ]
-        )
-        lines.extend(
-            "| "
-            + " | ".join(
-                _cell(value)
-                for value in (
-                    item.display_title_zh,
-                    item.original_title,
-                    item.organization,
-                    item.why_relevant,
-                    item.transferable_practice,
-                    _joined(item.cannot_copy),
-                    item.adaptation_conclusion,
-                )
-            )
-            + " |"
-            for item in synthesis.case_comparison
-        )
-    else:
-        lines.append("目前沒有足夠成熟案例作為正式案例依據。")
-    lines.extend(
-        [
-            "",
-            "## 6. 推薦方案與理由",
-            "",
-            synthesis.recommendation_narrative,
-            "",
-            "## 7. 分階段實施路線",
-            "",
-        ]
-    )
-    for phase in synthesis.implementation_roadmap:
-        lines.extend(
-            [
-                f"### {phase.phase}",
-                "",
-                phase.description,
-                f"- 行動：{_joined(phase.actions)}",
-                f"- 輸入：{_joined(phase.inputs)}",
-                f"- 輸出：{_joined(phase.outputs)}",
-                f"- 人工決策邊界：{phase.human_decision_boundary}",
-                f"- 不做：{_joined(phase.not_doing)}",
-                f"- 尚存差距：{_joined(phase.remaining_gaps)}",
-                f"- 驗收條件：{_joined(phase.acceptance_criteria)}",
-                "",
-            ]
-        )
-    lines.extend(
-        [
-            "## 8. 風險、人工邊界與暫不實施事項",
-            "",
-            synthesis.risk_and_boundary_summary,
-            "",
-        ]
-    )
-    if synthesis.hard_gate_summary:
-        lines.extend(
-            [
-                "| 限制內容 | 影響階段 | 目前可做事項 | 解除條件 |",
-                "|---|---|---|---|",
-            ]
-        )
-        lines.extend(
-            "| "
-            + " | ".join(
-                _cell(getattr(item, field))
-                for field in (
-                    "limit_content",
-                    "affected_stage",
-                    "currently_possible",
-                    "release_condition",
-                )
-            )
-            + " |"
-            for item in synthesis.hard_gate_summary
-        )
-        lines.append("")
-    lines.extend(["## 9. 下一步", ""])
-    lines.extend(f"- {item}" for item in synthesis.next_actions)
-    lines.extend(["", "## 10. 評估依據附錄", "", "### 六維評分"])
+    lines.extend(["", "最重要風險與暫不實施事項："])
+    lines.extend(f"- {item}" for item in synthesis.major_risks_and_boundaries)
+    lines.extend(["", "## 6. 技術附錄", "", "### 六維評分"])
     if synthesis.appendix.scores:
         lines.extend(["", "| 維度 | 判斷 | 主要依據 | 改善條件 |", "|---|---|---|---|"])
         lines.extend(
@@ -701,13 +801,13 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
             + " |"
             for item in synthesis.appendix.scores
         )
-    lines.extend(["", "### Hard gate 明細"])
+    lines.extend(["", "### 硬性限制明細"])
     if synthesis.appendix.hard_gates:
         lines.extend(
             [
                 "",
-                "| 編號 | 限制內容 | 影響階段 | 目前可做事項 | 解除條件 |",
-                "|---|---|---|---|---|",
+                "| 限制內容 | 影響階段 | 目前可做事項 | 重新評估條件 |",
+                "|---|---|---|---|",
             ]
         )
         lines.extend(
@@ -715,7 +815,6 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
             + " | ".join(
                 _cell(getattr(item, field))
                 for field in (
-                    "gate_id",
                     "limit_content",
                     "affected_stage",
                     "currently_possible",
@@ -725,29 +824,6 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
             + " |"
             for item in synthesis.appendix.hard_gates
         )
-    lines.extend(["", "### 安全化原始問答"])
-    if synthesis.appendix.safe_interview_qa:
-        lines.extend(
-            [
-                "",
-                "| 問題 | 為什麼重要 | 使用者回答 | 影響的評估判斷 |",
-                "|---|---|---|---|",
-            ]
-        )
-        lines.extend(
-            "| "
-            + " | ".join(
-                _cell(getattr(item, field))
-                for field in (
-                    "question",
-                    "why_it_matters",
-                    "user_answer",
-                    "assessment_impact",
-                )
-            )
-            + " |"
-            for item in synthesis.appendix.safe_interview_qa
-        )
-    lines.extend(["", "### 證據依據"])
-    lines.extend(f"- {item}" for item in synthesis.appendix.evidence_basis)
+    else:
+        lines.extend(["", "目前沒有額外硬性限制。"])
     return "\n".join(lines).rstrip() + "\n"

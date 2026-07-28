@@ -129,31 +129,21 @@ def _render_synthesis(
         icon=":material/download:",
     )
 
-    st.header("2. 需求與訪談發現")
-    st.write(view["project_context_narrative"])
+    st.header("2. 推薦方案與理由")
+    st.markdown(view["recommendation_narrative"])
+
+    st.header("3. 需求與訪談發現")
     _table(
         view["interview_findings"],
         (
             ("topic", "主題"),
-            ("initial_understanding", "初始理解"),
-            ("clarification", "追問後澄清"),
+            ("confirmed_content", "已確認內容"),
             ("assessment_impact", "對評估的影響"),
         ),
     )
 
-    st.header("3. 目前狀態與目標狀態")
-    _table(
-        view["current_target_comparison"],
-        (
-            ("aspect", "面向"),
-            ("current_state", "目前狀態"),
-            ("target_state", "目標狀態"),
-            ("main_gap", "主要差距"),
-            ("treatment", "處理方式"),
-        ),
-    )
-
-    st.header("4. 候選方案比較")
+    st.header("4. 方案、成熟案例與專案差距比較")
+    st.markdown(view["comparison_narrative"])
     option_rows = [
         {
             **row,
@@ -168,99 +158,62 @@ def _render_synthesis(
         option_rows,
         (
             ("option", "方案"),
-            ("suitable_reason", "適合原因"),
-            ("benefits", "效益"),
-            ("limitations_risks", "限制／風險"),
-            ("prerequisites", "前置條件"),
-            ("conclusion", "結論"),
+            ("positioning", "方案定位"),
+            ("supporting_cases", "支持此方案的成熟案例"),
+            ("case_evidence", "案例能證明什麼"),
+            ("transferable_practice", "可移植到本專案的做法"),
+            ("cannot_copy", "本專案不可直接複製的部分"),
+            ("conclusion", "綜合判斷"),
         ),
     )
-
-    st.header("5. 成熟案例橫向比較")
+    st.subheader("目前狀態、目標狀態與主要差距")
     _table(
-        view["case_comparison"],
+        view["current_target_comparison"],
         (
-            ("display_title_zh", "中文案例名稱"),
-            ("original_title", "原始英文名稱"),
-            ("organization", "組織"),
-            ("why_relevant", "為什麼相關"),
-            ("transferable_practice", "可移植做法"),
-            ("cannot_copy", "不能直接複製"),
-            ("adaptation_conclusion", "專案適配結論"),
+            ("aspect", "面向"),
+            ("current_state", "目前狀態"),
+            ("target_state", "採用推薦方案後的目標狀態"),
+            ("main_gap", "主要差距"),
+            ("treatment", "方案如何處理"),
         ),
     )
-    if not view["case_comparison"]:
-        st.caption("目前沒有足夠成熟案例作為正式案例依據。")
 
-    st.header("6. 推薦方案與理由")
-    st.write(view["recommendation_narrative"])
-
-    st.header("7. 分階段實施路線")
-    for phase in view["implementation_roadmap"]:
-        st.subheader(phase["phase"])
-        st.write(phase["description"])
-        for label, key in (
-            ("行動", "actions"),
-            ("輸入", "inputs"),
-            ("輸出", "outputs"),
-            ("不做什麼", "not_doing"),
-            ("尚存差距", "remaining_gaps"),
-            ("驗收條件", "acceptance_criteria"),
-        ):
-            st.markdown(f"**{label}**")
-            _items(phase[key])
-        st.markdown(f"**人工決策邊界：** {phase['human_decision_boundary']}")
-
-    st.header("8. 風險、人工邊界與暫不實施事項")
-    st.write(view["risk_and_boundary_summary"])
+    st.header("5. 實施路線、風險與驗收")
     _table(
-        view["hard_gate_summary"],
+        view["implementation_roadmap"],
         (
-            ("limit_content", "限制內容"),
-            ("affected_stage", "影響階段"),
-            ("currently_possible", "目前可做事項"),
-            ("release_condition", "解除條件"),
+            ("phase", "階段"),
+            ("actions", "主要工作"),
+            ("outputs", "交付成果"),
+            ("human_decision_boundary", "人工邊界"),
+            ("acceptance_criteria", "通過條件"),
         ),
     )
+    st.markdown("**最重要風險與暫不實施事項**")
+    _items(view["major_risks_and_boundaries"])
 
-    st.header("9. 下一步")
-    _items(view["next_actions"])
-
-    st.header("10. 評估依據附錄")
-    appendix = view["appendix"]
-    st.subheader("六維評分")
-    _table(
-        appendix["scores"],
-        (
-            ("dimension", "維度"),
-            ("judgement", "判斷"),
-            ("main_basis", "主要依據"),
-            ("improvement_condition", "改善條件"),
-        ),
-    )
-    st.subheader("Hard gate 明細")
-    _table(
-        appendix["hard_gates"],
-        (
-            ("gate_id", "編號"),
-            ("limit_content", "限制內容"),
-            ("affected_stage", "影響階段"),
-            ("currently_possible", "目前可做事項"),
-            ("release_condition", "解除條件"),
-        ),
-    )
-    st.subheader("安全化原始問答")
-    _table(
-        appendix["safe_interview_qa"],
-        (
-            ("question", "問題"),
-            ("why_it_matters", "為什麼重要"),
-            ("user_answer", "使用者回答"),
-            ("assessment_impact", "影響的評估判斷"),
-        ),
-    )
-    st.subheader("證據依據")
-    _items(appendix["evidence_basis"])
+    with st.expander("6. 技術附錄"):
+        appendix = view["appendix"]
+        st.subheader("六維評分")
+        _table(
+            appendix["scores"],
+            (
+                ("dimension", "維度"),
+                ("judgement", "判斷"),
+                ("main_basis", "主要依據"),
+                ("improvement_condition", "改善條件"),
+            ),
+        )
+        st.subheader("硬性限制明細")
+        _table(
+            appendix["hard_gates"],
+            (
+                ("limit_content", "限制內容"),
+                ("affected_stage", "影響階段"),
+                ("currently_possible", "目前可做事項"),
+                ("release_condition", "重新評估條件"),
+            ),
+        )
 
 
 def _refresh_after_write() -> None:
