@@ -2,16 +2,17 @@
 
 ## Current goal
 
-PR #23 completes the P6.6 technical product-acceptance baseline and closes Phase 6 implementation. The next planned implementation is P7.2 provider compatibility and local inference; it has not started.
+Draft PR #24 is refining the Results report's reader-facing information hierarchy. P7.2 provider compatibility and local inference has not started.
 
 ## Results Narrative and Comparison Redesign
 
-- The feature branch `codex/results-narrative-comparison-redesign` implements the readable report article, deterministic comparison tables, safe interview findings, and the technical/evidence appendix.
-- The main report also exposes human-readable hard-gate boundaries before the technical appendix; gate IDs remain appendix-only.
+- `ReportSynthesis` 2.1 puts a complete deterministic recommendation article before the concise interview table and the integrated option, case, and project-gap comparison.
+- Mature cases are evidence for a candidate direction rather than an independent ranking; current/target/gap rows are the second table in that same comparison chapter.
+- Raw interview questions, evidence lists, internal fact tokens, and standalone next steps are removed from the reader-facing report. The collapsible technical appendix retains only Chinese six-dimension scores and hard-limit details without identifiers.
 - The same persisted `ReportSynthesis` is used by the Results UI and Markdown renderer; Streamlit continues to access report data through the FastAPI boundary.
 - Deterministic matching, recommendation categories, scoring, hard gates, idempotency, reviewed-case approval, provider adapters, and P7.1 runtime behavior were not changed.
-- Automated verification passed: `611 passed, 6 skipped`, Ruff, formatting, and diff checks.
-- Headed Chrome smoke verification loaded the Local UI successfully and confirmed the Results empty state has no accordion elements. The local runtime had zero projects, so no existing completed project was re-entered or re-run during this change.
+- Automated verification passed: `612 passed, 6 skipped`, Ruff, formatting, and diff checks.
+- Populated UAT in the isolated UAT state verified a 2.1 report, downloaded Markdown parity, no raw questions or forbidden internal strings, a single formal recommendation, and no report regeneration after refresh or history re-entry.
 
 ## Current status
 
