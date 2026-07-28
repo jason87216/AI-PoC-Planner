@@ -191,14 +191,43 @@ def test_results_ui_does_not_expose_internal_details_or_forbidden_layers() -> No
     assert "traceback" not in source.casefold()
     assert source.count("st.expander") == 1
     assert "report_synthesis_view" in source
+    assert "來源：[" in source
+    assert "source_url" in source
 
 
 def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> None:
     view = report_synthesis_view(
         {
             "synthesis": {
-                "schema_version": "2.1",
+                "schema_version": "2.2",
                 "executive_narrative": "先顯示結論。",
+                "recommended_solution": {
+                    "display_name_zh": "權限申請標準化、規則檢查與人工審批",
+                    "short_description_zh": "以固定規則檢查申請內容。",
+                    "detailed_description_zh": "先整理申請格式，再由主管審批。",
+                    "suitable_when_zh": "規則與責任可以明確界定時。",
+                    "not_suitable_when_zh": "規則尚未釐清時。",
+                    "typical_scope_zh": "申請表、規則清單與審批紀錄。",
+                    "human_boundary_zh": "主管保留最終審批。",
+                    "expected_outputs_zh": "規則結果與審批紀錄。",
+                    "acceptance_focus_zh": "檢查漏項與例外處理。",
+                    "solution_key": "hidden-solution-key",
+                },
+                "reviewed_cases": [
+                    {
+                        "display_title_zh": "Morgan Stanley：企業知識檢索與人工覆核",
+                        "organization": "Morgan Stanley",
+                        "case_summary_zh": "案例摘要。",
+                        "problem_context_zh": "需要從文件中查找資訊。",
+                        "implemented_approach_zh": "使用檢索與人工覆核。",
+                        "documented_outcomes_zh": "來源記錄採用與查找效率改善。",
+                        "transferable_practices_zh": "建立評估集與人工修訂。",
+                        "limitations_zh": "責任與部署環境不同。",
+                        "source_name": "OpenAI 客戶案例：Morgan Stanley",
+                        "source_url": "https://example.test/morgan",
+                        "case_id": "hidden-case-id",
+                    }
+                ],
                 "interview_findings": [
                     {
                         "topic": "人工責任",
@@ -273,10 +302,17 @@ def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> Non
         True,
         False,
     ]
+    assert view["recommended_solution"]["display_name_zh"] == (
+        "權限申請標準化、規則檢查與人工審批"
+    )
+    assert view["reviewed_cases"][0]["source_name"] == "OpenAI 客戶案例：Morgan Stanley"
+    assert view["reviewed_cases"][0]["source_url"] == "https://example.test/morgan"
     assert "question_uuid" not in repr(view)
     assert "hidden-question-id" not in repr(view)
     assert "hidden-option-id" not in repr(view)
     assert "fact_key" not in repr(view)
     assert "source_question" not in repr(view)
+    assert "hidden-solution-key" not in repr(view)
+    assert "hidden-case-id" not in repr(view)
     assert "safe_interview_qa" not in repr(view)
     assert "evidence_basis" not in repr(view)

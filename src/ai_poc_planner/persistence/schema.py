@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from ai_poc_planner.persistence.errors import (
@@ -12,7 +13,7 @@ from ai_poc_planner.persistence.errors import (
     UnsupportedSchemaVersionError,
 )
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 _PROJECT_COLUMNS = frozenset(
     {
         "id",
@@ -78,6 +79,94 @@ CREATE TABLE IF NOT EXISTS planning_runs (
 _CREATE_PLANNING_RUNS_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_planning_runs_project_created
 ON planning_runs (project_id, created_at DESC, id DESC)
+"""
+_SOLUTION_PATTERN_COLUMNS = frozenset(
+    {
+        "solution_key",
+        "recommendation_category",
+        "display_name_zh",
+        "short_description_zh",
+        "detailed_description_zh",
+        "suitable_when_zh",
+        "not_suitable_when_zh",
+        "typical_scope_zh",
+        "human_boundary_zh",
+        "expected_outputs_zh",
+        "acceptance_focus_zh",
+        "review_status",
+        "content_version",
+        "created_at",
+        "updated_at",
+    }
+)
+_REVIEWED_CASE_COLUMNS = frozenset(
+    {
+        "case_id",
+        "display_title_zh",
+        "original_title",
+        "organization",
+        "case_summary_zh",
+        "problem_context_zh",
+        "implemented_approach_zh",
+        "documented_outcomes_zh",
+        "transferable_practices_zh",
+        "limitations_zh",
+        "applicable_solution_keys_json",
+        "applicable_conditions_json",
+        "non_applicable_conditions_json",
+        "source_name",
+        "source_url",
+        "additional_sources_json",
+        "evidence_grade",
+        "review_status",
+        "reviewed_at",
+        "content_version",
+        "payload_json",
+    }
+)
+_CREATE_SOLUTION_PATTERNS_TABLE = """
+CREATE TABLE IF NOT EXISTS solution_patterns (
+    solution_key TEXT PRIMARY KEY NOT NULL,
+    recommendation_category TEXT NOT NULL UNIQUE,
+    display_name_zh TEXT NOT NULL,
+    short_description_zh TEXT NOT NULL,
+    detailed_description_zh TEXT NOT NULL,
+    suitable_when_zh TEXT NOT NULL,
+    not_suitable_when_zh TEXT NOT NULL,
+    typical_scope_zh TEXT NOT NULL,
+    human_boundary_zh TEXT NOT NULL,
+    expected_outputs_zh TEXT NOT NULL,
+    acceptance_focus_zh TEXT NOT NULL,
+    review_status TEXT NOT NULL,
+    content_version TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+_CREATE_REVIEWED_CASES_TABLE = """
+CREATE TABLE IF NOT EXISTS reviewed_cases (
+    case_id TEXT PRIMARY KEY NOT NULL,
+    display_title_zh TEXT NOT NULL,
+    original_title TEXT NOT NULL,
+    organization TEXT NOT NULL,
+    case_summary_zh TEXT NOT NULL,
+    problem_context_zh TEXT NOT NULL,
+    implemented_approach_zh TEXT NOT NULL,
+    documented_outcomes_zh TEXT NOT NULL,
+    transferable_practices_zh TEXT NOT NULL,
+    limitations_zh TEXT NOT NULL,
+    applicable_solution_keys_json TEXT NOT NULL,
+    applicable_conditions_json TEXT NOT NULL,
+    non_applicable_conditions_json TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    additional_sources_json TEXT NOT NULL,
+    evidence_grade TEXT NOT NULL,
+    review_status TEXT NOT NULL,
+    reviewed_at TEXT NOT NULL,
+    content_version TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+)
 """
 _PLANNING_PROJECT_COLUMNS = frozenset(
     {"id", "project_name", "created_at", "updated_at"}
@@ -667,6 +756,7 @@ def _validate_current_schema(connection: sqlite3.Connection) -> None:
     _validate_phase_three_tables(connection)
     _validate_phase_four_tables(connection)
     _validate_phase_five_tables(connection)
+    _validate_catalog_tables(connection)
 
 
 def _ensure_case_centered_column(connection: sqlite3.Connection) -> None:
@@ -727,6 +817,11 @@ def _validate_phase_four_tables(connection: sqlite3.Connection) -> None:
 
 def _validate_phase_five_tables(connection: sqlite3.Connection) -> None:
     _validate_columns(connection, "planning_reports", _REPORT_COLUMNS)
+
+
+def _validate_catalog_tables(connection: sqlite3.Connection) -> None:
+    _validate_columns(connection, "solution_patterns", _SOLUTION_PATTERN_COLUMNS)
+    _validate_columns(connection, "reviewed_cases", _REVIEWED_CASE_COLUMNS)
 
 
 def _create_phase_two_schema(connection: sqlite3.Connection) -> None:
@@ -795,6 +890,82 @@ def _create_phase_five_schema(connection: sqlite3.Connection) -> None:
         connection.execute(statement)
 
 
+def _create_catalog_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(_CREATE_SOLUTION_PATTERNS_TABLE)
+    connection.execute(_CREATE_REVIEWED_CASES_TABLE)
+
+
+def _seed_reviewed_catalogue(connection: sqlite3.Connection) -> None:
+    """Upsert versioned editorial content without letting a provider write it."""
+
+    from ai_poc_planner.persistence.catalog_seed import (
+        reviewed_cases,
+        reviewed_solution_patterns,
+    )
+
+    for solution in reviewed_solution_patterns():
+        values = solution.model_dump(mode="json")
+        columns = tuple(values)
+        placeholders = ", ".join("?" for _ in columns)
+        updates = ", ".join(
+            f"{column} = excluded.{column}"
+            for column in columns
+            if column != "solution_key"
+        )
+        connection.execute(
+            f"""
+            INSERT INTO solution_patterns ({", ".join(columns)})
+            VALUES ({placeholders})
+            ON CONFLICT(solution_key) DO UPDATE SET {updates}
+            WHERE excluded.content_version > solution_patterns.content_version
+            """,
+            tuple(values[column] for column in columns),
+        )
+    for case in reviewed_cases():
+        payload = case.model_dump(mode="json")
+        values = {
+            "case_id": case.case_id,
+            "display_title_zh": case.display_title_zh,
+            "original_title": case.original_title,
+            "organization": case.organization,
+            "case_summary_zh": case.case_summary_zh,
+            "problem_context_zh": case.problem_context_zh,
+            "implemented_approach_zh": case.implemented_approach_zh,
+            "documented_outcomes_zh": case.documented_outcomes_zh,
+            "transferable_practices_zh": case.transferable_practices_zh,
+            "limitations_zh": case.limitations_zh,
+            "applicable_solution_keys_json": json.dumps(case.applicable_solution_keys),
+            "applicable_conditions_json": json.dumps(case.applicable_conditions),
+            "non_applicable_conditions_json": json.dumps(
+                case.non_applicable_conditions
+            ),
+            "source_name": case.source_name,
+            "source_url": str(case.source_url),
+            "additional_sources_json": json.dumps(
+                [item.model_dump(mode="json") for item in case.additional_sources]
+            ),
+            "evidence_grade": case.evidence_grade.value,
+            "review_status": case.review_status.value,
+            "reviewed_at": case.reviewed_at,
+            "content_version": case.content_version,
+            "payload_json": json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        }
+        columns = tuple(values)
+        placeholders = ", ".join("?" for _ in columns)
+        updates = ", ".join(
+            f"{column} = excluded.{column}" for column in columns if column != "case_id"
+        )
+        connection.execute(
+            f"""
+            INSERT INTO reviewed_cases ({", ".join(columns)})
+            VALUES ({placeholders})
+            ON CONFLICT(case_id) DO UPDATE SET {updates}
+            WHERE excluded.content_version > reviewed_cases.content_version
+            """,
+            tuple(values[column] for column in columns),
+        )
+
+
 def _phase_two_table_count(connection: sqlite3.Connection) -> int:
     names = {
         "planning_projects",
@@ -817,9 +988,9 @@ def _rollback_quietly(connection: sqlite3.Connection) -> None:
 
 
 def initialize_database(connection: sqlite3.Connection) -> None:
-    """Create schema v5 or additively upgrade supported legacy databases."""
+    """Create schema v7 or additively upgrade supported legacy databases."""
     version = read_schema_version(connection)
-    if version not in {0, 1, 2, 3, 4, 5, CURRENT_SCHEMA_VERSION}:
+    if version not in {0, 1, 2, 3, 4, 5, 6, CURRENT_SCHEMA_VERSION}:
         raise UnsupportedSchemaVersionError(
             "database schema version is not supported by this application"
         )
@@ -827,7 +998,10 @@ def initialize_database(connection: sqlite3.Connection) -> None:
     if version == CURRENT_SCHEMA_VERSION:
         try:
             _ensure_case_centered_column(connection)
+            _create_catalog_schema(connection)
+            _seed_reviewed_catalogue(connection)
             _validate_current_schema(connection)
+            connection.commit()
         except SchemaMismatchError:
             raise
         except sqlite3.Error as error:
@@ -854,6 +1028,9 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         _validate_phase_four_tables(connection)
         _create_phase_five_schema(connection)
         _validate_phase_five_tables(connection)
+        _create_catalog_schema(connection)
+        _seed_reviewed_catalogue(connection)
+        _validate_catalog_tables(connection)
         connection.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION}")
         connection.commit()
     except SchemaMismatchError:

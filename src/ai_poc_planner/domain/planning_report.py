@@ -145,12 +145,43 @@ class ReportAppendix(ContractModel):
     evidence_basis: list[NonEmptyStr] = Field(default_factory=list, exclude=True)
 
 
+class ReviewedSolutionContent(ContractModel):
+    """Reader-facing copy projected verbatim from an approved solution row."""
+
+    display_name_zh: NonEmptyStr
+    short_description_zh: NonEmptyStr
+    detailed_description_zh: NonEmptyStr
+    suitable_when_zh: NonEmptyStr
+    not_suitable_when_zh: NonEmptyStr
+    typical_scope_zh: NonEmptyStr
+    human_boundary_zh: NonEmptyStr
+    expected_outputs_zh: NonEmptyStr
+    acceptance_focus_zh: NonEmptyStr
+
+
+class ReviewedCaseContent(ContractModel):
+    """Reader-facing facts projected verbatim from an approved case row."""
+
+    display_title_zh: NonEmptyStr
+    organization: NonEmptyStr
+    case_summary_zh: NonEmptyStr
+    problem_context_zh: NonEmptyStr
+    implemented_approach_zh: NonEmptyStr
+    documented_outcomes_zh: NonEmptyStr
+    transferable_practices_zh: NonEmptyStr
+    limitations_zh: NonEmptyStr
+    source_name: NonEmptyStr
+    source_url: NonEmptyStr
+
+
 class ReportSynthesis(ContractModel):
     """Canonical article view model shared by the API response and Markdown export."""
 
-    schema_version: Literal["2.0", "2.1"] = "2.1"
+    schema_version: Literal["2.0", "2.1", "2.2"] = "2.2"
     executive_narrative: NonEmptyStr
     recommendation_narrative: NonEmptyStr
+    recommended_solution: ReviewedSolutionContent | None = None
+    reviewed_cases: list[ReviewedCaseContent] = Field(default_factory=list)
     interview_findings: list[InterviewFinding] = Field(default_factory=list)
     current_target_comparison: list[CurrentTargetComparison] = Field(min_length=1)
     option_comparison: list[OptionComparison] = Field(min_length=1)

@@ -7,10 +7,11 @@ from __future__ import annotations
 import json
 import re
 from datetime import UTC, datetime
-from pathlib import Path
 from uuid import UUID, uuid4
 
-from ai_poc_planner.application.case_matching import match_cases
+from ai_poc_planner.application.case_centered_assessment import (
+    derive_recommendation_category,
+)
 from ai_poc_planner.application.project_history import ProjectHistoryService
 from ai_poc_planner.application.provider_readiness import ProviderReadinessService
 from ai_poc_planner.application.report_synthesis import (
@@ -21,7 +22,6 @@ from ai_poc_planner.domain.analysis import ValidatedAnalysisResult
 from ai_poc_planner.domain.case_centered import (
     CaseCenteredNarrative,
 )
-from ai_poc_planner.domain.catalog import OpportunityType
 from ai_poc_planner.domain.discovery import InterviewQuestion
 from ai_poc_planner.domain.enums import FactStatus, ProjectStatus
 from ai_poc_planner.domain.planning_report import (
@@ -39,11 +39,12 @@ from ai_poc_planner.domain.project_history import (
     VisibleConversationMessage,
 )
 from ai_poc_planner.domain.reviewed_cases import ReviewedCase
-from ai_poc_planner.infrastructure.local_case_repository import LocalCaseRepository
+from ai_poc_planner.domain.solution_catalog import SolutionPattern
 from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import InterviewSessionNotFoundError
 from ai_poc_planner.persistence.report import SQLitePlanningReportRepository
+from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
 from ai_poc_planner.providers.json_schema import normalize_provider_schema
 from ai_poc_planner.providers.openai_compatible import JSONSchemaResponseFormat
 from ai_poc_planner.providers.profiles import ModelProfile
@@ -59,16 +60,27 @@ def render_markdown(
     report: PlanningReportDraft,
     analysis: ValidatedAnalysisResult,
     facts: list[FactRevision],
-    cases: tuple[ReviewedCase, ...] = (),
     *,
     synthesis: ReportSynthesis | None = None,
+    solution: SolutionPattern | None = None,
+    reviewed_cases: tuple[ReviewedCase, ...] = (),
+    candidate_solutions: tuple[SolutionPattern, ...] = (),
 ) -> str:
     """Render in a fixed, business-readable order without provider internals."""
 
     if analysis.case_centered is not None:
         return render_synthesis_markdown(
             synthesis
-            or build_report_synthesis(analysis=analysis, facts=facts, report=report)
+            or build_report_synthesis(
+                analysis=analysis,
+                facts=facts,
+                solution=solution
+                if solution is not None
+                else _missing_solution_pattern(),
+                reviewed_cases=reviewed_cases,
+                candidate_solutions=candidate_solutions,
+                report=report,
+            )
         )
     lines = [
         "# AI PoC Planning Report",
@@ -90,11 +102,6 @@ def render_markdown(
                 "Evidence: " + ", ".join(section.fact_refs),
             ]
         )
-    lines.extend(["", "## Relevant Reviewed Cases", ""])
-    lines.extend(
-        f"- {case.organization} ({case.evidence_grade}): {case.source_name} — {case.source_url}"
-        for case in cases
-    )
     lines.extend(["", "## Fact-Backed Scoring Appendix", ""])
     for score in analysis.scores:
         lines.append(
@@ -104,6 +111,10 @@ def render_markdown(
     for gate in analysis.gate_results:
         lines.append(f"- {gate.rule_id}: {gate.disposition.value} — {gate.reason}")
     return "\n".join(lines) + "\n"
+
+
+def _missing_solution_pattern() -> SolutionPattern:
+    raise PlanningReportError("approved_solution_not_found")
 
 
 def _label(value: object) -> str:
@@ -408,7 +419,7 @@ class PlanningReportService:
         selected_profile_getter,
         profile_getter=None,
         adapter_factory,
-        cases_path: Path,
+        catalog: SQLiteSolutionCatalogRepository | None = None,
         clock=lambda: datetime.now(UTC),
     ) -> None:
         self._history, self._analyses, self._reports, self._readiness = (
@@ -422,9 +433,9 @@ class PlanningReportService:
             self._selected_profile_getter,
             self._profile_getter,
             self._adapter_factory,
-            self._cases_path,
+            self._catalog,
             self._clock,
-        ) = selected_profile_getter, profile_getter, adapter_factory, cases_path, clock
+        ) = selected_profile_getter, profile_getter, adapter_factory, catalog, clock
 
     def get(self, project_id: UUID, version_number: int) -> PersistedPlanningReport:
         version = self._history.get_version(project_id, version_number)
@@ -444,6 +455,7 @@ class PlanningReportService:
             raise PlanningReportError("analysis_not_found")
         profile = self._profile(version)
         facts = self._history.list_current_facts(project_id, version_number)
+        solution, reviewed_cases = self._catalogue_for_report(analysis, facts)
         tokens = {
             f"F{i:03d}": fact
             for i, fact in enumerate(
@@ -515,6 +527,9 @@ class PlanningReportService:
         synthesis = build_report_synthesis(
             analysis=analysis,
             facts=facts,
+            solution=solution,
+            reviewed_cases=reviewed_cases,
+            candidate_solutions=self._catalog.list_approved_solutions(),
             report=draft,
             interview_questions=questions,
             messages=messages,
@@ -661,24 +676,37 @@ class PlanningReportService:
             raise PlanningReportError("provider_output_invalid")
         return json.loads(value)
 
-    def _matched_cases(
-        self, analysis: ValidatedAnalysisResult
-    ) -> tuple[ReviewedCase, ...]:
-        if analysis.case_centered is not None:
-            return tuple(item.case for item in analysis.case_centered.matched_cases)
-        option = next(
-            item
-            for item in analysis.options
-            if item.option_key == analysis.recommended_option_key
-        )
-        reference = option.ai_opportunity
-        if reference is None or reference.kind != "catalog":
-            return ()
-        return match_cases(
-            LocalCaseRepository(self._cases_path).load(),
-            OpportunityType(reference.opportunity_type),
-            option.option_kind.value,
-        )
+    def _catalogue_for_report(
+        self,
+        analysis: ValidatedAnalysisResult,
+        facts: list[FactRevision],
+    ):
+        """Fail closed unless the persisted assessment still matches SQLite content."""
+
+        result = analysis.case_centered
+        if self._catalog is None or result is None:
+            raise PlanningReportError("report_catalogue_unavailable")
+        solution = self._catalog.get_solution(result.solution_key)
+        if solution is None:
+            raise PlanningReportError("approved_solution_not_found")
+        if (
+            solution.recommendation_category != result.recommendation_category.value
+            or solution.display_name_zh != result.recommendation_title
+            or derive_recommendation_category(facts, analysis.gate_results)
+            is not result.recommendation_category
+        ):
+            raise PlanningReportError("project_solution_mismatch")
+        cases = []
+        for match in result.matched_cases:
+            case = self._catalog.get_approved_case(match.case.case_id)
+            if (
+                case is None
+                or solution.solution_key not in case.applicable_solution_keys
+                or case.model_dump(mode="json") != match.case.model_dump(mode="json")
+            ):
+                raise PlanningReportError("reviewed_case_mismatch")
+            cases.append(case)
+        return solution, tuple(cases)
 
     def _interview_records(
         self, version_id: UUID, project_id: UUID, version_number: int

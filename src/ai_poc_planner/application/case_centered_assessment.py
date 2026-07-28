@@ -267,6 +267,32 @@ _RULES_FIRST_SIGNAL_WORDS = (
     "不需要自然語言",
 )
 
+_PERMISSION_REQUEST_SIGNAL_WORDS = (
+    "權限申請",
+    "存取申請",
+    "permission request",
+    "access request",
+)
+
+_PERMISSION_RULE_SIGNAL_WORDS = (
+    "規則檢查",
+    "規則判斷",
+    "權限規則",
+    "rule check",
+    "rule validation",
+)
+
+_PERMISSION_HUMAN_APPROVAL_SIGNAL_WORDS = (
+    "主管核准",
+    "主管審核",
+    "人工核准",
+    "人工審核",
+    "人工審批",
+    "最終核准",
+    "human approval",
+    "human review",
+)
+
 
 _EMPLOYMENT_HIGH_IMPACT_PATTERNS = (
     r"招募|招聘|錄用|录用|雇用|聘用|解雇|解僱|終止雇傭|终止雇佣|升遷|升迁|晉升|晋升",
@@ -292,6 +318,23 @@ def _has_employment_high_impact_signal(
         ):
             return True
     return False
+
+
+def _is_controlled_permission_request_workflow(
+    facts: Mapping[str, FactRevision],
+) -> bool:
+    """Recognise an access-request workflow without relying on a provider option.
+
+    The route requires the request, deterministic rule checking, and a named
+    human approval boundary together.  A generic mention of access or a
+    knowledge article about permissions is therefore insufficient.
+    """
+
+    return (
+        _contains(facts, *_PERMISSION_REQUEST_SIGNAL_WORDS)
+        and _contains(facts, *_PERMISSION_RULE_SIGNAL_WORDS)
+        and _contains(facts, *_PERMISSION_HUMAN_APPROVAL_SIGNAL_WORDS)
+    )
 
 
 def build_deterministic_assessment_facts(
@@ -910,6 +953,8 @@ def rank_case_matches(
     facts: Iterable[FactRevision],
     *,
     opportunity_types: Sequence[object],
+    solution_key: str,
+    gate_results: Sequence[ProgramGateResult],
     limit: int = 3,
 ) -> tuple[MatchedCaseAssessment, ...]:
     """Filter reviewed cases, calculate fit, then combine value and fit."""
@@ -918,13 +963,19 @@ def rank_case_matches(
         return ()
     facts_tuple = tuple(facts)
     opportunities = {str(item) for item in opportunity_types}
+    assessment_facts = build_deterministic_assessment_facts(facts_tuple)
+    gate_ids = {item.rule_id for item in gate_results}
     ranked: list[tuple[float, int, int, str, MatchedCaseAssessment]] = []
     for case in cases:
         if case.review_status is not ReviewStatus.APPROVED:
             continue
+        if solution_key not in case.applicable_solution_keys:
+            continue
         if not opportunities.intersection(
             item.value for item in case.opportunity_types
         ):
+            continue
+        if _case_conditions_conflict(case, assessment_facts, gate_ids):
             continue
         reference = calculate_case_reference_value(case)
         fit = calculate_project_case_fit(facts_tuple, case)
@@ -953,15 +1004,48 @@ def rank_case_matches(
     return tuple(item[4] for item in ranked[:limit])
 
 
+def _case_conditions_conflict(
+    case: ReviewedCase,
+    assessment_facts: AssessmentFacts,
+    gate_ids: set[str],
+) -> bool:
+    """Reject a reviewed case before fit scoring when its scope conflicts.
+
+    Conditions remain human-written catalogue fields.  The small mapping below
+    translates only the currently reviewed conditions into deterministic facts
+    and gates; unknown conditions are never treated as a positive match.
+    """
+
+    conditions = set(case.non_applicable_conditions)
+    if {"資料或標籤不足", "尚未建立驗證樣本"}.intersection(conditions) and (
+        not assessment_facts.data_readiness.data_available
+        or not assessment_facts.data_readiness.validation_sample_available
+    ):
+        return True
+    if "需要未經人工確認的自主對外承諾" in conditions and "HG-03" in gate_ids:
+        return True
+    if "需要系統自行對外承諾或完成最終決策" in conditions and "HG-03" in gate_ids:
+        return True
+    if (
+        "需要系統自行作出具法律或高影響效力的最終決定" in conditions
+        and "HG-03" in gate_ids
+    ):
+        return True
+    return False
+
+
 def derive_recommendation_category(
     facts: Iterable[FactRevision],
     gate_results: Sequence[ProgramGateResult],
 ) -> RecommendationCategory:
     """Derive the formal route from facts and gates, not provider option choice."""
 
-    assessment_facts = build_deterministic_assessment_facts(facts)
+    facts_tuple = tuple(facts)
+    assessment_facts = build_deterministic_assessment_facts(facts_tuple)
     gate_ids = {item.rule_id for item in gate_results}
-    if "HG-03" in gate_ids:
+    if "HG-03" in gate_ids or _is_controlled_permission_request_workflow(
+        _all_fact_map(facts_tuple)
+    ):
         return RecommendationCategory.GOVERNED_ASSISTIVE
     if (
         assessment_facts.technical_fit.traditional_solution_preferred
@@ -1041,13 +1125,19 @@ def build_case_centered_assessment(
     cases: Iterable[ReviewedCase],
     facts: Iterable[FactRevision],
     opportunity_types: Sequence[object],
+    solution_key: str,
     recommendation_title: str,
     gate_results: Sequence[ProgramGateResult],
     option_kind: str,
 ) -> CaseCenteredAssessment:
     facts_tuple = tuple(facts)
     matches = rank_case_matches(
-        cases, facts_tuple, opportunity_types=opportunity_types, limit=3
+        cases,
+        facts_tuple,
+        opportunity_types=opportunity_types,
+        solution_key=solution_key,
+        gate_results=gate_results,
+        limit=3,
     )
     practices = [item for match in matches if (item := _practice(match)) is not None]
     impacts = [_gate_impact(gate) for gate in gate_results]
@@ -1147,6 +1237,7 @@ def build_case_centered_assessment(
         transferable_practices=practices,
         gate_impacts=impacts,
         phased_path=phases,
+        solution_key=solution_key,
         recommendation_title=recommendation_title,
         recommendation_category=recommendation_category,
         recommendation_basis=case_basis

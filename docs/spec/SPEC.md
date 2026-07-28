@@ -155,20 +155,40 @@ the single formal result consumed by the Results workspace and Markdown report.
 
 ### Local success cases
 
-MVP uses a local, manually curated, source-backed case library. A case has
-title, industry, original problem, implementation method, result, applicability,
-non-applicability, source, and review status. AI must not fabricate companies,
-metrics, or sources. Initial matching uses tags/rules; FAISS is not required.
+MVP uses a local, manually curated, source-backed case library. SQLite is the
+runtime source of truth for approved solution patterns and reviewed cases. A
+solution pattern has an immutable key, recommendation category, reviewed
+Traditional-Chinese display name and description, suitable/unsuitable scope,
+human boundary, expected outputs, acceptance focus, review status, and content
+version. Only an approved pattern may enter a formal report; provider option
+titles are never reader-facing formal names.
+
+A reviewed case has reviewed Traditional-Chinese title, context, implementation,
+recorded outcome, transferable practice, limitation, source name and URL,
+solution-key applicability, conditions, evidence grade, review status, and
+content version. Approved cases require a valid source URL. AI must not
+fabricate, translate, or overwrite companies, case facts, metrics, titles, or
+sources. Matching first requires an approved solution-key relationship, no
+opportunity/condition/hard-gate conflict, and only then applies deterministic
+fit and gap comparison. FAISS is not required.
+
+A controlled permission-request route requires confirmed evidence of an access
+request, fixed rule checks, and human approval together. It maps to the
+approved governed access solution pattern even when validation samples are not
+yet available; a generic mention of access or knowledge material is
+insufficient. This prevents data-readiness gaps from obscuring the project's
+actual rules-and-approval workflow.
 
 ### Report contract
 
-The Markdown report contains: executive summary; requirement understanding;
-current process and pain points; goals and success criteria; AI suitability;
-recommended direction; non-AI/hybrid alternatives; relevant cases; target
-workflow; data needs/gaps; local/cloud/hybrid deployment comparison; PoC scope;
-in/out of scope; KPI and acceptance method; cost range and assumptions;
-implementation stages and roles; risks/governance/human review; open issues and
-next actions; and a fact-backed scoring appendix.
+The canonical `ReportSynthesis` contains: project evaluation summary; the
+reviewed formal recommendation and rationale; concise interview findings;
+integrated solution/case/project-gap comparison; implementation roadmap, risks,
+and acceptance; and a technical appendix. The comparison presents the reviewed
+solution, each matching reviewed case with a named source link, then the
+solution/case table and current/target/gap table. It may state that no sufficient
+reviewed case exists; it must not force an unrelated case. UI and Markdown use
+the same persisted synthesis and source links.
 
 The UI renders the readable report first. Raw Markdown, IDs, rule IDs, and
 technical evidence are not primary product content.

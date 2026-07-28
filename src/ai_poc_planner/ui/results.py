@@ -155,7 +155,7 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
     """Project the persisted canonical synthesis into safe UI fields only."""
 
     synthesis = report.get("synthesis")
-    if not isinstance(synthesis, dict) or synthesis.get("schema_version") != "2.1":
+    if not isinstance(synthesis, dict) or synthesis.get("schema_version") != "2.2":
         return {}
 
     def rows(
@@ -194,10 +194,42 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
     appendix = synthesis.get("appendix")
     if not isinstance(appendix, dict):
         appendix = {}
+    recommended_solution = synthesis.get("recommended_solution")
+    if not isinstance(recommended_solution, dict):
+        return {}
     return {
         "executive_narrative": _readable_text(synthesis.get("executive_narrative", "")),
         "recommendation_narrative": _readable_text(
             synthesis.get("recommendation_narrative", "")
+        ),
+        "recommended_solution": {
+            field: _readable_text(recommended_solution.get(field, ""))
+            for field in (
+                "display_name_zh",
+                "short_description_zh",
+                "detailed_description_zh",
+                "suitable_when_zh",
+                "not_suitable_when_zh",
+                "typical_scope_zh",
+                "human_boundary_zh",
+                "expected_outputs_zh",
+                "acceptance_focus_zh",
+            )
+        },
+        "reviewed_cases": rows(
+            "reviewed_cases",
+            (
+                "display_title_zh",
+                "organization",
+                "case_summary_zh",
+                "problem_context_zh",
+                "implemented_approach_zh",
+                "documented_outcomes_zh",
+                "transferable_practices_zh",
+                "limitations_zh",
+                "source_name",
+                "source_url",
+            ),
         ),
         "interview_findings": rows(
             "interview_findings",

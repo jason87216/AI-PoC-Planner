@@ -9,9 +9,11 @@ from ai_poc_planner.application.case_centered_assessment import (
     build_deterministic_scores,
     calculate_case_reference_value,
     calculate_project_case_fit,
+    derive_recommendation_category,
     infer_opportunity_types,
     rank_case_matches,
 )
+from ai_poc_planner.domain.case_centered import RecommendationCategory
 from ai_poc_planner.domain.catalog import OpportunityType
 from ai_poc_planner.domain.enums import (
     DecisionAuthority,
@@ -46,6 +48,7 @@ def _case(case_id: str = "case-01", **updates: object) -> ReviewedCase:
         "measurable_outcomes": ["Fewer free-form requests."],
         "applicability_tags": ["human_review"],
         "non_applicability_tags": ["autonomous_action"],
+        "applicable_solution_keys": ["test-solution"],
         "human_oversight": ["Manager makes the final decision."],
         "risks_or_limitations": ["Requires a role catalogue."],
         "evidence_type": "official_company_disclosure",
@@ -132,6 +135,8 @@ def test_ranking_filters_review_status_and_is_repeatable() -> None:
         opportunity_types=(
             OpportunityType.ENTERPRISE_KNOWLEDGE_AND_PROFESSIONAL_DOCUMENT_ASSIST,
         ),
+        solution_key="test-solution",
+        gate_results=(),
     )
     second = rank_case_matches(
         tuple(reversed(cases)),
@@ -139,6 +144,8 @@ def test_ranking_filters_review_status_and_is_repeatable() -> None:
         opportunity_types=(
             OpportunityType.ENTERPRISE_KNOWLEDGE_AND_PROFESSIONAL_DOCUMENT_ASSIST,
         ),
+        solution_key="test-solution",
+        gate_results=(),
     )
 
     assert [item.case.case_id for item in first] == [
@@ -154,6 +161,7 @@ def test_composition_has_source_bound_practices_and_no_case_is_honest() -> None:
         opportunity_types=(
             OpportunityType.ENTERPRISE_KNOWLEDGE_AND_PROFESSIONAL_DOCUMENT_ASSIST,
         ),
+        solution_key="test-solution",
         recommendation_title="權限申請標準化與人工審核輔助",
         gate_results=(),
         option_kind="hybrid",
@@ -162,6 +170,7 @@ def test_composition_has_source_bound_practices_and_no_case_is_honest() -> None:
         cases=(_case(),),
         facts=_facts(),
         opportunity_types=(OpportunityType.CUSTOMER_SERVICE_ASSIST,),
+        solution_key="test-solution",
         recommendation_title="資料基礎建設優先路線",
         gate_results=(),
         option_kind="foundations_first",
@@ -206,3 +215,28 @@ def test_opportunity_inference_uses_confirmed_facts_not_model_options() -> None:
         OpportunityType.ENTERPRISE_KNOWLEDGE_AND_PROFESSIONAL_DOCUMENT_ASSIST,
     )
     assert OpportunityType.PREDICTIVE_MAINTENANCE not in inferred
+
+
+def test_permission_request_rules_with_human_approval_prefer_governed_route() -> None:
+    """A missing validation set must not hide a controlled access workflow."""
+
+    facts = (
+        _fact(
+            "current_workflow_problem",
+            "員工以 Email 與 Excel 提出權限申請，主管逐案審核。",
+        ),
+        _fact(
+            "desired_outcome",
+            "建立權限申請標準化、固定規則檢查與可追蹤的人工核准流程。",
+        ),
+        _fact("available_data", "員工職位資料、既有權限清單與申請紀錄。"),
+        _fact("users_and_owners", "員工申請，主管最終核准，IT 人員實際開通。"),
+        _fact(
+            "known_constraints",
+            "第一階段不得 AI 自動核准或直接開通，必須保留人工複核與稽核紀錄。",
+        ),
+    )
+
+    assert derive_recommendation_category(facts, ()) is (
+        RecommendationCategory.GOVERNED_ASSISTIVE
+    )

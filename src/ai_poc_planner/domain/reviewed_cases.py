@@ -67,6 +67,19 @@ class ReviewedCase(ContractModel):
     title: NonEmptyStr
     display_title_zh: NonEmptyStr | None = None
     summary_zh: NonEmptyStr | None = None
+    # Reviewed report content. These fields remain optional only so old
+    # persisted assessment snapshots can still be read; the SQLite catalogue
+    # rejects incomplete approved runtime records.
+    original_title: NonEmptyStr | None = None
+    case_summary_zh: NonEmptyStr | None = None
+    problem_context_zh: NonEmptyStr | None = None
+    implemented_approach_zh: NonEmptyStr | None = None
+    documented_outcomes_zh: NonEmptyStr | None = None
+    transferable_practices_zh: NonEmptyStr | None = None
+    limitations_zh: NonEmptyStr | None = None
+    applicable_solution_keys: list[NonEmptyStr] = Field(default_factory=list)
+    applicable_conditions: list[NonEmptyStr] = Field(default_factory=list)
+    non_applicable_conditions: list[NonEmptyStr] = Field(default_factory=list)
     organization_type: NonEmptyStr | None = None
     applicable_context: list[NonEmptyStr] = Field(default_factory=list)
     opportunity_types: list[OpportunityType] = Field(min_length=1)
@@ -91,8 +104,11 @@ class ReviewedCase(ContractModel):
     source_name: NonEmptyStr
     source_url: HttpUrl
     source_references: list[CaseSourceReference] = Field(default_factory=list)
+    additional_sources: list[CaseSourceReference] = Field(default_factory=list)
     review_status: ReviewStatus
     review_notes: NonEmptyStr | None = None
+    reviewed_at: NonEmptyStr | None = None
+    content_version: NonEmptyStr | None = None
 
     @model_validator(mode="after")
     def approved_case_has_source(self) -> ReviewedCase:

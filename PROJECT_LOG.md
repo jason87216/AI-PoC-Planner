@@ -6,13 +6,15 @@ Draft PR #24 is refining the Results report's reader-facing information hierarch
 
 ## Results Narrative and Comparison Redesign
 
-- `ReportSynthesis` 2.1 puts a complete deterministic recommendation article before the concise interview table and the integrated option, case, and project-gap comparison.
+- `ReportSynthesis` 2.2 puts a complete deterministic recommendation article before the concise interview table and the integrated option, case, and project-gap comparison.
 - Mature cases are evidence for a candidate direction rather than an independent ranking; current/target/gap rows are the second table in that same comparison chapter.
 - Raw interview questions, evidence lists, internal fact tokens, and standalone next steps are removed from the reader-facing report. The collapsible technical appendix retains only Chinese six-dimension scores and hard-limit details without identifiers.
 - The same persisted `ReportSynthesis` is used by the Results UI and Markdown renderer; Streamlit continues to access report data through the FastAPI boundary.
-- Deterministic matching, recommendation categories, scoring, hard gates, idempotency, reviewed-case approval, provider adapters, and P7.1 runtime behavior were not changed.
-- Automated verification passed: `612 passed, 6 skipped`, Ruff, formatting, and diff checks.
-- Populated UAT in the isolated UAT state verified a 2.1 report, downloaded Markdown parity, no raw questions or forbidden internal strings, a single formal recommendation, and no report regeneration after refresh or history re-entry.
+- SQLite `solution_patterns` and `reviewed_cases` are now the runtime source of truth. Provider titles, translations, case facts, outcomes, and source URLs cannot enter the formal report.
+- Deterministic matching now requires the approved solution-key relation before fit/gap ranking; report creation fail-closes when the project route, stored solution, or stored case facts disagree.
+- The governed access route requires confirmed access-request, fixed-rule, and human-approval signals together. It formally recommends `權限申請標準化、規則檢查與人工審批`, even when validation samples remain pending; it does not fall back to document knowledge retrieval or generic data readiness.
+- The refreshed populated UAT passed with the governed access solution, the honest no-case fallback, UI/Markdown schema `2.2` parity, and history re-entry without regeneration. Its ignored artifact is `artifacts/results-catalog-consistency-uat-20260728/`.
+- Final verification passed: `619 passed, 6 skipped`, Ruff, format check, and `git diff --check`.
 
 ## Current status
 

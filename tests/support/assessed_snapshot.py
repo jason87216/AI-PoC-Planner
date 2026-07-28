@@ -11,7 +11,11 @@ from ai_poc_planner.domain.analysis import (
     ProgramScore,
     ValidatedAnalysisResult,
 )
-from ai_poc_planner.domain.case_centered import CaseCenteredAssessment
+from ai_poc_planner.domain.case_centered import (
+    CaseCenteredAssessment,
+    ImplementationPhase,
+    RecommendationCategory,
+)
 from ai_poc_planner.domain.catalog import NonAiAlternativeDirection, OpportunityType
 from ai_poc_planner.domain.enums import (
     AnalysisConclusion,
@@ -173,7 +177,27 @@ def build_assessed_snapshot(
         ],
         gate_disposition=GateDisposition.ASSISTIVE_ONLY,
         created_at=now,
-        case_centered=case_centered,
+        case_centered=case_centered
+        or CaseCenteredAssessment(
+            matching_status="no_suitable_reviewed_case",
+            no_case_reason="目前沒有足夠相關的已審核成熟案例。",
+            phased_path=[
+                ImplementationPhase(
+                    phase_name="目前階段",
+                    description="先整理資料與驗證條件。",
+                    actions=["盤點資料"],
+                    inputs=["已確認需求"],
+                    outputs=["資料清單"],
+                    users=["流程負責人"],
+                    human_decision_boundary="人員確認資料與驗收範圍。",
+                    acceptance_criteria=["資料與驗證條件可供覆核。"],
+                )
+            ],
+            solution_key="data_readiness_validation",
+            recommendation_title="資料與驗證基礎建設",
+            recommendation_category=RecommendationCategory.READINESS_FIRST,
+            recommendation_basis=["已確認資料與驗證條件仍待補足。"],
+        ),
     )
     with history.transaction():
         analyses.create(analysis, tokens)

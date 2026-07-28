@@ -130,6 +130,9 @@ def _render_synthesis(
     )
 
     st.header("2. 推薦方案與理由")
+    solution = view["recommended_solution"]
+    st.subheader(solution["display_name_zh"])
+    st.write(solution["short_description_zh"])
     st.markdown(view["recommendation_narrative"])
 
     st.header("3. 需求與訪談發現")
@@ -144,6 +147,23 @@ def _render_synthesis(
 
     st.header("4. 方案、成熟案例與專案差距比較")
     st.markdown(view["comparison_narrative"])
+    st.subheader("正式推薦方案")
+    st.markdown(f"**方案說明：** {solution['detailed_description_zh']}")
+    st.markdown(f"**適用時機：** {solution['suitable_when_zh']}")
+    st.markdown(f"**人工責任：** {solution['human_boundary_zh']}")
+    if view["reviewed_cases"]:
+        for case in view["reviewed_cases"]:
+            st.subheader(case["display_title_zh"])
+            st.markdown(f"**案例背景：** {case['problem_context_zh']}")
+            st.markdown(f"**實際做法：** {case['implemented_approach_zh']}")
+            st.markdown(f"**已記錄成果：** {case['documented_outcomes_zh']}")
+            st.markdown(f"**可借鑑做法：** {case['transferable_practices_zh']}")
+            st.markdown(f"**不可直接複製：** {case['limitations_zh']}")
+            st.markdown(f"來源：[{case['source_name']}]({case['source_url']})")
+    else:
+        st.info(
+            "目前沒有足夠相關的已審核成熟案例，因此本方案主要依據專案需求、流程規則與目前條件形成，案例只待後續補充。"
+        )
     option_rows = [
         {
             **row,

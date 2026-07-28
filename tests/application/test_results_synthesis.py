@@ -10,10 +10,18 @@ from ai_poc_planner.application.planning_report import (
     build_report_synthesis,
     render_synthesis_markdown,
 )
-from ai_poc_planner.application.report_synthesis import build_interview_findings
+from ai_poc_planner.application.report_synthesis import (
+    ReportSynthesisError,
+    build_interview_findings,
+)
 from ai_poc_planner.domain.discovery import InterviewQuestion
 from ai_poc_planner.domain.enums import InterviewRole, VisibleMessageKind
 from ai_poc_planner.domain.project_history import VisibleConversationMessage
+from ai_poc_planner.domain.solution_catalog import SolutionPattern
+from ai_poc_planner.persistence.catalog_seed import (
+    reviewed_cases,
+    reviewed_solution_patterns,
+)
 from tests.application.test_product_acceptance_baselines import (
     _facts,
     _formal_result,
@@ -23,9 +31,21 @@ from tests.application.test_product_acceptance_baselines import (
 
 def _synthesis(scenario_id: str):
     scenario = _scenario(scenario_id)
+    analysis = _formal_result(scenario)
+    solution = next(
+        item
+        for item in reviewed_solution_patterns()
+        if item.solution_key == analysis.case_centered.solution_key
+    )
+    match_ids = {item.case.case_id for item in analysis.case_centered.matched_cases}
     return build_report_synthesis(
-        analysis=_formal_result(scenario),
+        analysis=analysis,
         facts=list(_facts(scenario)),
+        solution=solution,
+        reviewed_cases=tuple(
+            item for item in reviewed_cases() if item.case_id in match_ids
+        ),
+        candidate_solutions=reviewed_solution_patterns(),
     )
 
 
@@ -67,6 +87,18 @@ def test_interview_findings_are_compact_and_never_expose_raw_questions() -> None
     synthesis = build_report_synthesis(
         analysis=result,
         facts=list(_facts(scenario)),
+        solution=next(
+            item
+            for item in reviewed_solution_patterns()
+            if item.solution_key == result.case_centered.solution_key
+        ),
+        reviewed_cases=tuple(
+            item
+            for item in reviewed_cases()
+            if item.case_id
+            in {case.case.case_id for case in result.case_centered.matched_cases}
+        ),
+        candidate_solutions=reviewed_solution_patterns(),
         interview_questions=[question],
         messages=[answer],
     )
@@ -107,6 +139,133 @@ def test_fallback_writes_a_complete_recommendation_article() -> None:
     ):
         assert phrase in synthesis.recommendation_narrative
     assert "## 2. 推薦方案與理由" in markdown
+
+
+def test_synthesis_uses_reviewed_catalogue_content() -> None:
+    result = _formal_result(_scenario("governed_access"))
+    solution = SolutionPattern(
+        solution_key="permission_request_rules_and_human_approval",
+        recommendation_category="governed_assistive",
+        display_name_zh="權限申請標準化、規則檢查與人工審批",
+        short_description_zh="將申請格式、規則檢查與人工核准串成可追溯流程。",
+        detailed_description_zh=(
+            "先標準化申請欄位與權限範本，再執行固定規則檢查；"
+            "主管保留最終核准，IT 依核准結果開通。"
+        ),
+        suitable_when_zh="申請格式、核准規則與人工責任可以明確界定時適用。",
+        not_suitable_when_zh="規則、權限範本或責任人尚未釐清時，不應直接擴大自動化。",
+        typical_scope_zh="先驗證申請表、規則清單、人工核准與稽核紀錄。",
+        human_boundary_zh="主管最終核准，IT 依已核准結果開通；系統不得自行核准或開通。",
+        expected_outputs_zh="完整申請資料、規則檢查結果、人工核准與可追溯紀錄。",
+        acceptance_focus_zh="檢查漏項、規則命中、例外處理與人工覆核紀錄。",
+        review_status="approved",
+        content_version="test-1",
+        created_at="2026-07-28T00:00:00+00:00",
+        updated_at="2026-07-28T00:00:00+00:00",
+    )
+
+    synthesis = build_report_synthesis(
+        analysis=result,
+        facts=list(_facts(_scenario("governed_access"))),
+        solution=solution,
+        reviewed_cases=(),
+    )
+    markdown = render_synthesis_markdown(synthesis)
+
+    assert synthesis.recommended_solution.display_name_zh == solution.display_name_zh
+    assert solution.display_name_zh in markdown
+    assert "測試路線 o1" not in markdown
+    assert "文件知識檢索與人工審核輔助" not in markdown
+    assert "目前沒有足夠相關的已審核成熟案例" in markdown
+
+
+def test_synthesis_fails_closed_for_solution_mismatch() -> None:
+    result = _formal_result(_scenario("governed_access"))
+    wrong_solution = next(
+        item
+        for item in reviewed_solution_patterns()
+        if item.recommendation_category == "ai_hybrid"
+    )
+
+    with pytest.raises(ReportSynthesisError, match="solution_category_mismatch"):
+        build_report_synthesis(
+            analysis=result,
+            facts=list(_facts(_scenario("governed_access"))),
+            solution=wrong_solution,
+            reviewed_cases=(),
+        )
+
+
+def test_case_facts_and_source_links_are_verbatim_from_reviewed_catalogue() -> None:
+    synthesis = _synthesis("knowledge_assist")
+    markdown = render_synthesis_markdown(synthesis)
+
+    assert synthesis.reviewed_cases
+    for case in synthesis.reviewed_cases:
+        assert case.problem_context_zh in markdown
+        assert case.implemented_approach_zh in markdown
+        assert case.documented_outcomes_zh in markdown
+        assert case.transferable_practices_zh in markdown
+        assert case.limitations_zh in markdown
+        assert f"[{case.source_name}]({case.source_url})" in markdown
+
+
+def test_provider_values_cannot_enter_synthesis() -> None:
+    result = _formal_result(_scenario("knowledge_assist"))
+    mutated_option = result.options[0].model_copy(
+        update={"title": "Manual Knowledge Base Consolidation"}
+    )
+    altered_analysis = result.model_copy(
+        update={"options": [mutated_option, *result.options[1:]]}
+    )
+    solution = next(
+        item
+        for item in reviewed_solution_patterns()
+        if item.solution_key == result.case_centered.solution_key
+    )
+    cases = tuple(
+        item
+        for item in reviewed_cases()
+        if item.case_id
+        in {match.case.case_id for match in result.case_centered.matched_cases}
+    )
+
+    markdown = render_synthesis_markdown(
+        build_report_synthesis(
+            analysis=altered_analysis,
+            facts=list(_facts(_scenario("knowledge_assist"))),
+            solution=solution,
+            reviewed_cases=cases,
+            candidate_solutions=reviewed_solution_patterns(),
+        )
+    )
+    assert "Manual Knowledge Base Consolidation" not in markdown
+
+    altered_case = result.case_centered.matched_cases[0].case.model_copy(
+        update={"case_summary_zh": "provider 覆寫的案例成果"}
+    )
+    altered_match = result.case_centered.matched_cases[0].model_copy(
+        update={"case": altered_case}
+    )
+    inconsistent_analysis = result.model_copy(
+        update={
+            "case_centered": result.case_centered.model_copy(
+                update={
+                    "matched_cases": [
+                        altered_match,
+                        *result.case_centered.matched_cases[1:],
+                    ]
+                }
+            )
+        }
+    )
+    with pytest.raises(ReportSynthesisError, match="reviewed_case_mismatch"):
+        build_report_synthesis(
+            analysis=inconsistent_analysis,
+            facts=list(_facts(_scenario("knowledge_assist"))),
+            solution=solution,
+            reviewed_cases=cases,
+        )
 
 
 def test_comparison_combines_options_cases_and_project_gap_in_one_section() -> None:
@@ -164,7 +323,7 @@ def test_all_golden_scenarios_use_the_new_chinese_article_structure(
     markdown = render_synthesis_markdown(synthesis)
     main_report = _main_report(markdown)
 
-    assert synthesis.schema_version == "2.1"
+    assert synthesis.schema_version == "2.2"
     assert len(synthesis.current_target_comparison) == 6
     assert synthesis.implementation_roadmap
     assert "## 1. 專案評估摘要" in markdown

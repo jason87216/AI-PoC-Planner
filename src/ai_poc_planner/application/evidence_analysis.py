@@ -8,7 +8,6 @@ import json
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
@@ -47,6 +46,7 @@ from ai_poc_planner.domain.project_history import FactRevision, ProjectVersion
 from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import CurrentVersionRequiredError
+from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
 from ai_poc_planner.providers.analysis_contracts import (
     option_detail_contract,
     stage_a0_contract,
@@ -85,7 +85,7 @@ class EvidenceAnalysisService:
         selected_profile_getter: Callable[[], ModelProfile | None],
         profile_getter: Callable[[UUID], ModelProfile] | None = None,
         adapter_factory: Callable[[ModelProfile], InterviewCompletionAdapter],
-        cases_path: Path | None = None,
+        catalog: SQLiteSolutionCatalogRepository,
         clock: Callable[[], datetime] = _utc_now,
         uuid_factory: Callable[[], UUID] = uuid4,
     ) -> None:
@@ -98,9 +98,7 @@ class EvidenceAnalysisService:
         self._adapter_factory = adapter_factory
         self._clock = clock
         self._uuid_factory = uuid_factory
-        self._cases_path = cases_path or (
-            Path(__file__).resolve().parents[3] / "data" / "reviewed_cases.json"
-        )
+        self._catalog = catalog
 
     def get(self, project_id: UUID, version_number: int) -> ValidatedAnalysisResult:
         version = self._history.get_version(project_id, version_number)
@@ -602,18 +600,22 @@ class EvidenceAnalysisService:
         # Only confirmed project facts may select the reviewed-case catalogue.
         opportunity_types = list(infer_opportunity_types(facts))
         recommendation_category = derive_recommendation_category(facts, gates)
-        recommendation_title = self._recommendation_title(
-            selected, opportunity_types, recommendation_category
-        )
-        from ai_poc_planner.infrastructure.local_case_repository import (
-            LocalCaseRepository,
-        )
+        solution = self._approved_solution(recommendation_category)
+        if solution is None:
+            raise EvidenceAnalysisError("approved_solution_not_found")
+        if solution.recommendation_category != recommendation_category.value:
+            raise EvidenceAnalysisError("solution_category_mismatch")
+        catalog = getattr(self, "_catalog", None)
+        if catalog is None:
+            raise EvidenceAnalysisError("catalogue_unavailable")
+        cases = catalog.list_approved_cases_for_solution(solution.solution_key)
 
         case_centered = build_case_centered_assessment(
-            cases=LocalCaseRepository(self._cases_path).load(),
+            cases=cases,
             facts=facts,
             opportunity_types=opportunity_types,
-            recommendation_title=recommendation_title,
+            solution_key=solution.solution_key,
+            recommendation_title=solution.display_name_zh,
             gate_results=gates,
             option_kind=selected.option_kind.value,
         )
@@ -638,36 +640,11 @@ class EvidenceAnalysisService:
             case_centered=case_centered,
         )
 
-    @staticmethod
-    def _recommendation_title(
-        selected,
-        opportunity_types,
-        category: RecommendationCategory,
-    ) -> str:
-        if category is RecommendationCategory.RULES_FIRST:
-            return "流程標準化與規則檢查路線"
-        if category is RecommendationCategory.READINESS_FIRST:
-            return "資料基礎建設優先路線"
-        if category is RecommendationCategory.GOVERNED_ASSISTIVE:
-            return "權限申請標準化與人工審核輔助"
-        if selected.option_kind.value == "foundations_first":
-            return "資料基礎建設優先路線"
-        if selected.option_kind.value == "non_ai":
-            return "流程標準化與規則檢查路線"
-        labels = {
-            "customer_service_assist": "客服知識檢索與人工回覆輔助",
-            "enterprise_knowledge_and_professional_document_assist": "文件知識檢索與人工審核輔助",
-            "document_classification_and_extraction": "文件分類與人工覆核輔助",
-            "recruiting_process_assist": "招募流程整理與人工決策輔助",
-        }
-        for item in opportunity_types:
-            key = getattr(item, "value", str(item))
-            if key in labels:
-                return labels[key]
-        title = str(selected.title)
-        if title.casefold().startswith(("option", "ai option", "candidate")):
-            return "混合式流程改善路線"
-        return title
+    def _approved_solution(self, category: RecommendationCategory):
+        catalog = getattr(self, "_catalog", None)
+        if catalog is None:
+            raise EvidenceAnalysisError("catalogue_unavailable")
+        return catalog.get_approved_solution_for_category(category)
 
     @staticmethod
     def _gate_facts(selected: object, draft: AIAnalysisDraft) -> GateFacts:

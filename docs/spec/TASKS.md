@@ -158,9 +158,13 @@ Delivered:
 - a continuous enterprise assessment article with the executive conclusion before
   technical score and gate details;
 - persisted interview findings, current/target comparison, candidate-option comparison,
-  reviewed-case comparison, recommendation, roadmap, boundaries, next actions, and a
-  safe evaluation-basis appendix;
-- human-maintained Chinese reviewed-case display titles and summaries;
+  reviewed-case comparison, recommendation, roadmap, boundaries, and a safe technical
+  appendix without standalone next actions;
+- SQLite-reviewed solution patterns and source-backed case content; approved catalog
+  records are the only formal source for user-facing solution names, case facts, and
+  source links;
+- deterministic solution–case–project consistency checks that reject mismatched
+  recommendation categories, unapproved content, unrelated cases, and stale case facts;
 - one canonical `ReportSynthesis` consumed by both the Results UI and Markdown;
 - deterministic fallback composition when provider narrative generation is unavailable;
 - regression tests for safe interview tracing, formal recommendation categories,
@@ -169,7 +173,7 @@ Delivered:
 
 Verification:
 
-- `611 passed, 6 skipped`;
+- `618 passed, 6 skipped` before the final populated UAT refresh;
 - Ruff, formatting, and diff checks passed;
 - headed Chrome loaded the Local UI. No completed project existed in the Local runtime,
   so the existing-project re-entry check was not performed.
