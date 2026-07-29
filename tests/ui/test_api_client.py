@@ -178,6 +178,35 @@ def test_safe_error_never_exposes_api_error_payload_or_connection_address() -> N
     assert "raw-provider-detail" not in caught.value.user_message
 
 
+def test_provider_error_reads_only_whitelisted_safe_details() -> None:
+    raw_marker = "raw-provider-marker-ui-p72a"
+    api = _client(
+        lambda _: httpx.Response(
+            503,
+            json={
+                "error": {
+                    "code": "provider_unavailable",
+                    "message": raw_marker,
+                    "details": {
+                        "operation": "analysis",
+                        "retryable": True,
+                        "user_action": "請稍後重試，並確認服務目前可用。",
+                        "raw": raw_marker,
+                    },
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.provider_status()
+
+    assert caught.value.retryable is True
+    assert caught.value.user_action == "請稍後重試，並確認服務目前可用。"
+    assert raw_marker not in str(caught.value)
+    assert raw_marker not in repr(caught.value)
+
+
 def test_project_model_binding_sends_only_a_profile_reference() -> None:
     requests: list[httpx.Request] = []
 

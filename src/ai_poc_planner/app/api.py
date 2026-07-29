@@ -132,6 +132,12 @@ from ai_poc_planner.providers.base import (
     ReasoningEffort,
     StructuredOutputMode,
 )
+from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
+from ai_poc_planner.providers.errors import (
+    ProviderOperation,
+    ProviderOperationError,
+    SafeProviderFailure,
+)
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleChatAdapter
 from ai_poc_planner.providers.profiles import (
     ModelProfile,
@@ -182,6 +188,7 @@ class ModelProfileCreateRequest(ContractModel):
     api_key: str | None = None
     structured_output_mode: StructuredOutputMode | None = None
     reasoning_effort: ReasoningEffort | None = None
+    capabilities: OpenAICompatibleCapabilities | None = None
     is_enabled: bool = True
 
 
@@ -192,6 +199,7 @@ class ModelProfileUpdateRequest(ContractModel):
     api_key: str | None = None
     structured_output_mode: StructuredOutputMode | None = None
     reasoning_effort: ReasoningEffort | None = None
+    capabilities: OpenAICompatibleCapabilities | None = None
     is_enabled: bool | None = None
 
 
@@ -267,6 +275,56 @@ def _error_response(
     )
 
 
+def _provider_error_response(
+    code: str, operation: ProviderOperation, correlation_id: UUID
+) -> JSONResponse:
+    failure = SafeProviderFailure.from_code(code, operation)
+    status = 502
+    if code == "provider_timeout":
+        status = 504
+    elif code in {
+        "provider_connection_failed",
+        "provider_rate_limited",
+        "provider_unavailable",
+    }:
+        status = 503
+    return _error_response(
+        status,
+        failure.code,
+        correlation_id,
+        details={
+            "operation": failure.operation.value,
+            "retryable": failure.retryable,
+            "user_action": failure.user_action,
+        },
+    )
+
+
+_SAFE_PROVIDER_CODES = {
+    "provider_auth_required",
+    "provider_auth_failed",
+    "provider_parameter_unsupported",
+    "provider_structured_output_unsupported",
+    "provider_not_found",
+    "provider_timeout",
+    "provider_connection_failed",
+    "provider_rate_limited",
+    "provider_unavailable",
+    "provider_http_error",
+    "provider_invalid_response",
+    "provider_output_truncated",
+    "provider_output_invalid",
+    "provider_schema_invalid",
+}
+
+_SAFE_PROFILE_CODES = {
+    "model_profile_auth_required",
+    "model_profile_auth_forbidden",
+    "model_profile_reasoning_unsupported",
+    "model_profile_structured_output_invalid",
+}
+
+
 def create_app(
     *,
     chat_model: BaseChatModel,
@@ -328,6 +386,7 @@ def create_app(
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
             reasoning_effort=profile.reasoning_effort,
+            capabilities=profile.effective_capabilities,
         )
 
     def default_interview_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
@@ -340,6 +399,7 @@ def create_app(
             client=app_owned_provider_client(),
             timeout_seconds=300,
             reasoning_effort=profile.reasoning_effort,
+            capabilities=profile.effective_capabilities,
         )
 
     def default_analysis_adapter(profile: ModelProfile) -> ChatCompletionAdapter:
@@ -350,6 +410,7 @@ def create_app(
             client=app_owned_provider_client(),
             timeout_seconds=240,
             reasoning_effort=profile.reasoning_effort,
+            capabilities=profile.effective_capabilities,
         )
 
     readiness = ProviderReadinessService(
@@ -472,6 +533,11 @@ def create_app(
         fields = [
             ".".join(str(part) for part in item["loc"]) for item in error.errors()
         ]
+        for item in error.errors():
+            message = str(item.get("msg", ""))
+            for code in _SAFE_PROFILE_CODES:
+                if code in message:
+                    return _error_response(422, code, correlation_id)
         return _error_response(
             422,
             "request_validation_error",
@@ -544,16 +610,32 @@ def create_app(
     async def provider_readiness_error(
         _: Request, error: ProviderReadinessError
     ) -> JSONResponse:
+        if error.failure is not None:
+            return _provider_error_response(error.code, error.failure.operation, uuid4())
         return _error_response(409, error.code, uuid4())
+
+    @app.exception_handler(ProviderOperationError)
+    async def provider_operation_error(
+        _: Request, error: ProviderOperationError
+    ) -> JSONResponse:
+        return _provider_error_response(error.code, error.operation, uuid4())
 
     @app.exception_handler(DiscoveryError)
     async def discovery_error(_: Request, error: DiscoveryError) -> JSONResponse:
+        if error.code in _SAFE_PROVIDER_CODES:
+            return _provider_error_response(
+                error.code, ProviderOperation.DISCOVERY, uuid4()
+            )
         return _error_response(
             502 if error.code == "provider_output_invalid" else 409, error.code, uuid4()
         )
 
     @app.exception_handler(EvidenceAnalysisError)
     async def analysis_error(_: Request, error: EvidenceAnalysisError) -> JSONResponse:
+        if error.code in _SAFE_PROVIDER_CODES:
+            return _provider_error_response(
+                error.code, ProviderOperation.ANALYSIS, uuid4()
+            )
         status = 502 if error.code == "provider_output_invalid" else 409
         if error.code == "analysis_not_found":
             status = 404
@@ -561,6 +643,8 @@ def create_app(
 
     @app.exception_handler(PlanningReportError)
     async def report_error(_: Request, error: PlanningReportError) -> JSONResponse:
+        if error.code in _SAFE_PROVIDER_CODES:
+            return _provider_error_response(error.code, ProviderOperation.REPORT, uuid4())
         status = 502 if error.code == "provider_output_invalid" else 409
         if error.code in {"report_not_found", "analysis_not_found"}:
             status = 404
@@ -597,6 +681,7 @@ def create_app(
             api_key=request.api_key,
             structured_output_mode=request.structured_output_mode,
             reasoning_effort=request.reasoning_effort,
+            capabilities=request.capabilities,
             is_enabled=request.is_enabled,
         ).to_public()
 

@@ -51,3 +51,7 @@ def profile_options(profiles: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
 
 def show_api_error(error: ApiClientError) -> None:
     st.error(error.user_message)
+    if error.user_action:
+        st.info(error.user_action)
+    if error.retryable:
+        st.caption("修正設定後或稍後可重試。")

@@ -20,6 +20,11 @@ from ai_poc_planner.providers.capabilities import (
     ReasoningParameter,
     TokenParameter,
 )
+from ai_poc_planner.providers.errors import (
+    ProviderOperation,
+    ProviderOperationError,
+    SafeProviderFailure,
+)
 from ai_poc_planner.providers.fake import (
     FakeEmbeddingProvider,
     FakeModelProvider,
@@ -36,11 +41,6 @@ from ai_poc_planner.providers.profiles import (
     ModelProfile,
     ModelProfilePublic,
     ProviderConnectionStatus,
-)
-from ai_poc_planner.providers.errors import (
-    ProviderOperation,
-    ProviderOperationError,
-    SafeProviderFailure,
 )
 from ai_poc_planner.providers.structured_output import (
     StructuredOutputContentError,
