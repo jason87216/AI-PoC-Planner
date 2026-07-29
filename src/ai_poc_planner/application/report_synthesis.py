@@ -75,7 +75,7 @@ _TOPIC_IMPACTS = {
     "available_data": "決定可納入的資料範圍與驗證樣本準備方式。",
     "users_and_owners": "用來界定使用者、品質責任與例外交接。",
     "known_constraints": "用來限制第一階段範圍與部署方式。",
-    "human_final_decision": "明確保留人工確認與對外回覆責任。",
+    "human_final_decision": "明確保留人工最終決策與例外處理責任。",
     "approval_process_detail": "用來界定主管核准、拒絕與例外處理的流程。",
     "processing_boundary": "用來限定資料可在何種受控環境中處理。",
     "first_phase_scope": "用來限制第一階段的工作範圍。",
@@ -113,6 +113,61 @@ _INTERVIEW_IMPACT_ALIASES = {
     "exception_handling": "用來界定例外如何回到人工判斷。",
     "audit_trail": "用來保留申請、核准人與處理時間的稽核紀錄。",
     "access_review": "用來安排後續存取檢視與撤銷追蹤。",
+}
+_INTERVIEW_GROUP_ORDER = (
+    "現況與預期成果",
+    "第一階段範圍",
+    "主管與 IT 責任",
+    "資料與處理環境",
+    "規則、例外與稽核",
+    "驗收指標",
+)
+_INTERVIEW_GROUP_BY_FACT = {
+    "current_workflow_problem": "現況與預期成果",
+    "desired_outcome": "現況與預期成果",
+    "first_phase_scope": "第一階段範圍",
+    "process_scope": "第一階段範圍",
+    "known_constraints": "第一階段範圍",
+    "users_and_owners": "主管與 IT 責任",
+    "human_final_decision": "主管與 IT 責任",
+    "manager_approval": "主管與 IT 責任",
+    "manager_approval_responsibility": "主管與 IT 責任",
+    "it_provisioning": "主管與 IT 責任",
+    "it_provisioning_responsibility": "主管與 IT 責任",
+    "approval_process_detail": "主管與 IT 責任",
+    "available_data": "資料與處理環境",
+    "processing_boundary": "資料與處理環境",
+    "governance_and_risk": "資料與處理環境",
+    "rules_conflict_check": "規則、例外與稽核",
+    "policy_rule_validation": "規則、例外與稽核",
+    "required_field_validation": "規則、例外與稽核",
+    "exception_handling": "規則、例外與稽核",
+    "auditability_requirements": "規則、例外與稽核",
+    "audit_trail_detail": "規則、例外與稽核",
+    "audit_trail_requirements": "規則、例外與稽核",
+    "access_review": "規則、例外與稽核",
+    "validation_metric": "驗收指標",
+    "success_conditions": "驗收指標",
+    "validation_sample": "驗收指標",
+    "fault_labels": "驗收指標",
+}
+_INTERVIEW_GROUP_IMPACTS = {
+    "現況與預期成果": "用來確認第一階段要優先改善的流程痛點與預期成果。",
+    "第一階段範圍": "用來限制第一階段範圍、責任與部署方式。",
+    "主管與 IT 責任": "明確保留人工最終決策與例外處理責任。",
+    "資料與處理環境": "決定可納入的資料範圍與受控處理環境。",
+    "規則、例外與稽核": "用來定義規則、例外與稽核紀錄的處理方式。",
+    "驗收指標": "用來設定可觀察的驗收指標與通過門檻。",
+}
+_INTERVIEW_GROUP_IMPACTS_BY_CATEGORY = {
+    "rules_first": {
+        "現況與預期成果": "用來界定電子郵件與試算表流程的改善目標與驗收方向。",
+        "第一階段範圍": "用來限制第一階段僅標準化、規則檢查與人工核准，不自動開通。",
+        "主管與 IT 責任": "明確保留主管最終核准與 IT 實際開通責任。",
+        "資料與處理環境": "用來決定申請資料、權限資料及受控處理環境的整理範圍。",
+        "規則、例外與稽核": "用來定義必填欄位、固定規則、例外處理與稽核紀錄。",
+        "驗收指標": "用來設定格式完整率、規則提示正確率、核准時間與例外紀錄完整性。",
+    }
 }
 _PRACTICE_LABELS = {
     "structured_request_intake": "集中申請入口與標準欄位",
@@ -335,13 +390,18 @@ def _reviewed_case_content(
 def _case_support_summaries(
     cases: Sequence[ReviewedCaseContent], solution_key: str
 ) -> list[CaseSupportSummary]:
+    permission_adoption = {
+        "Demandbase": "集中申請入口、角色與權限對照、撤銷追蹤。",
+        "Cenibra": "分階段導入、規則與風險檢查、跨系統稽核。",
+        "Varo": "臨時權限、期限管理、存取檢視。",
+    }
     summaries: list[CaseSupportSummary] = []
     for case in cases:
         supported = case.applicability_note_zh or case.transferable_practices_zh
         if solution_key == "permission_request_rules_and_human_approval":
-            adoption = (
-                "本專案先採用標準欄位、固定規則檢查、主管核准、"
-                "IT 依核准結果開通與完整稽核紀錄。"
+            adoption = permission_adoption.get(
+                case.organization,
+                "本專案依此案例支持的做法，對應到受控的申請、核准與稽核流程。",
             )
         else:
             adoption = (
@@ -383,61 +443,50 @@ def build_interview_findings(
     questions: Sequence[InterviewQuestion],
     messages: Sequence[VisibleConversationMessage],
     facts: Sequence[FactRevision],
+    recommendation_category: str | None = None,
 ) -> list[InterviewFinding]:
-    """Summarise confirmed interview content without emitting the raw question."""
+    """Summarise persisted interview content into product-level themes."""
 
     answers = {str(message.id): message.content for message in messages}
-    fact_by_key = _fact_map(facts)
-    findings: list[InterviewFinding] = []
     ordered_questions = sorted(
         questions, key=lambda item: (item.round_number, item.position)
     )
-    answer_by_key: dict[str, str] = {}
+    grouped_content: dict[str, list[str]] = {
+        topic: [] for topic in _INTERVIEW_GROUP_ORDER
+    }
+
+    def add_content(fact_key: str, value: object) -> None:
+        group = _INTERVIEW_GROUP_BY_FACT.get(fact_key)
+        if group is None or value is None:
+            return
+        content = _natural_text(value, fallback="")
+        if content and content not in grouped_content[group]:
+            grouped_content[group].append(content)
+
     for question in ordered_questions:
         key = question.fact_key.strip().casefold()
         answer = answers.get(str(question.answer_message_id), "").strip()
         if answer:
-            answer_by_key[key] = answer
-
-    confirmed_facts = {
-        fact.fact_key.strip().casefold(): fact
-        for fact in facts
-        if fact.status is FactStatus.CONFIRMED
-    }
-    seen_keys: set[str] = set()
-
-    def add_finding(key: str, fact: FactRevision | None) -> None:
-        topic = _INTERVIEW_TOPIC_ALIASES.get(key) or _FACT_LABELS.get(key)
-        impact = _INTERVIEW_IMPACT_ALIASES.get(key) or _TOPIC_IMPACTS.get(key)
-        if topic is None or impact is None:
-            return
-        seen_keys.add(key)
-        findings.append(
-            InterviewFinding(
-                topic=topic,
-                confirmed_content=_natural_text(
-                    answer_by_key.get(key) or _fact_display(fact),
-                    fallback="待確認。",
-                ),
-                assessment_impact=impact,
-            )
-        )
-
-    # Keep the current round's answer-backed findings first, then append every
-    # confirmed persisted fact so refresh/history cannot erase earlier findings.
-    for question in ordered_questions:
-        key = question.fact_key.strip().casefold()
-        if key in seen_keys:
-            continue
-        if key not in confirmed_facts and key not in answer_by_key:
-            continue
-        add_finding(key, confirmed_facts.get(key) or fact_by_key.get(key))
+            add_content(key, answer)
     for fact in facts:
         key = fact.fact_key.strip().casefold()
-        if key in seen_keys or key not in confirmed_facts:
-            continue
-        add_finding(key, confirmed_facts[key])
-    return findings
+        if fact.status is FactStatus.CONFIRMED:
+            add_content(key, fact.value)
+
+    category_impacts = _INTERVIEW_GROUP_IMPACTS_BY_CATEGORY.get(
+        recommendation_category, {}
+    )
+    return [
+        InterviewFinding(
+            topic=topic,
+            confirmed_content="；".join(grouped_content[topic]),
+            assessment_impact=category_impacts.get(
+                topic, _INTERVIEW_GROUP_IMPACTS[topic]
+            ),
+        )
+        for topic in _INTERVIEW_GROUP_ORDER
+        if grouped_content[topic]
+    ]
 
 
 def _case_support(
@@ -515,6 +564,34 @@ def _case_table_support(
     return evidence, transferable, cannot_copy
 
 
+_PERMISSION_ROUTE_COMPARISON = {
+    "permission_request_manual_baseline": {
+        "positioning": "保留電子郵件與試算表，先統一申請欄位、檔案格式與人工核准紀錄。",
+        "benefit": "改動小，導入成本最低。",
+        "limitation": "仍高度依賴人工，規則一致性與追蹤改善有限。",
+        "conclusion": "可作為最低成本基線，暫不列為正式推薦。",
+    },
+    "permission_request_rules_and_human_approval": {
+        "positioning": "以標準表單收集申請，檢查固定規則與衝突，再由主管核准、IT 開通。",
+        "benefit": "直接改善漏填、規則衝突、責任分工與稽核追蹤。",
+        "limitation": "需先整理職位—權限範本、固定規則與例外處理。",
+        "conclusion": "正式推薦；適合以有限範圍 PoC 驗證。",
+    },
+    "permission_request_ai_future_extension": {
+        "positioning": "後續以 AI 協助整理自由文字與附件，將複雜例外交回固定規則與人工核准。",
+        "benefit": "未來可協助整理非結構化申請與複雜例外。",
+        "limitation": "目前沒有足夠需求，且仍需人工複核。",
+        "conclusion": "列為後續延伸，第一階段不作為主要方案。",
+    },
+    "permission_request_automatic_provisioning_rejected": {
+        "positioning": "將規則結果直接轉成核准與權限開通動作。",
+        "benefit": "理論上可減少人工處理時間。",
+        "limitation": "責任、權限與錯誤影響過高，目前不可採用。",
+        "conclusion": "明確拒絕；不得繞過主管核准或 IT 開通責任。",
+    },
+}
+
+
 def _option_comparison(
     analysis: ValidatedAnalysisResult,
     solution: SolutionPattern,
@@ -551,38 +628,24 @@ def _option_comparison(
         rows: list[OptionComparison] = []
         for route in routes:
             recommended = route.solution_key == solution.solution_key
-            if recommended:
-                rows.append(
-                    OptionComparison(
-                        option=route.display_name_zh,
-                        positioning=_natural_text(
-                            route.short_description_zh, fallback="主要做法待補充。"
-                        ),
-                        supporting_cases=case_names,
-                        case_evidence=table_case_evidence,
-                        transferable_practice=table_transferable,
-                        cannot_copy=table_cannot_copy,
-                        supporting_references=reference_names,
-                        conclusion="正式推薦；適合以有限範圍 PoC 驗證。",
-                        recommended=True,
-                    )
-                )
+            comparison = _PERMISSION_ROUTE_COMPARISON.get(route.solution_key)
+            if comparison is None:
                 continue
-            conclusion = {
-                "baseline": "可作為最低成本基線，暫不列為正式推薦。",
-                "future_extension": "列為後續延伸，第一階段不作為主要方案。",
-                "rejected": "明確拒絕；不得繞過主管核准或 IT 開通責任。",
-            }.get(route.alternative_type or "", "作為比較參考，暫不列為正式推薦。")
             rows.append(
                 OptionComparison(
                     option=route.display_name_zh,
-                    positioning=_natural_text(
-                        route.short_description_zh, fallback="主要做法待補充。"
+                    positioning=comparison["positioning"],
+                    supporting_cases=case_names if recommended else [],
+                    case_evidence=(
+                        table_case_evidence
+                        if recommended
+                        else "此方向沒有本次推薦案例直接支持，只用來說明取捨。"
                     ),
-                    case_evidence="此方向沒有本次推薦案例直接支持，只用來說明取捨。",
-                    transferable_practice=route.typical_scope_zh,
-                    cannot_copy=[route.human_boundary_zh],
-                    conclusion=conclusion,
+                    transferable_practice=comparison["benefit"],
+                    cannot_copy=[comparison["limitation"]],
+                    supporting_references=reference_names if recommended else [],
+                    conclusion=comparison["conclusion"],
+                    recommended=recommended,
                 )
             )
         return rows
@@ -1226,7 +1289,10 @@ def build_report_synthesis(
             implementation_references
         ),
         interview_findings=build_interview_findings(
-            questions=interview_questions, messages=messages, facts=facts
+            questions=interview_questions,
+            messages=messages,
+            facts=facts,
+            recommendation_category=solution.recommendation_category,
         ),
         current_target_comparison=_current_target_comparison(
             analysis, facts, category, solution.solution_key

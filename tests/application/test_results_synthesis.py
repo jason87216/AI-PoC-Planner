@@ -33,7 +33,7 @@ from tests.application.test_product_acceptance_baselines import (
 )
 
 
-def _synthesis(scenario_id: str):
+def _synthesis(scenario_id: str, extra_facts: tuple[FactRevision, ...] = ()):
     scenario = _scenario(scenario_id)
     analysis = _formal_result(scenario)
     solution = next(
@@ -44,7 +44,7 @@ def _synthesis(scenario_id: str):
     match_ids = {item.case.case_id for item in analysis.case_centered.matched_cases}
     return build_report_synthesis(
         analysis=analysis,
-        facts=list(_facts(scenario)),
+        facts=[*_facts(scenario), *extra_facts],
         solution=solution,
         reviewed_cases=tuple(
             item for item in reviewed_cases() if item.case_id in match_ids
@@ -109,32 +109,41 @@ def test_interview_findings_are_compact_and_never_expose_raw_questions() -> None
     )
     markdown = render_synthesis_markdown(synthesis)
 
-    finding = synthesis.interview_findings[0]
-    assert finding.topic == "人工最終決策"
-    assert finding.confirmed_content == answer.content
-    assert finding.assessment_impact == "明確保留人工確認與對外回覆責任。"
+    finding = next(
+        item for item in synthesis.interview_findings if item.topic == "主管與 IT 責任"
+    )
+    assert answer.content in finding.confirmed_content
+    assert finding.assessment_impact == "明確保留人工最終決策與例外處理責任。"
     assert "誰保留對外回覆" not in markdown
     assert "初始理解" not in markdown
     assert "追問後澄清" not in markdown
     assert "| 主題 | 已確認內容 | 對方案的影響 |" in markdown
 
-    scope_finding = build_interview_findings(
-        questions=[question.model_copy(update={"fact_key": "process_scope"})],
-        messages=[answer],
-        facts=list(_facts(scenario)),
-    )[0]
-    assert scope_finding.topic == "第一階段範圍"
-    assert scope_finding.assessment_impact == "用來限制第一階段的工作範圍。"
-
-    for fact_key, topic in (
-        ("approval_process_detail", "核准流程與例外"),
-        ("audit_trail_requirements", "稽核紀錄要求"),
-    ):
-        finding = build_interview_findings(
-            questions=[question.model_copy(update={"fact_key": fact_key})],
+    scope_finding = next(
+        item
+        for item in build_interview_findings(
+            questions=[question.model_copy(update={"fact_key": "process_scope"})],
             messages=[answer],
             facts=list(_facts(scenario)),
-        )[0]
+        )
+        if item.topic == "第一階段範圍"
+    )
+    assert scope_finding.topic == "第一階段範圍"
+    assert scope_finding.assessment_impact == "用來限制第一階段範圍、責任與部署方式。"
+
+    for fact_key, topic in (
+        ("approval_process_detail", "主管與 IT 責任"),
+        ("audit_trail_requirements", "規則、例外與稽核"),
+    ):
+        finding = next(
+            item
+            for item in build_interview_findings(
+                questions=[question.model_copy(update={"fact_key": fact_key})],
+                messages=[answer],
+                facts=list(_facts(scenario)),
+            )
+            if item.topic == topic
+        )
         assert finding.topic == topic
         assert finding.topic != "其他已確認事項"
 
@@ -172,16 +181,16 @@ def test_interview_findings_include_all_confirmed_facts_without_new_questions() 
     findings = build_interview_findings(questions=[], messages=[], facts=facts)
     topics = {item.topic for item in findings}
 
-    assert {
+    assert topics == {
+        "現況與預期成果",
         "第一階段範圍",
-        "主管核准責任",
-        "IT 開通責任",
-        "規則與衝突檢查",
-        "稽核紀錄要求",
+        "主管與 IT 責任",
+        "資料與處理環境",
+        "規則、例外與稽核",
         "驗收指標",
-    } <= topics
+    }
     assert any(
-        item.confirmed_content == "主管保留每一筆權限申請的最終核准權。"
+        "主管保留每一筆權限申請的最終核准權。" in item.confirmed_content
         for item in findings
     )
 
@@ -198,6 +207,122 @@ def test_permission_report_uses_taiwan_approval_terms() -> None:
 
     assert "人工審批" not in markdown
     assert "審批" not in markdown
+
+
+def test_permission_interview_impact_uses_manager_and_it_responsibilities() -> None:
+    fact = FactRevision(
+        id=uuid4(),
+        version_id=uuid4(),
+        fact_key="human_final_decision",
+        value="主管保留最終核准，IT 人員負責實際開通。",
+        status=FactStatus.CONFIRMED,
+        reference_message_ids=[uuid4()],
+        created_at=datetime.now(UTC),
+    )
+
+    findings = build_interview_findings(
+        questions=[],
+        messages=[],
+        facts=[fact],
+        recommendation_category="rules_first",
+    )
+
+    assert findings[0].topic == "主管與 IT 責任"
+    assert findings[0].assessment_impact == "明確保留主管最終核准與 IT 實際開通責任。"
+
+
+def test_permission_report_excludes_cross_scenario_copy_and_merges_topics() -> None:
+    extra_facts = tuple(
+        FactRevision(
+            id=uuid4(),
+            version_id=uuid4(),
+            fact_key=fact_key,
+            value=value,
+            status=FactStatus.CONFIRMED,
+            reference_message_ids=[uuid4()],
+            created_at=datetime.now(UTC),
+        )
+        for fact_key, value in (
+            ("first_phase_scope", "第一階段不自動核准，也不直接寫入權限系統。"),
+            ("manager_approval_responsibility", "主管保留每筆申請的最終核准權。"),
+            ("it_provisioning_responsibility", "IT 依核准結果實際開通。"),
+            ("rules_conflict_check", "提交時檢查必填資料與規則衝突。"),
+            ("audit_trail_requirements", "保留申請、規則結果、核准人與時間紀錄。"),
+            ("validation_metric", "驗收檢查格式完整率與規則提示正確率。"),
+        )
+    )
+    synthesis = _synthesis("governed_access", extra_facts=extra_facts)
+    markdown = render_synthesis_markdown(synthesis)
+    main_report = _main_report(markdown)
+    interview_section = main_report.split("## 3. 需求與訪談發現", 1)[1].split(
+        "## 4. 方案、成熟案例與專案差距比較", 1
+    )[0]
+    topics = [
+        line.split("|")[1].strip()
+        for line in interview_section.splitlines()
+        if line.startswith("|") and "主題" not in line and "---" not in line
+    ]
+
+    assert set(topics) <= {
+        "現況與預期成果",
+        "第一階段範圍",
+        "主管與 IT 責任",
+        "資料與處理環境",
+        "規則、例外與稽核",
+        "驗收指標",
+    }
+    assert len(topics) <= 8
+    assert {
+        item.topic: item.assessment_impact for item in synthesis.interview_findings
+    } == {
+        "現況與預期成果": "用來界定電子郵件與試算表流程的改善目標與驗收方向。",
+        "第一階段範圍": "用來限制第一階段僅標準化、規則檢查與人工核准，不自動開通。",
+        "主管與 IT 責任": "明確保留主管最終核准與 IT 實際開通責任。",
+        "資料與處理環境": "用來決定申請資料、權限資料及受控處理環境的整理範圍。",
+        "規則、例外與稽核": "用來定義必填欄位、固定規則、例外處理與稽核紀錄。",
+        "驗收指標": "用來設定格式完整率、規則提示正確率、核准時間與例外紀錄完整性。",
+    }
+    for term in ("對外回覆", "客服", "客戶回覆", "回覆草稿"):
+        assert term not in main_report
+
+
+def test_permission_route_table_separates_benefits_from_case_practices() -> None:
+    synthesis = _synthesis("governed_access")
+    rows = {item.option: item for item in synthesis.option_comparison}
+    route_table = render_synthesis_markdown(synthesis).split("### 路線比較", 1)[1]
+    route_table = route_table.split("### 成熟案例介紹", 1)[0]
+
+    assert rows["電子郵件與試算表人工標準化"].transferable_practice == (
+        "改動小，導入成本最低。"
+    )
+    assert rows["權限申請標準化、規則檢查與人工核准"].transferable_practice == (
+        "直接改善漏填、規則衝突、責任分工與稽核追蹤。"
+    )
+    assert rows["自由文字與附件的 AI 輔助"].transferable_practice == (
+        "未來可協助整理非結構化申請與複雜例外。"
+    )
+    assert rows["自動核准與直接開通"].transferable_practice == (
+        "理論上可減少人工處理時間。"
+    )
+    assert len({item.transferable_practice for item in rows.values()}) == 4
+    assert all("可移植的是" not in item.transferable_practice for item in rows.values())
+    assert len({"；".join(item.cannot_copy) for item in rows.values()}) == 4
+    assert "可移植的是" not in route_table
+
+
+def test_permission_case_support_summaries_have_case_specific_adoption() -> None:
+    summaries = _synthesis("governed_access").case_support_summaries
+    adoptions = {item.case_title: item.project_adoption for item in summaries}
+
+    assert len(adoptions) == 3
+    assert len(set(adoptions.values())) == 3
+    for title, expected in (
+        ("Demandbase", "集中申請入口、角色與權限對照、撤銷追蹤"),
+        ("Cenibra", "分階段導入、規則與風險檢查、跨系統稽核"),
+        ("Varo", "臨時權限、期限管理、存取檢視"),
+    ):
+        adoption = next(value for key, value in adoptions.items() if title in key)
+        assert expected in adoption
 
 
 def test_fallback_writes_a_complete_recommendation_article() -> None:
