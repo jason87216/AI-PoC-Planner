@@ -108,6 +108,47 @@ def _table(rows: list[dict[str, Any]], fields: tuple[tuple[str, str], ...]) -> N
     )
 
 
+def _markdown_table(
+    rows: list[dict[str, Any]], fields: tuple[tuple[str, str], ...]
+) -> None:
+    if not rows:
+        st.caption("目前未記錄。")
+        return
+    headers = [label for _, label in fields]
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for row in rows:
+        values: list[str] = []
+        for key, _ in fields:
+            value = row.get(key, "")
+            if isinstance(value, list):
+                value = "；".join(str(item) for item in value)
+            values.append(str(value).replace("|", "\\|").replace("\n", " "))
+        lines.append("| " + " | ".join(values) + " |")
+    st.markdown("\n".join(lines))
+
+
+def _render_reviewed_cases(cases: list[dict[str, Any]]) -> None:
+    if not cases:
+        st.caption("本次沒有匹配的已審核成熟案例。")
+        return
+    for case in cases:
+        st.subheader(str(case.get("display_title_zh", "未命名案例")))
+        for label, key in (
+            ("背景", "problem_context_zh"),
+            ("實際做法", "implemented_approach_zh"),
+            ("已記錄成果", "documented_outcomes_zh"),
+            ("可借鑑做法", "transferable_practices_zh"),
+            ("不直接複製部分", "limitations_zh"),
+        ):
+            st.markdown(f"- **{label}：** {case.get(key, '')}")
+        source_name = case.get("source_name", "來源")
+        source_url = case.get("source_url", "")
+        st.markdown(f"- **可點擊來源：** [{source_name}]({source_url})")
+
+
 def _render_synthesis(
     report: dict[str, Any], project_name: str, version_number: int
 ) -> None:
@@ -162,11 +203,40 @@ def _render_synthesis(
         (
             ("option", "方案"),
             ("positioning", "方案定位"),
-            ("supporting_cases", "支持此方案的成熟案例"),
-            ("case_evidence", "案例能證明什麼"),
-            ("transferable_practice", "可移植到本專案的做法"),
-            ("cannot_copy", "本專案不可直接複製的部分"),
-            ("conclusion", "綜合判斷"),
+            ("transferable_practice", "優點"),
+            ("cannot_copy", "限制"),
+            ("conclusion", "判斷"),
+        ),
+    )
+    st.subheader("成熟案例介紹")
+    _render_reviewed_cases(view["reviewed_cases"])
+    st.subheader("案例支持關係摘要")
+    _table(
+        view["case_support_summaries"],
+        (
+            ("case_title", "案例"),
+            ("supported_practices", "主要支持做法"),
+            ("project_adoption", "本專案採用方式"),
+        ),
+    )
+    st.subheader("官方實施參考")
+    reference_rows = [
+        {
+            **reference,
+            "display_title_zh": (
+                f"{reference.get('display_title_zh', '')}"
+                f"（[{reference.get('source_name', '來源')}]"
+                f"({reference.get('source_url', '')})）"
+            ),
+        }
+        for reference in view["implementation_references"]
+    ]
+    _markdown_table(
+        reference_rows,
+        (
+            ("topic", "主題"),
+            ("display_title_zh", "參考文件"),
+            ("purpose_zh", "用途"),
         ),
     )
     st.subheader("目前狀態、目標狀態與主要差距")

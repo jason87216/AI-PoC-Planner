@@ -232,6 +232,14 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
                 "source_url",
             ),
         ),
+        "case_support_summaries": rows(
+            "case_support_summaries",
+            ("case_title", "supported_practices", "project_adoption"),
+        ),
+        "implementation_references": rows(
+            "implementation_references",
+            ("topic", "display_title_zh", "purpose_zh", "source_name", "source_url"),
+        ),
         "interview_findings": rows(
             "interview_findings",
             (

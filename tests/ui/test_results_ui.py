@@ -192,6 +192,8 @@ def test_results_ui_does_not_expose_internal_details_or_forbidden_layers() -> No
     assert source.count("st.expander") == 1
     assert "report_synthesis_view" in source
     assert "case_evidence" in source
+    assert "case_support_summaries" in source
+    assert "implementation_references" in source
     assert "source_url" in source
 
 
@@ -226,6 +228,22 @@ def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> Non
                         "source_name": "OpenAI 客戶案例：Morgan Stanley",
                         "source_url": "https://example.test/morgan",
                         "case_id": "hidden-case-id",
+                    }
+                ],
+                "case_support_summaries": [
+                    {
+                        "case_title": "Morgan Stanley：企業知識檢索與人工覆核",
+                        "supported_practices": "人工覆核。",
+                        "project_adoption": "本專案先保留人工確認。",
+                    }
+                ],
+                "implementation_references": [
+                    {
+                        "topic": "流程實施",
+                        "display_title_zh": "官方文件",
+                        "purpose_zh": "說明流程責任。",
+                        "source_name": "官方文件來源",
+                        "source_url": "https://example.test/reference",
                     }
                 ],
                 "interview_findings": [
@@ -307,6 +325,10 @@ def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> Non
     )
     assert view["reviewed_cases"][0]["source_name"] == "OpenAI 客戶案例：Morgan Stanley"
     assert view["reviewed_cases"][0]["source_url"] == "https://example.test/morgan"
+    assert view["case_support_summaries"][0]["case_title"].startswith("Morgan Stanley")
+    assert view["implementation_references"][0]["source_url"] == (
+        "https://example.test/reference"
+    )
     assert "question_uuid" not in repr(view)
     assert "hidden-question-id" not in repr(view)
     assert "hidden-option-id" not in repr(view)

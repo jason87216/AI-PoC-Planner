@@ -179,6 +179,24 @@ class ReviewedCaseContent(ContractModel):
     limitation_note_zh: str = ""
 
 
+class CaseSupportSummary(ContractModel):
+    """Compact case-to-project relation shown beside the full case details."""
+
+    case_title: NonEmptyStr
+    supported_practices: NonEmptyStr
+    project_adoption: NonEmptyStr
+
+
+class ImplementationReferenceContent(ContractModel):
+    """Official implementation documentation, distinct from enterprise cases."""
+
+    topic: NonEmptyStr
+    display_title_zh: NonEmptyStr
+    purpose_zh: NonEmptyStr
+    source_name: NonEmptyStr
+    source_url: NonEmptyStr
+
+
 class ReportSynthesis(ContractModel):
     """Canonical article view model shared by the API response and Markdown export."""
 
@@ -187,6 +205,10 @@ class ReportSynthesis(ContractModel):
     recommendation_narrative: NonEmptyStr
     recommended_solution: ReviewedSolutionContent | None = None
     reviewed_cases: list[ReviewedCaseContent] = Field(default_factory=list)
+    case_support_summaries: list[CaseSupportSummary] = Field(default_factory=list)
+    implementation_references: list[ImplementationReferenceContent] = Field(
+        default_factory=list
+    )
     interview_findings: list[InterviewFinding] = Field(default_factory=list)
     current_target_comparison: list[CurrentTargetComparison] = Field(min_length=1)
     option_comparison: list[OptionComparison] = Field(min_length=1)

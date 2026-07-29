@@ -19,6 +19,7 @@ from ai_poc_planner.domain.enums import InterviewRole, VisibleMessageKind
 from ai_poc_planner.domain.project_history import VisibleConversationMessage
 from ai_poc_planner.domain.solution_catalog import SolutionPattern
 from ai_poc_planner.persistence.catalog_seed import (
+    implementation_references,
     reviewed_cases,
     reviewed_solution_patterns,
 )
@@ -46,6 +47,7 @@ def _synthesis(scenario_id: str):
             item for item in reviewed_cases() if item.case_id in match_ids
         ),
         candidate_solutions=reviewed_solution_patterns(),
+        implementation_references=implementation_references(),
     )
 
 
@@ -294,20 +296,92 @@ def test_comparison_combines_options_cases_and_project_gap_in_one_section() -> N
         or "本次未找到可直接參照的已審核案例" in item.case_evidence
         for item in synthesis.option_comparison
     )
-    assert (
-        "| 方案 | 方案定位 | 支持此方案的成熟案例 | 案例能證明什麼 | "
-        "可移植到本專案的做法 | 本專案不可直接複製的部分 | 綜合判斷 |"
-    ) in markdown
+    assert ("| 方案 | 主要做法 | 優點 | 限制 | 判斷 |") in markdown
     assert (
         "| 面向 | 目前狀態 | 採用推薦方案後的目標狀態 | 主要差距 | 方案如何處理 |"
     ) in markdown
     assert (
         markdown.index(synthesis.comparison_narrative)
-        < markdown.index("| 方案 | 方案定位 |")
+        < markdown.index("| 方案 | 主要做法 | 優點 | 限制 | 判斷 |")
         < markdown.index("| 面向 | 目前狀態 |")
     )
     assert "成熟案例橫向比較" not in markdown
     assert "目前狀態與目標狀態" not in markdown
+
+
+def test_comparison_chapter_separates_routes_cases_references_and_gaps() -> None:
+    synthesis = _synthesis("governed_access")
+    markdown = render_synthesis_markdown(synthesis)
+    recommendation = synthesis.recommendation_narrative
+    chapter = markdown.split("## 4. 方案、成熟案例與專案差距比較", 1)[1]
+    chapter = chapter.split("## 5. 實施路線、風險與驗收", 1)[0]
+
+    assert 5 <= recommendation.count("\n\n") + 1 <= 6
+    assert all(
+        case.problem_context_zh not in recommendation
+        for case in synthesis.reviewed_cases
+    )
+    assert all(
+        case.implemented_approach_zh not in recommendation
+        for case in synthesis.reviewed_cases
+    )
+    assert all(
+        case.documented_outcomes_zh not in recommendation
+        for case in synthesis.reviewed_cases
+    )
+    assert all(
+        f"[{case.source_name}]" not in recommendation
+        for case in synthesis.reviewed_cases
+    )
+
+    route_header = "| 方案 | 主要做法 | 優點 | 限制 | 判斷 |"
+    case_summary_header = "| 案例 | 主要支持做法 | 本專案採用方式 |"
+    reference_header = "| 主題 | 參考文件 | 用途 |"
+    assert route_header in chapter
+    assert "案例能證明什麼" not in chapter
+    assert "persisted matched cases" not in chapter
+    assert case_summary_header in chapter
+    assert "### 官方實施參考" in chapter
+    assert (
+        "| 面向 | 目前狀態 | 採用推薦方案後的目標狀態 | 主要差距 | 方案如何處理 |"
+        in chapter
+    )
+    assert chapter.index("### 路線比較") < chapter.index(route_header)
+    assert chapter.index(route_header) < chapter.index("### 成熟案例介紹")
+    assert chapter.index("### 成熟案例介紹") < chapter.index("### 案例支持關係摘要")
+    assert chapter.index("### 官方實施參考") < chapter.index(reference_header)
+    assert chapter.index(reference_header) < chapter.index("| 面向 |")
+
+    matched_titles = {case.display_title_zh for case in synthesis.reviewed_cases}
+    non_case_headers = {
+        "### 路線比較",
+        "### 成熟案例介紹",
+        "### 案例支持關係摘要",
+        "### 官方實施參考",
+        "### 目前狀態、目標狀態與主要差距",
+    }
+    detail_titles = {
+        line.removeprefix("### ").strip()
+        for line in chapter.splitlines()
+        if line.startswith("### ") and line not in non_case_headers
+    }
+    assert detail_titles == matched_titles
+    assert "cellcentric" not in chapter
+    assert len(synthesis.case_support_summaries) == len(synthesis.reviewed_cases)
+    assert len(synthesis.implementation_references) == 6
+    assert reference_header in chapter
+    assert "[Microsoft Learn：存取套件申請流程]" in chapter
+
+    visible_gate_rows = [
+        (
+            row.limit_content,
+            row.affected_stage,
+            row.currently_possible,
+            row.release_condition,
+        )
+        for row in synthesis.appendix.hard_gates
+    ]
+    assert len(visible_gate_rows) == len(set(visible_gate_rows))
 
 
 def test_governed_access_report_excludes_unrelated_retrieval_content() -> None:
@@ -316,12 +390,12 @@ def test_governed_access_report_excludes_unrelated_retrieval_content() -> None:
 
     for required in (
         "權限申請標準化、規則檢查與人工審批",
-        "主管保留最終審批",
+        "主管保留最終核准",
         "IT 依已核准結果開通",
         "不處理自動開通",
         "申請格式完整率",
         "規則提示正確率",
-        "主管審批處理時間",
+        "主管核准處理時間",
         "例外紀錄完整性",
         "Demandbase",
         "Cenibra",

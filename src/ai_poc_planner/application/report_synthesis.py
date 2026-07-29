@@ -16,8 +16,10 @@ from ai_poc_planner.domain.catalog_relationships import (
 from ai_poc_planner.domain.discovery import InterviewQuestion
 from ai_poc_planner.domain.enums import FactStatus
 from ai_poc_planner.domain.planning_report import (
+    CaseSupportSummary,
     CurrentTargetComparison,
     GateAppendixRow,
+    ImplementationReferenceContent,
     InterviewFinding,
     OptionComparison,
     ReportAppendix,
@@ -112,6 +114,19 @@ _INTERVIEW_IMPACT_ALIASES = {
     "audit_trail": "用來保留申請、核准人與處理時間的稽核紀錄。",
     "access_review": "用來安排後續存取檢視與撤銷追蹤。",
 }
+_PRACTICE_LABELS = {
+    "structured_request_intake": "集中申請入口與標準欄位",
+    "required_field_validation": "必填欄位檢查",
+    "policy_rule_validation": "固定規則與衝突檢查",
+    "manager_approval": "主管核准",
+    "resource_owner_approval": "資源負責人核准",
+    "provisioning_separation": "核准與 IT 開通分離",
+    "exception_handling": "例外處理",
+    "audit_trail": "稽核紀錄",
+    "access_review": "存取檢視",
+    "temporary_access": "臨時存取",
+    "access_expiration": "期限管理",
+}
 _SIMPLIFIED_REPLACEMENTS = {
     "申请": "申請",
     "规则": "規則",
@@ -186,6 +201,7 @@ def _natural_text(value: object, *, fallback: str) -> str:
         "High": "高",
         "Low": "低",
         "Medium": "中",
+        "審批": "核准",
     }.items():
         text = text.replace(source, target)
     for source, target in _SIMPLIFIED_REPLACEMENTS.items():
@@ -229,6 +245,14 @@ def _joined_verbatim(values: Sequence[str], *, empty: str = "目前尚待確認�
     return " ".join(_unique(values, empty=empty))
 
 
+def _practice_labels(keys: Sequence[str], *, fallback: str) -> str:
+    labels = _unique(
+        [_PRACTICE_LABELS.get(key, "") for key in keys],
+        empty=fallback,
+    )
+    return "、".join(labels)
+
+
 def _formal_category(analysis: ValidatedAnalysisResult) -> str:
     if analysis.case_centered is not None:
         return analysis.case_centered.recommendation_category.value
@@ -244,14 +268,30 @@ def _reviewed_solution_content(solution: SolutionPattern) -> ReviewedSolutionCon
         raise ReportSynthesisError("solution_not_approved")
     return ReviewedSolutionContent(
         display_name_zh=solution.display_name_zh,
-        short_description_zh=solution.short_description_zh,
-        detailed_description_zh=solution.detailed_description_zh,
-        suitable_when_zh=solution.suitable_when_zh,
-        not_suitable_when_zh=solution.not_suitable_when_zh,
-        typical_scope_zh=solution.typical_scope_zh,
-        human_boundary_zh=solution.human_boundary_zh,
-        expected_outputs_zh=solution.expected_outputs_zh,
-        acceptance_focus_zh=solution.acceptance_focus_zh,
+        short_description_zh=_natural_text(
+            solution.short_description_zh, fallback="推薦方向待補充。"
+        ),
+        detailed_description_zh=_natural_text(
+            solution.detailed_description_zh, fallback="推薦方向待補充。"
+        ),
+        suitable_when_zh=_natural_text(
+            solution.suitable_when_zh, fallback="適用條件待補充。"
+        ),
+        not_suitable_when_zh=_natural_text(
+            solution.not_suitable_when_zh, fallback="限制條件待補充。"
+        ),
+        typical_scope_zh=_natural_text(
+            solution.typical_scope_zh, fallback="第一階段範圍待補充。"
+        ),
+        human_boundary_zh=_natural_text(
+            solution.human_boundary_zh, fallback="人工責任邊界待補充。"
+        ),
+        expected_outputs_zh=_natural_text(
+            solution.expected_outputs_zh, fallback="預期交付成果待補充。"
+        ),
+        acceptance_focus_zh=_natural_text(
+            solution.acceptance_focus_zh, fallback="驗收方式待補充。"
+        ),
     )
 
 
@@ -290,6 +330,52 @@ def _reviewed_case_content(
         applicability_note_zh=link.applicability_note_zh if link is not None else "",
         limitation_note_zh=link.limitation_note_zh if link is not None else "",
     )
+
+
+def _case_support_summaries(
+    cases: Sequence[ReviewedCaseContent], solution_key: str
+) -> list[CaseSupportSummary]:
+    summaries: list[CaseSupportSummary] = []
+    for case in cases:
+        supported = case.applicability_note_zh or case.transferable_practices_zh
+        if solution_key == "permission_request_rules_and_human_approval":
+            adoption = (
+                "本專案先採用標準欄位、固定規則檢查、主管核准、"
+                "IT 依核准結果開通與完整稽核紀錄。"
+            )
+        else:
+            adoption = (
+                f"本專案只採用{_phrase(case.transferable_practices_zh)}，"
+                "再依自身資料與人工責任重新驗證。"
+            )
+        summaries.append(
+            CaseSupportSummary(
+                case_title=case.display_title_zh,
+                supported_practices=_natural_text(
+                    supported, fallback="可移植做法待確認。"
+                ),
+                project_adoption=adoption,
+            )
+        )
+    return summaries
+
+
+def _implementation_reference_contents(
+    references: Sequence[ReviewedImplementationReference],
+) -> list[ImplementationReferenceContent]:
+    return [
+        ImplementationReferenceContent(
+            topic=_practice_labels(
+                reference.supported_practice_keys,
+                fallback="流程實施",
+            ),
+            display_title_zh=reference.display_title_zh,
+            purpose_zh=reference.summary_zh,
+            source_name=reference.source_name,
+            source_url=str(reference.source_url),
+        )
+        for reference in references
+    ]
 
 
 def build_interview_findings(
@@ -442,7 +528,9 @@ def _option_comparison(
                 rows.append(
                     OptionComparison(
                         option=route.display_name_zh,
-                        positioning=route.short_description_zh,
+                        positioning=_natural_text(
+                            route.short_description_zh, fallback="主要做法待補充。"
+                        ),
                         supporting_cases=case_names,
                         case_evidence=table_case_evidence,
                         transferable_practice=table_transferable,
@@ -461,7 +549,9 @@ def _option_comparison(
             rows.append(
                 OptionComparison(
                     option=route.display_name_zh,
-                    positioning=route.short_description_zh,
+                    positioning=_natural_text(
+                        route.short_description_zh, fallback="主要做法待補充。"
+                    ),
                     case_evidence="此方向沒有本次推薦案例直接支持，只用來說明取捨。",
                     transferable_practice=route.typical_scope_zh,
                     cannot_copy=[route.human_boundary_zh],
@@ -472,7 +562,9 @@ def _option_comparison(
     rows = [
         OptionComparison(
             option=solution.display_name_zh,
-            positioning=solution.short_description_zh,
+            positioning=_natural_text(
+                solution.short_description_zh, fallback="主要做法待補充。"
+            ),
             supporting_cases=case_names,
             case_evidence=case_evidence,
             transferable_practice=transferable,
@@ -517,7 +609,9 @@ def _option_comparison(
         rows.append(
             OptionComparison(
                 option=alternative.display_name_zh,
-                positioning=alternative.short_description_zh,
+                positioning=_natural_text(
+                    alternative.short_description_zh, fallback="主要做法待補充。"
+                ),
                 case_evidence="本次未找到可直接參照的已審核案例；此方向僅作為比較參考。",
                 transferable_practice=alternative.typical_scope_zh,
                 cannot_copy=["目前沒有可直接套用的外部做法，仍需依本專案條件驗證。"],
@@ -536,10 +630,11 @@ def _comparison_narrative(
     names = "、".join(item.option for item in options)
     recommended = next(item for item in options if item.recommended)
     if title == "權限申請標準化、規則檢查與人工審批":
+        case_names = "、".join(recommended.supporting_cases) or "本次沒有匹配案例"
         return "\n\n".join(
             [
-                "本次主要比較電子郵件與試算表人工標準化、標準化申請搭配固定規則與人工審批，以及未來處理自由文字與附件的 AI 輔助；另列出自動核准與直接開通作為明確拒絕的方向。這些方向的差異在於申請入口、規則檢查、人工責任與是否直接執行開通。",
-                "Demandbase、Cenibra、Varo 與 cellcentric 的官方案例支持集中申請、角色或權限對照、人工核准、存取檢視、期限與稽核紀錄等特定做法，但它們的產品環境、組織規模、特權程度與既有整合不相同，因此只能作為成熟做法的證據，不能直接複製自動化程度或案例成效。Microsoft Entra、Okta、SailPoint 與 ServiceNow 的官方實施文件則用來補充流程設計參考，不會被當成企業成功案例。",
+                "本次主要比較電子郵件與試算表人工標準化、標準化申請搭配固定規則與人工核准，以及未來處理自由文字與附件的 AI 輔助；另列出自動核准與直接開通作為明確拒絕的方向。這些方向的差異在於申請入口、規則檢查、人工責任與是否直接執行開通。",
+                f"本次實際匹配的成熟案例為{case_names}。這些案例分別支持集中申請、核准、期限或稽核等做法；案例的產品環境、組織規模與既有整合不同，因此只能作為成熟做法的參考，不能直接複製自動化程度或案例成效。",
                 "本專案最大的差距是目前仍以電子郵件與試算表收件，申請欄位、衝突規則、例外處理、主管核准與 IT 開通紀錄尚未形成單一流程；這與案例已具備的身分治理平台和整合能力不同。綜合比較後仍選擇「權限申請標準化、規則檢查與人工審批」，因為它先處理已確認的流程問題，又保留主管與 IT 的責任邊界，並能在第一階段以可驗收資料驗證。",
             ]
         )
@@ -908,8 +1003,9 @@ def _appendix(analysis: ValidatedAnalysisResult) -> ReportAppendix:
         if analysis.case_centered is not None
         else analysis.gate_results
     )
-    gates = [
-        GateAppendixRow(
+    gates_by_limit: dict[str, GateAppendixRow] = {}
+    for gate in gate_source:
+        row = GateAppendixRow(
             gate_id="內部檢核項目",
             limit_content=_natural_text(
                 "；".join(getattr(gate, "limits", []) or [getattr(gate, "reason", "")]),
@@ -927,8 +1023,24 @@ def _appendix(analysis: ValidatedAnalysisResult) -> ReportAppendix:
                 fallback="待相關條件確認後再重新評估。",
             ),
         )
-        for gate in gate_source
-    ]
+        existing = gates_by_limit.get(row.limit_content)
+        if existing is None:
+            gates_by_limit[row.limit_content] = row
+            continue
+        gates_by_limit[row.limit_content] = existing.model_copy(
+            update={
+                "affected_stage": _joined(
+                    [existing.affected_stage, row.affected_stage]
+                ),
+                "currently_possible": _joined(
+                    [existing.currently_possible, row.currently_possible]
+                ),
+                "release_condition": _joined(
+                    [existing.release_condition, row.release_condition]
+                ),
+            }
+        )
+    gates = list(gates_by_limit.values())
     return ReportAppendix(scores=scores, hard_gates=gates)
 
 
@@ -941,49 +1053,41 @@ def _recommendation_narrative(
 ) -> str:
     fact_by_key = _fact_map(facts)
     recommended = next(item for item in options if item.recommended)
-    case_support = (
-        "；".join(recommended.supporting_cases)
-        if recommended.supporting_cases
-        else "目前沒有足夠相關的已審核成熟案例"
-    )
-    case_basis = (
-        _phrase(_case_support(reviewed_cases)[1])
-        if reviewed_cases
-        else "目前沒有足夠相關的已審核成熟案例，因此本方案主要依據專案需求、流程規則與目前條件形成，案例只待後續補充"
-    )
-    implementation_basis = (
-        "；".join(recommended.supporting_references)
-        if recommended.supporting_references
-        else "目前沒有另外列出的實施參考文件。"
-    )
     if solution.solution_key == "permission_request_rules_and_human_approval":
-        case_names = _joined(
-            recommended.supporting_cases,
-            empty="已核准案例未列入本次結果。",
-        )
-        case_fallback = (
-            ""
+        case_names = "、".join(case.organization for case in reviewed_cases)
+        case_conclusion = (
+            f"本次匹配的成熟案例為{case_names}；它們共同支持集中申請、主管核准、"
+            "期限或稽核追蹤等流程做法。案例的產品環境、組織規模與自動化程度不同，"
+            "本專案只採用可移植的流程原則，不直接複製產品整合或案例成效。"
             if reviewed_cases
-            else "目前沒有足夠相關的已審核成熟案例；此版本只作為相容測試，不代表正式權限場景可以通過。"
+            else "本次沒有匹配的已審核成熟案例（目前沒有足夠相關的已審核成熟案例），"
+            "因此推薦主要依據專案流程、固定規則與人工責任形成，不把其他領域案例當成直接證據。"
         )
         return "\n\n".join(
             [
                 f"本專案目前以電子郵件與試算表處理員工權限申請，申請欄位不一致，容易漏填，主管與 IT 也缺少同一份可追溯的處理紀錄。推薦方向是「{solution.display_name_zh}」，先把員工、申請系統、權限範圍、申請理由、期限與附件等內容整理成標準欄位，再讓系統在提交時檢查必填資料與固定規則衝突。",
-                "這個方向的核心不是先導入生成式 AI，而是建立一條可驗證的規則流程：申請人提交後，系統提示缺項與規則衝突，主管保留最終審批權，可核准或退回申請，IT 依已核准結果開通。申請內容、規則結果、審批人、審批時間、IT 處理結果與例外說明都要保留，讓每一筆申請可以回溯。",
-                f"成熟案例支持的具體做法包括集中申請入口、角色與權限對照、主管核准、存取檢視、期限管理與稽核紀錄。Demandbase、Cenibra、Varo 與 cellcentric 分別提供這些做法的官方參考；它們支持的是「如何把申請與治理做得可追蹤」，不是本專案可以直接複製的產品配置或自動化成效。{case_names}。{case_fallback}",
-                f"逐案來看，成熟案例的完整支持內容是：{case_basis}。這些案例證明集中申請、角色或權限對照、主管核准、生命週期管理、期限控制與稽核追蹤具有實務參考價值；案例中的組織規模、產品整合與量化成果則只屬於案例本身。相關實施參考包括：{implementation_basis}。",
-                "本專案不能直接複製案例的規模、產品整合或自動開通程度，因為目前最大的前置條件是統一申請欄位、職位與權限範本、規則衝突定義、例外處理責任與核准後的 IT 作業紀錄。第一階段只在受控環境驗證這些基礎流程，不自動核准、不直接寫入權限系統，也不處理自動開通；主要效益是降低漏項、提高規則檢查一致性、縮短主管處理時間並改善稽核可追溯性。",
-                "正式落地前的前置條件是：先確認申請欄位、職位與權限範本、固定規則與衝突定義，再指定主管核准和 IT 開通的交接責任。系統只負責收集、檢查、提示與留痕；主管可以核准、退回或要求補件，IT 只能依核准結果實際開通，不能把案例中的自動化配置當成這個 PoC 已具備的能力。",
-                "PoC 驗收檢查申請格式完整率、規則提示正確率、主管審批處理時間、例外紀錄完整性與稽核紀錄完整性。只有當標準欄位與固定規則穩定後，才評估把自由文字、附件或複雜例外交給 AI 輔助整理；生成式 AI 不是目前方案的核心，也不能取得核准或開通權限。",
+                f"正式推薦是「{solution.display_name_zh}」，因為它先處理申請入口、欄位與規則的一致性，再把主管核准和 IT 開通分成可追蹤的責任步驟。{case_conclusion}",
+                "生成式 AI 不是第一階段核心：目前最需要驗證的是必填資料、固定規則與例外處理，而不是生成文字。第一階段可以先把 AI 限制在整理或提示，不能取得核准權，也不能直接執行開通。",
+                "主管保留最終核准、退回與要求補件的權限；IT 依已核准結果開通。系統負責收集標準欄位、檢查規則、提示缺項並保存申請、規則結果、核准人、時間、開通結果與例外紀錄。",
+                "PoC 前置條件是確認申請欄位、職位與權限範本、固定規則、衝突定義與交接責任。第一階段不處理自動開通；驗收檢查申請格式完整率、規則提示正確率、主管核准處理時間、例外紀錄完整性與稽核可追溯性，預期效益是減少漏項、提升檢查一致性並縮短人工往返。",
+                "未來只有在標準欄位、規則與人工流程穩定後，才評估以 AI 整理自由文字或附件；若要串接權限系統，也必須先完成權限範本、最小權限、稽核與回復流程設計。任何 AI 或系統串接都不能取代主管核准與 IT 的實際責任。",
             ]
         )
+    case_names = "、".join(case.organization for case in reviewed_cases)
+    case_conclusion = (
+        f"本次匹配的成熟案例為{case_names}；它們只支持可移植的流程做法，"
+        "不代表本專案可以複製相同的產品環境、規模或案例成效。"
+        if reviewed_cases
+        else "本次沒有匹配的已審核成熟案例，因此不把其他領域案例當成直接證據。"
+    )
     return "\n\n".join(
         [
             f"專案問題在於{_phrase(_fact(fact_by_key, 'current_workflow_problem'))}；期待達成的成果是{_phrase(_fact(fact_by_key, 'desired_outcome'))}。目前可用資料為{_phrase(_fact(fact_by_key, 'available_data'))}，因此第一階段不應從抽象的技術選型開始，而應先把可驗證的資料、流程與責任範圍固定下來。",
-            f"正式推薦方向是「{solution.display_name_zh}」。{solution.detailed_description_zh}若{solution.not_suitable_when_zh}，就不應把它當成可直接擴大的答案。",
-            f"第一階段範圍為{solution.typical_scope_zh}。預期交付成果是{solution.expected_outputs_zh}，因此推薦理由不只在於處理眼前痛點，也在於把後續判斷建立在可回溯的流程與資料上。",
-            f"人工責任必須維持清楚：{solution.human_boundary_zh}成熟案例支持的是其中可移植的做法，而不是另一套排名。{case_support}正式案例依據為{case_basis}。本專案可借鑑{_phrase(recommended.transferable_practice)}；但{_joined(recommended.cannot_copy)}。",
-            f"PoC 驗收不以通用宣稱代替實測，而是聚焦於{solution.acceptance_focus_zh}若資料、責任或驗證條件仍待確認，結果只用來決定下一階段是否補足準備，不把未知內容寫成既有能力。",
+            f"正式推薦方向是「{solution.display_name_zh}」。{solution.detailed_description_zh}本次理由聚焦於{_phrase(recommended.transferable_practice)}，而不是把案例詳情當成方案本身。",
+            f"生成式 AI 不是第一階段核心；先完成資料、流程與責任的可驗證定義，再評估 AI 是否能降低整理成本。{case_conclusion}",
+            f"人工責任必須維持清楚：{solution.human_boundary_zh}系統只在受控範圍內提供輔助，不把未確認條件寫成既有能力。",
+            f"第一階段範圍為{solution.typical_scope_zh}，PoC 驗收聚焦於{solution.acceptance_focus_zh}預期交付成果是{solution.expected_outputs_zh}，並以人工覆核與可追溯紀錄確認結果。",
+            f"未來若資料、流程與驗收條件穩定，再評估生成式 AI 或系統串接；若{solution.not_suitable_when_zh}，就不應擴大自動化。",
         ]
     )
 
@@ -1068,7 +1172,7 @@ def build_report_synthesis(
     )
     return ReportSynthesis(
         executive_narrative=(
-            f"本次評估建議採用「{solution.display_name_zh}」。{solution.short_description_zh}"
+            f"本次評估建議採用「{solution.display_name_zh}」。{_natural_text(solution.short_description_zh, fallback='推薦方向待補充。')}"
             "第一階段將以受控範圍驗證，不把未確認事項視為既有條件。"
         ),
         recommendation_narrative=_recommendation_narrative(
@@ -1079,6 +1183,12 @@ def build_report_synthesis(
         ),
         recommended_solution=_reviewed_solution_content(solution),
         reviewed_cases=case_content,
+        case_support_summaries=_case_support_summaries(
+            case_content, solution.solution_key
+        ),
+        implementation_references=_implementation_reference_contents(
+            implementation_references
+        ),
         interview_findings=build_interview_findings(
             questions=interview_questions, messages=messages, facts=facts
         ),
@@ -1130,7 +1240,10 @@ def validate_report_quality(synthesis: ReportSynthesis, markdown: str) -> None:
     ):
         if len(synthesis.option_comparison) != 4 and synthesis.reviewed_cases:
             errors.append("permission_route_count")
-        if "生成式 AI 不是目前方案的核心" not in synthesis.recommendation_narrative:
+        if not any(
+            phrase in synthesis.recommendation_narrative
+            for phrase in ("生成式 AI 不是第一階段核心", "生成式 AI 不是目前方案的核心")
+        ):
             errors.append("rules_first_ai_first_narrative")
     if errors:
         raise ReportSynthesisError("REPORT_QUALITY_ERROR: " + ", ".join(errors))
@@ -1181,8 +1294,10 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
     )
     lines.extend(
         [
-            "| 方案 | 方案定位 | 支持此方案的成熟案例 | 案例能證明什麼 | 可移植到本專案的做法 | 本專案不可直接複製的部分 | 綜合判斷 |",
-            "|---|---|---|---|---|---|---|",
+            "### 路線比較",
+            "",
+            "| 方案 | 主要做法 | 優點 | 限制 | 判斷 |",
+            "|---|---|---|---|---|",
         ]
     )
     lines.extend(
@@ -1192,8 +1307,6 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
             for value in (
                 ("正式推薦：" if item.recommended else "") + item.option,
                 item.positioning,
-                _joined(item.supporting_cases, empty="未有已審核案例可提供直接佐證。"),
-                item.case_evidence,
                 item.transferable_practice,
                 _joined_verbatim(item.cannot_copy),
                 item.conclusion,
@@ -1202,6 +1315,58 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
         + " |"
         for item in synthesis.option_comparison
     )
+    lines.extend(["", "### 成熟案例介紹", ""])
+    for case in synthesis.reviewed_cases:
+        lines.extend(
+            [
+                f"### {case.display_title_zh}",
+                "",
+                f"- 背景：{case.problem_context_zh}",
+                f"- 實際做法：{case.implemented_approach_zh}",
+                f"- 已記錄成果：{case.documented_outcomes_zh}",
+                f"- 可借鑑做法：{case.transferable_practices_zh}",
+                f"- 不直接複製部分：{case.limitations_zh}",
+                f"- 可點擊來源：[{case.source_name}]({case.source_url})",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "### 案例支持關係摘要",
+            "",
+            "| 案例 | 主要支持做法 | 本專案採用方式 |",
+            "|---|---|---|",
+        ]
+    )
+    lines.extend(
+        "| "
+        + " | ".join(
+            _cell(getattr(item, field))
+            for field in ("case_title", "supported_practices", "project_adoption")
+        )
+        + " |"
+        for item in synthesis.case_support_summaries
+    )
+    lines.extend(["", "### 官方實施參考", ""])
+    if synthesis.implementation_references:
+        lines.extend(["| 主題 | 參考文件 | 用途 |", "|---|---|---|"])
+        lines.extend(
+            "| "
+            + " | ".join(
+                (
+                    _cell(reference.topic),
+                    _cell(
+                        f"{reference.display_title_zh}"
+                        f"（[{reference.source_name}]({reference.source_url})）"
+                    ),
+                    _cell(reference.purpose_zh),
+                )
+            )
+            + " |"
+            for reference in synthesis.implementation_references
+        )
+    else:
+        lines.append("目前沒有另外列出的官方實施參考。")
     lines.extend(
         [
             "",
