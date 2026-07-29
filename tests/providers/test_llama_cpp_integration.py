@@ -41,6 +41,7 @@ def test_user_started_llama_cpp_accepts_connection_test(tmp_path: Path) -> None:
                 else None
             ),
             client=httpx.Client(),
+            capabilities=selected.effective_capabilities,
         ),
     )
 

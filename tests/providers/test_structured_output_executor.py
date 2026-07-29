@@ -1,16 +1,19 @@
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import pytest
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ai_poc_planner.providers.base import StructuredOutputMode
 from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.errors import (
     ProviderOperation,
     ProviderOperationError,
+    SafeProviderFailure,
 )
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderError
 from ai_poc_planner.providers.structured_output import (
@@ -219,3 +222,22 @@ def test_executor_does_not_run_domain_semantic_validation() -> None:
     result = _execute(adapter)
 
     assert result.value.status == "ok"
+
+
+def test_safe_provider_failure_is_immutable_and_secret_free() -> None:
+    failure = SafeProviderFailure.from_code(
+        "provider_unavailable", ProviderOperation.READINESS
+    )
+    marker = "raw-provider-marker-p72a"
+
+    assert marker not in str(failure)
+    assert marker not in repr(failure)
+    with pytest.raises(ValidationError):
+        failure.retryable = False
+    with pytest.raises(ValidationError):
+        SafeProviderFailure(
+            code="provider_unavailable",
+            operation=ProviderOperation.READINESS,
+            retryable=True,
+            user_action=f"{marker}",
+        )

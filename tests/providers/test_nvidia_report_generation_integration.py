@@ -66,6 +66,7 @@ class RecordingNvidiaAdapter:
             client=self._recorder._client,
             timeout_seconds=240 if name.startswith("report_") else 10,
             reasoning_effort=self._profile.reasoning_effort,
+            capabilities=self._profile.effective_capabilities,
         ).complete(**kwargs)
 
 

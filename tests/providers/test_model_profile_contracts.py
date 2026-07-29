@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 import json
 from datetime import UTC, datetime
 from uuid import UUID
@@ -13,6 +15,7 @@ from ai_poc_planner.providers import (
     ProviderConnectionState,
     ProviderConnectionStatus,
     ReasoningParameter,
+    SafeProviderFailure,
     StructuredOutputMode,
     TokenParameter,
 )
@@ -62,6 +65,11 @@ def _status(**overrides: object) -> ProviderConnectionStatus:
         "model_name": "qwen-local",
     }
     values.update(overrides)
+    if values.get("connection_state") is ProviderConnectionState.FAILED:
+        values.setdefault(
+            "failure",
+            SafeProviderFailure.from_code("provider_unavailable", "readiness"),
+        )
     return ProviderConnectionStatus.model_validate(values)
 
 
@@ -148,6 +156,18 @@ def test_none_authentication_rejects_a_key() -> None:
         _profile(
             capabilities=_capabilities(authentication=AuthenticationMode.NONE),
         )
+
+
+def test_profile_validation_rendering_never_contains_secret_marker() -> None:
+    marker = "profile-secret-marker-p72a"
+    with pytest.raises(ValidationError) as error:
+        _profile(
+            api_key=marker,
+            capabilities=_capabilities(authentication=AuthenticationMode.NONE),
+        )
+
+    assert marker not in str(error.value)
+    assert marker not in repr(error.value)
 
 
 def test_unsupported_reasoning_rejects_configured_effort() -> None:
