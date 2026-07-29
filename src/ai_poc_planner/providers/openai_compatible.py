@@ -7,9 +7,22 @@ from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import httpx
-from pydantic import AnyHttpUrl, Field, SecretStr, TypeAdapter, ValidationError
+from pydantic import (
+    AnyHttpUrl,
+    Field,
+    SecretStr,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 from ai_poc_planner.domain.models import ContractModel, JSONValue, NonEmptyStr
+from ai_poc_planner.providers.capabilities import (
+    AuthenticationMode,
+    OpenAICompatibleCapabilities,
+    ReasoningParameter,
+    TokenParameter,
+)
 from ai_poc_planner.providers.base import ProviderError, ReasoningEffort
 
 _HTTP_URL = TypeAdapter(AnyHttpUrl)
@@ -28,9 +41,18 @@ class OpenAIChatCompletionRequest(ContractModel):
     model: NonEmptyStr
     messages: list[OpenAIChatMessage] = Field(min_length=1)
     temperature: float = Field(ge=0, le=2)
-    max_tokens: int = Field(ge=1, le=4096)
+    max_tokens: int | None = Field(default=None, ge=1, le=4096)
+    max_completion_tokens: int | None = Field(default=None, ge=1, le=4096)
     response_format: dict[str, JSONValue] | None = None
     reasoning_effort: ReasoningEffort | None = None
+
+    @model_validator(mode="after")
+    def requires_one_token_parameter(self) -> OpenAIChatCompletionRequest:
+        if (self.max_tokens is None) == (self.max_completion_tokens is None):
+            raise ValueError(
+                "exactly one of max_tokens or max_completion_tokens is required"
+            )
+        return self
 
 
 class JSONSchemaResponseFormat(ContractModel):
@@ -75,6 +97,12 @@ class OpenAICompatibleProviderError(ProviderError):
         "provider_rate_limited": "The provider is temporarily rate limited.",
         "provider_unavailable": "The provider is temporarily unavailable.",
         "provider_http_error": "The provider request failed.",
+        "provider_parameter_unsupported": (
+            "The provider does not support a requested request parameter."
+        ),
+        "provider_structured_output_unsupported": (
+            "The provider does not support the requested structured-output mode."
+        ),
         "provider_invalid_response": "The provider returned an invalid response.",
         "provider_output_truncated": "The provider response was truncated.",
     }
@@ -96,7 +124,12 @@ class OpenAICompatibleChatAdapter:
         client: httpx.Client,
         timeout_seconds: float = 10,
         reasoning_effort: ReasoningEffort | None = None,
+        capabilities: OpenAICompatibleCapabilities | None = None,
     ) -> None:
+        self._capabilities = capabilities or OpenAICompatibleCapabilities(
+            json_schema=True,
+            json_object=True,
+        )
         try:
             self._base_url = str(_HTTP_URL.validate_python(base_url)).rstrip("/")
             self._model_name = OpenAIChatCompletionRequest.model_validate(
@@ -116,6 +149,21 @@ class OpenAICompatibleChatAdapter:
         self._api_key = SecretStr(api_key) if api_key and api_key.strip() else None
         self._client = client
         self._timeout_seconds = timeout_seconds
+        if (
+            self._capabilities.authentication is AuthenticationMode.BEARER_REQUIRED
+            and self._api_key is None
+        ):
+            raise ValueError("model_profile_auth_required")
+        if (
+            self._capabilities.authentication is AuthenticationMode.NONE
+            and self._api_key is not None
+        ):
+            raise ValueError("model_profile_auth_forbidden")
+        if (
+            self._capabilities.reasoning_parameter is ReasoningParameter.UNSUPPORTED
+            and reasoning_effort is not None
+        ):
+            raise ValueError("model_profile_reasoning_unsupported")
         self._reasoning_effort = reasoning_effort
 
     def __repr__(self) -> str:
@@ -138,16 +186,30 @@ class OpenAICompatibleChatAdapter:
         reasoning_effort: ReasoningEffort | None = None,
     ) -> str:
         try:
+            token_field = self._capabilities.token_parameter
             payload = {
                 "model": self._model_name,
                 "messages": list(messages),
                 "temperature": temperature,
-                "max_tokens": max_tokens,
+                token_field.value: max_tokens,
             }
             selected_reasoning_effort = reasoning_effort or self._reasoning_effort
-            if selected_reasoning_effort is not None:
+            if (
+                self._capabilities.reasoning_parameter
+                is ReasoningParameter.REASONING_EFFORT
+                and selected_reasoning_effort is not None
+            ):
                 payload["reasoning_effort"] = selected_reasoning_effort
             if response_format is not None:
+                requested_type = response_format.as_request_value().get("type")
+                if requested_type == "json_schema" and not self._capabilities.json_schema:
+                    raise OpenAICompatibleProviderError(
+                        "provider_structured_output_unsupported"
+                    )
+                if requested_type == "json_object" and not self._capabilities.json_object:
+                    raise OpenAICompatibleProviderError(
+                        "provider_structured_output_unsupported"
+                    )
                 payload["response_format"] = response_format.as_request_value()
             request_payload = OpenAIChatCompletionRequest.model_validate(payload)
         except ValidationError as error:
@@ -166,7 +228,7 @@ class OpenAICompatibleChatAdapter:
             raise OpenAICompatibleProviderError("provider_timeout") from error
         except httpx.RequestError as error:
             raise OpenAICompatibleProviderError("provider_connection_failed") from error
-        self._raise_for_http_status(response.status_code)
+        self._raise_for_http_status(response)
         try:
             payload = response.json()
         except (json.JSONDecodeError, ValueError) as error:
@@ -181,8 +243,9 @@ class OpenAICompatibleChatAdapter:
         )
         return f"{self._base_url}{suffix}"
 
-    @staticmethod
-    def _raise_for_http_status(status_code: int) -> None:
+    @classmethod
+    def _raise_for_http_status(cls, response: httpx.Response) -> None:
+        status_code = response.status_code
         if 200 <= status_code < 300:
             return
         if status_code in {401, 403}:
@@ -193,7 +256,64 @@ class OpenAICompatibleChatAdapter:
             raise OpenAICompatibleProviderError("provider_rate_limited")
         if status_code >= 500:
             raise OpenAICompatibleProviderError("provider_unavailable")
+        if status_code in {400, 422}:
+            code = cls._classify_client_rejection(response)
+            raise OpenAICompatibleProviderError(code)
         raise OpenAICompatibleProviderError("provider_http_error")
+
+    @staticmethod
+    def _classify_client_rejection(response: httpx.Response) -> str:
+        """Classify only explicit, narrow capability/parameter rejections.
+
+        The response is inspected in memory and never included in an exception,
+        log, persistence record, or API payload.
+        """
+
+        try:
+            payload = response.json()
+        except (json.JSONDecodeError, ValueError):
+            return "provider_http_error"
+        strings: list[str] = []
+
+        def collect(value: object) -> None:
+            if isinstance(value, str):
+                strings.append(value.casefold())
+            elif isinstance(value, Mapping):
+                for item in value.values():
+                    collect(item)
+            elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+                for item in value:
+                    collect(item)
+
+        collect(payload)
+        combined = " ".join(strings)
+        rejection = (
+            "unsupported" in combined
+            or "unknown" in combined
+            or "not supported" in combined
+            or "invalid parameter" in combined
+            or "invalid" in combined
+            or "unrecognized" in combined
+        )
+        if not rejection:
+            return "provider_http_error"
+        structured = (
+            "response_format" in combined
+            or "json_schema" in combined
+            or "structured output" in combined
+            or "structured_output" in combined
+        )
+        if structured:
+            return "provider_structured_output_unsupported"
+        parameter = (
+            "max_tokens" in combined
+            or "max_completion_tokens" in combined
+            or "reasoning_effort" in combined
+            or "reasoning parameter" in combined
+        )
+        if parameter:
+            return "provider_parameter_unsupported"
+        return "provider_http_error"
 
     @staticmethod
     def _content_from(payload: object) -> str:
