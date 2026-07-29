@@ -1,55 +1,109 @@
 # AI PoC Planner
 
-AI PoC Planner 的目标是成为一个本机运行、连接真实 OpenAI-compatible 模型的企业 AI 导入需求分析与 PoC 规划工具。它将协助使用者厘清流程、资料、治理条件与可行方案，并输出可执行的 Markdown 规划报告。
+AI PoC Planner 是一個本機優先、連接真實 OpenAI-compatible provider 的企業 AI 導入需求分析與 PoC 規劃工具。它把模糊的企業需求整理成可確認的事實、可比較的方案、受治理約束的建議，以及可下載的 Markdown 規劃報告。
 
-## 当前状态：规格重置中
+## 目前產品狀態
 
-`main` 目前是技术基础，不是可用产品，也不是发布版本。它包含 FastAPI、SQLite、LangChain 与 Streamlit 的实验性基础，但当前公开流程使用 scripted fake provider，不能真正理解使用者输入，也不能代表可行 MVP。
+目前 `main` 已包含可操作的 FastAPI 與 Streamlit 產品流程，而不是規格草稿或 scripted demo。
 
-PR #8 保留为技术原型与实验记录，不作为发布版本。真实模型连接、可行 MVP 的访谈与报告已经具备后端契约；产品 UI 目前只完成首页、项目历史与模型设定，完整流程与启动体验仍未完成。
+- 每個專案綁定自己的 model profile，正式分析只能使用該專案已選定、啟用並完成 readiness 驗證的 profile。
+- 所有真實模型呼叫共用一個 OpenAI-compatible provider adapter；目前 NVIDIA OpenAI-compatible provider 是真實驗證基線。
+- Discovery 已支援需求理解、修正、確認與最多三輪的針對性訪談。
+- Assessment 已包含 deterministic opportunity matching、六維評分、recommendation category 與 hard gates。
+- Results 已整合 reviewed-case matching、專案差距、可移植做法、分階段路線與 article-style report。
+- SQLite 會保存 project、discovery、PlanningRun、assessment 與 report；完成後可從 history re-entry 回到 Results。
+- Markdown 下載直接使用已保存報告；reload、history 與 download 不會重新呼叫 provider。
+- P7.1 本機 UAT runtime 已完成，可用受監督的一鍵流程啟動與停止 FastAPI、Streamlit。
+- fake provider 僅用於 deterministic automated tests，不是公開產品模式，也不存在 silent runtime fallback。
 
-fake provider 仅用于自动测试；它不是可提供给使用者的分析模式。项目不会自动回退到 fake model。
+下一階段是 **P7.2 provider compatibility and structured-output policy**。P7.2 尚未開始實作；它將驗證同一個 adapter 對 NVIDIA 基線與使用者自行啟動的本機 llama.cpp 端點的一致支援。
 
-## 新 viable MVP 方向
-
-第一版会优先支持使用者自行启动的 llama.cpp OpenAI-compatible server，并允许在产品中新增、编辑、删除、测试与切换多个本机模型连接。配置包含 profile name、base URL、model name 与可空 API key；第一版存放于 ignored 本机 JSON 文件。
-
-没有已测试且选定的真实模型连接时，产品必须拒绝正式 AI 分析，而不是产生 scripted 结果。
-
-后续产品流程为：
+## 產品流程
 
 ```text
-最小初始需求 → AI 需求理解 → 使用者确认／纠正 → 最多三轮针对性访谈
-→ 结构化确认事实 → AI／非 AI／混合分析 → hard gates → 正式 Markdown 报告
+建立專案並綁定 model profile
+→ 輸入最小需求
+→ AI 理解、使用者修正與確認
+→ 最多三輪針對性訪談
+→ confirmed facts
+→ reviewed-case matching 與方案分析
+→ deterministic scoring、recommendation category、hard gates
+→ article-style Results 與持久化 Markdown report
+→ history re-entry／download
 ```
 
-完整契约与实施顺序请参阅：
+## 決策邊界
 
-- [产品规格](docs/spec/SPEC.md)
-- [实施计划](docs/spec/PLAN.md)
-- [任务拆分](docs/spec/TASKS.md)
-- [项目记录](PROJECT_LOG.md)
+LLM 只負責：
 
-## 保留的技术资产
+- 理解模糊需求；
+- 提出結構化訪談問題；
+- 產生受 schema 約束的候選方案與敘事內容。
 
-- Python、FastAPI、Streamlit 与 Pydantic contracts
-- SQLite 本机持久化基础
-- LangChain 单一 Agent/typed-tool 实验边界
-- 六维评分、加权总分与 hard-gate 规则资产
-- 九类 AI opportunity catalog 与三个非 AI 方向
-- pytest、Ruff 与 deterministic fake-provider 测试设施
+程式碼負責：
 
-这些资产需要依照新规格重新验证，不能据此宣称 real-provider 产品已完成。
+- opportunity 與 reviewed-case matching；
+- recommendation category；
+- 六維評分與加權總分；
+- hard gates；
+- 正式建議、案例、分數與報告的一致性。
 
-## 明确不包含
+Provider 輸出不能覆寫 deterministic decision logic，也不能自行宣告正式 recommendation、score 或 gate disposition。
 
-第一版不包含多 Agent、LangGraph、FAISS、Docker、云端部署、用户账号、Email 登录、自动下载模型、安装或管理 llama.cpp、React/Next.js、PDF/DOCX、在线案例搜索、多租户或生产级凭证加密。
+## Provider 與 model profile
 
-本项目也不负责安装 llama.cpp 或下载 GGUF 模型。
+每個專案保存自己的安全 model-profile snapshot。正式流程要求 profile 與目前已測試的真實連線一致；缺少、停用、未測試或不一致時會 fail closed，而不是改用 fake provider 或其他模型。
 
-## 开发状态与命令
+目前只有一個 OpenAI-compatible adapter。它是 NVIDIA 雲端基線與未來 llama.cpp 相容性驗證的共同邊界，不代表產品具有多 provider business logic 或多套專用 adapter。
 
-现有命令仅供技术基础与自动测试维护使用，并非面向终端使用者的产品安装说明：
+## 持久化與安全
+
+- SQLite 保存專案、版本、可見對話、confirmed facts、PlanningRun、assessment 與 report。
+- 完成版本維持不可變；後續修改建立新的版本。
+- 不保存 system prompt、chain of thought、LangChain tool trajectory、raw provider response、Authorization header 或 API key。
+- 錯誤回應不得洩漏 secrets、raw response、內部路徑或技術診斷。
+- 高影響人事、醫療、法律、信用或財務情境保持 assistive-only，人工保留最終決定。
+
+## 本機執行
+
+P7.1 提供專案自有的 Windows 本機 runtime，使用安全埠範圍：
+
+- Streamlit UI：`18501-18599`
+- FastAPI：`18610-18699`
+- 不使用 `8000` 作為產品預設埠
+
+從專案目錄啟動 UAT：
+
+```powershell
+.\scripts\start-local.ps1 -Mode Uat
+```
+
+查詢狀態與停止：
+
+```powershell
+.\scripts\status-local.ps1 -Mode Uat
+.\scripts\stop-local.ps1 -Mode Uat
+```
+
+Runtime 只負責驗證專案 `.venv`、選擇安全埠、啟動／監督 FastAPI 與 Streamlit、開啟瀏覽器及可靠停止。它不會安裝 provider、下載模型或建立雲端帳號。
+
+## 驗證基線
+
+PR #24 已合併至 `main`，完成 P6.7 Results narrative、reviewed-case catalog consistency 與 report persistence 的產品驗收基線。NVIDIA OpenAI-compatible provider 已完成真實 Discovery、Assessment、Report 與 browser UAT；fake provider 仍只支援離線且可重現的自動測試。
+
+## 明確不包含
+
+目前不包含：
+
+- 多 Agent 或 LangGraph；
+- FAISS 或向量資料庫；
+- Docker；
+- 自動安裝 llama.cpp、Ollama、LM Studio、vLLM 或模型檔；
+- provider 專用 adapter 或多 provider business logic；
+- 雲端部署、帳號建立、多租戶；
+- PDF／DOCX 匯出。
+
+## 開發驗證
 
 ```powershell
 python -m pytest
@@ -57,201 +111,14 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-未来会规划 `安装 AI PoC Planner.bat`、`启动 AI PoC Planner.bat` 与 `停止 AI PoC Planner.bat`。在这些入口完成前，不应把手动建立环境、手动分别启动 FastAPI/Streamlit，或 fake demo 当作产品使用方式。
+真實 provider UAT 必須明確 opt-in，且不得成為預設 CI 的秘密資料依賴。
 
-## 安全与资料边界
+## 文件
 
-- API key 不会提交到仓库；第一版本机 profile JSON 必须被忽略。
-- 高影响领域只能提供辅助建议，保留人工最终决定。
-- 未授权资料外传、禁止外部端点、缺少必要人工审核等 hard-gate 冲突会阻挡结论。
-- 产品只保存正式可见的使用者/AI 对话与结构化事实；不保存 system prompt、chain of thought、LangChain tool trajectory 或 raw provider metadata。
-
-## Phase 1 provider foundation
-
-Phase 1 implements local model-profile storage, an OpenAI-compatible chat
-adapter, safe profile/status API endpoints, a formal-analysis readiness guard,
-and an opt-in llama.cpp validation. This is a provider foundation only: the
-Streamlit product UI has not been rebuilt, and the formal business interview,
-scoring, and report are not connected to a real model yet.
-
-Profiles are stored for this MVP in a private local JSON file. The default is
-`%LOCALAPPDATA%\AI-PoC-Planner\model_profiles.json` on Windows, or
-`~/.local/share/ai-poc-planner/model_profiles.json` elsewhere; set
-`AI_POC_PLANNER_DATA_DIR` to override the directory. API keys are plaintext in
-that user-local file by deliberate MVP trade-off. They are excluded from public
-profile responses, normal representations, and safe error responses.
-
-The user starts llama.cpp independently. The default test suite never calls the
-network. To opt in after starting an OpenAI-compatible llama.cpp server, set
-`AI_POC_PLANNER_LLAMA_CPP_TEST=1`,
-`AI_POC_PLANNER_LLAMA_CPP_BASE_URL`, and
-`AI_POC_PLANNER_LLAMA_CPP_MODEL`; `AI_POC_PLANNER_LLAMA_CPP_API_KEY` is optional.
-Then run:
-
-```powershell
-python -m pytest tests/providers/test_llama_cpp_integration.py
-```
-
-### Qwen3 compatibility note
-
-In the verified Qwen3 llama.cpp UAT, the server's default reasoning mode
-returned only a reasoning channel while ordinary assistant `content` was empty.
-The Phase 1 adapter requires non-empty assistant content for a successful
-connection test, so that UAT server used `--reasoning off`. This is a verified
-startup configuration for that model/server combination, not a requirement for
-every model. The current adapter does not treat reasoning-only responses as
-successful connection-test responses.
-
-A successful connection test proves only that the configured endpoint was
-reachable at that time. Fake providers remain offline automated-test fixtures;
-there is no fake runtime fallback for provider readiness or formal analysis.
-
-## Phase 2 durable project history
-
-Phase 2 adds durable SQLite project identity and linear planning-version
-history. Creating a project creates version 1 in `draft`; completing a version
-makes it immutable, and subsequent edits require a new successor version. A
-successor copies only visible conversation and current fact revisions, with new
-local IDs and mapped message references.
-
-Only user-visible conversation is persisted. Facts are append-only revisions:
-an assistant assumption needs visible evidence, a user confirmation creates a
-new confirmed revision, and changing a confirmed fact requires an explicit
-user correction. The database does not persist system prompts, reasoning,
-chain-of-thought, tool/LangChain trajectories, raw provider metadata, API keys,
-or Authorization headers.
-
-## Phase 3 real-model discovery interview
-
-Phase 3 adds a provider-readiness-gated minimal initial brief, a real-model
-requirement-understanding confirmation/correction step, and a contextual
-interview bounded to three rounds with at most three questions per round.
-Only visible conversation and append-only fact revisions survive reload. A
-completed version remains immutable; Phase 3 stops at `ready_for_assessment`.
-
-The structured provider boundary accepts only a complete JSON object (or one
-complete `json` fence), validates it with Pydantic, and allows one safe repair
-retry. It never persists system prompts, reasoning, chain of thought, tool
-trajectories, raw provider responses, API keys, or Authorization headers.
-Runtime calls require the currently selected, enabled, successfully tested real
-profile to match the version's safe model snapshot. Test fakes are dependency
-injection only; no fake runtime fallback exists.
-
-The real Qwen3 llama.cpp UAT passed with `--reasoning off`, including correction
-and regeneration, confirmation, bounded interview completion, and fresh-app
-reload. Provider connection status remains process-local and is not persisted.
-## Phase 4 evidence-backed assessment
-
-Phase 4 adds one immutable assessment for an assessment-ready project version.
-The real selected/tested profile proposes two to four AI, non-AI,
-foundations-first, or hybrid options and six evidence-backed ratings. The
-application resolves only current `Fxxx` fact tokens, assigns the normative
-weights, calculates the total deterministically, and evaluates the existing
-hard gates. Option generation is staged: the provider selects an option index,
-then receives a kind-specific option-detail schema; the application derives the
-formal conclusion from that selected kind. The provider cannot submit a formal
-conclusion, weights, totals, rule results, or a gate disposition.
-
-SQLite schema v6 persists normalized analysis results and one immutable,
-fact-backed Markdown planning report per assessed version. P5.2 generates the
-eighteen report narration fields in two staged real-provider calls (Report Part
-A and Report Part B), then deterministically renders program-owned conclusions,
-scores, gates, resolved fact references, and reviewed-case attribution. Numeric
-claims and KPI thresholds are rejected unless fact-backed. It does not persist
-prompts, reasoning, raw provider responses, API keys, Authorization headers, or
-base URLs. A report completes its version. Phase 6.1 adds a Streamlit home,
-project-history, and model-settings surface that talks only to the existing
-FastAPI HTTP API. Phase 6.2 adds the Phase 3 brief, real-provider requirement
-understanding, correction/confirmation, and bounded interview flow through the
-same public HTTP boundary. It restores durable discovery state after a rerun,
-shows only readable facts at completion, and keeps UUIDs, raw JSON, prompts,
-API URLs, SQLite paths, and technical diagnostics out of the UI. A real NVIDIA
-NIM browser UAT covered profile readiness, brief, correction, confirmation,
-unknown answer, proactive fact addition, bounded completion, and refresh
- recovery. Phase 6.3 adds readable Phase 4 assessment and Phase 5 report views:
- it follows the persisted version status, renders the six scores, hard gates,
- options, risks, gaps, all eighteen report sections, and saved reviewed-case
- sources through FastAPI HTTP only. It downloads the persisted UTF-8 Markdown
- without re-rendering it, restores the latest result-capable project after a
- refresh, and keeps fact tokens, UUIDs, raw JSON, API URLs, SQLite paths, and
- technical diagnostics out of the UI. A real NVIDIA browser UAT covered
- assessment creation, Report Part A/Part B, completed-state refresh, and
- Markdown download. Phase 6.4 closes out the Discovery experience with natural-
-language correction, free supplementary input, bounded material questions,
-human-readable summaries, and explicit Traditional Chinese output. The product
-now enters work through four global pages only: Home, New project, Project
-history, and Model settings. Discovery, assessment, and reports are rendered
-inside the selected project's workspace. New-project routing remains stable on
-refresh; the selected model profile is persisted safely with the project, and
-copying a project prefills only its initial brief. Headed Chrome UAT verified
-the new-project refresh route, selected-profile readiness, project workspace,
-  discovery, history, and copy flow. P6.5 now centres assessment on reviewed
-  cases and preserves the same deterministic, case-backed result across API,
-  Results, and Markdown report views.
-
-The real NVIDIA NIM `openai/gpt-oss-20b` UAT passed twice through the production
-API using `json_schema`, `reasoning_effort=low`, and temporary local state. The
-test covers Phase 3 discovery through immutable Phase 4 assessment, duplicate
-blocking, and fresh-app reload. Provider reasoning channels and raw responses
-are ignored and never persisted.
-
-P5.2 also passed a report-only NVIDIA UAT twice using two fresh temporary
-states. Each run uses production assessed-version repositories, calls Report
-Part A and Report Part B, persists an immutable report, completes the version,
-and verifies GET, duplicate POST blocking, and fresh-app reload. Full
-cross-phase report UAT is deferred to Phase 8.
-
-## Reviewed local cases
-
-The reviewed local case library in `data/reviewed_cases.json` is read-only,
-source-backed, and Pydantic-validated. P6.5 computes case reference value and
-project-to-case fit separately, ranks only approved cases from confirmed project
-facts, records gaps and source-bound transferable practices, and persists the
-case-centered result for API, Results, and Markdown report reuse. It does not
-use online search, embeddings, FAISS, a vector database, or a provider to invent
-cases or override deterministic scoring.
-
-## Case-centered assessment results
-
-P6.5 makes reviewed cases the main evidence in the assessment result. The
-program calculates case reference value separately from project-to-case fit,
-keeps unknown conditions as confirmation items, derives transferable practices
-only from source-backed cases, and interprets hard gates as limits on stage,
-capability, and deployment scope. The persisted result also contains the
-current stage, PoC path, later-stage prerequisites, and acceptance criteria.
-
-The Results workspace is an internal project route and is not a fifth global
-navigation item. The FastAPI analysis snapshot is the shared source for the
-API response, Streamlit view, and Markdown report. Existing completed results
-are loaded from SQLite without calling the provider again; a missing reviewed
-case is reported honestly and never replaced with a fabricated candidate.
-
-## Windows local runtime
-
-P7.1 provides a one-command, supervised local runtime for browser UAT. From
-the project directory run:
-
-```powershell
-.\scripts\start-local.ps1 -Mode Uat
-```
-
-The launcher requires this project's `.venv\Scripts\python.exe`; it never
-falls back to a system Python. It starts FastAPI and Streamlit, selects free
-ports in API `18610-18699` and UI `18501-18599`, validates API identity, opens
-the browser, and stops both child processes together on Ctrl+C or child failure.
-It does not use port 8000 as a product default.
-
-Persistent data is separate in `%LOCALAPPDATA%\AI-PoC-Planner` (Local) and
-`%LOCALAPPDATA%\AI-PoC-Planner-UAT` (Uat): SQLite, profile storage, safe state,
-and logs. Profiles/selection persist, while readiness intentionally returns to
-untested after a process restart. API keys retain the existing local plaintext
-MVP trade-off and are not written to launcher state or logs. This is not an
-installer, Windows auto-start, or release package.
-
-```powershell
-.\scripts\status-local.ps1 -Mode Uat
-.\scripts\stop-local.ps1 -Mode Uat
-```
+- [產品規格](docs/spec/SPEC.md)
+- [實施計畫](docs/spec/PLAN.md)
+- [任務拆分](docs/spec/TASKS.md)
+- [專案記錄](PROJECT_LOG.md)
 
 ## License
 
