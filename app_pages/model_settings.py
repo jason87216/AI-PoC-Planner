@@ -59,7 +59,10 @@ def _profile_payload(
         payload["api_key"] = api_key
     if structured_output_mode:
         payload["structured_output_mode"] = structured_output_mode
-    if reasoning_effort:
+    if reasoning_parameter == "unsupported":
+        # Explicitly clear a previously saved effort when the capability changes.
+        payload["reasoning_effort"] = None
+    elif reasoning_effort:
         payload["reasoning_effort"] = reasoning_effort
     if include_required_fields or any(
         [
