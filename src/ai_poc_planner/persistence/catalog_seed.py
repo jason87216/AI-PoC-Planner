@@ -10,6 +10,11 @@ SQLite rows through ``SQLiteSolutionCatalogRepository``.
 from __future__ import annotations
 
 from ai_poc_planner.domain.catalog import EvidenceType, OpportunityType
+from ai_poc_planner.domain.catalog_relationships import (
+    GoldenScenarioCoverage,
+    ReviewedImplementationReference,
+    SolutionCaseLink,
+)
 from ai_poc_planner.domain.reviewed_cases import (
     CaseSourceReference,
     ReviewedCase,
@@ -62,7 +67,7 @@ def reviewed_solution_patterns() -> tuple[SolutionPattern, ...]:
         ),
         SolutionPattern(
             solution_key="permission_request_rules_and_human_approval",
-            recommendation_category="governed_assistive",
+            recommendation_category="rules_first",
             display_name_zh="權限申請標準化、規則檢查與人工審批",
             short_description_zh="以職位與權限範本整理申請、檢查固定規則，並保留主管審批與 IT 開通責任。",
             detailed_description_zh="將權限申請表、職位—權限範本與固定檢查規則整理成可追溯流程。系統可提示漏項、比對既定規則並彙整申請資料；主管必須作出最終審批，IT 僅依已核准結果執行開通。",
@@ -72,6 +77,61 @@ def reviewed_solution_patterns() -> tuple[SolutionPattern, ...]:
             human_boundary_zh="主管保留最終審批；IT 依已核准結果開通；系統不得自行審批、拒絕或開通權限。",
             expected_outputs_zh="完整申請資料、規則檢查結果、人工審批紀錄、例外處理紀錄與可追溯稽核資料。",
             acceptance_focus_zh="檢查申請格式完整率、規則提示正確率、主管審批處理時間、例外紀錄完整性與稽核紀錄完整性，而非追求自動開通。",
+            alternative_type="recommended",
+            review_status=ReviewStatus.APPROVED,
+            content_version=_CONTENT_VERSION,
+            created_at=_STAMP,
+            updated_at=_STAMP,
+        ),
+        SolutionPattern(
+            solution_key="permission_request_manual_baseline",
+            recommendation_category="rules_first",
+            display_name_zh="電子郵件與試算表人工標準化",
+            short_description_zh="保留現有工具，先以人工方式統一欄位、檔案命名與審批紀錄。",
+            detailed_description_zh="在不導入新系統的前提下，先建立申請欄位範本、職位與權限對照表、人工檢查清單與審批紀錄格式。這是最低成本基線，不能取代正式的規則檢查流程。",
+            suitable_when_zh="需要先確認欄位、責任與規則內容，且暫時沒有條件建立集中入口時。",
+            not_suitable_when_zh="若申請量大、錯誤追蹤要求高，或需要一致的規則結果時，不應長期停留在此基線。",
+            typical_scope_zh="建立人工申請範本、權限對照表與審批紀錄格式。",
+            human_boundary_zh="申請人、主管與 IT 人員各自人工檢查、核准與開通；不由系統自動判斷。",
+            expected_outputs_zh="統一申請範本、人工檢查清單與可追溯的審批紀錄。",
+            acceptance_focus_zh="檢查欄位完整率、人工檢查一致性與審批紀錄完整性。",
+            alternative_type="baseline",
+            review_status=ReviewStatus.APPROVED,
+            content_version=_CONTENT_VERSION,
+            created_at=_STAMP,
+            updated_at=_STAMP,
+        ),
+        SolutionPattern(
+            solution_key="permission_request_ai_future_extension",
+            recommendation_category="ai_hybrid",
+            display_name_zh="自由文字與附件的 AI 輔助",
+            short_description_zh="未來處理自由文字、附件與複雜例外時，再評估 AI 協助整理，不取代審批。",
+            detailed_description_zh="只有在標準欄位與固定規則穩定後，才評估讓 AI 協助讀取自由文字或附件、整理例外脈絡與提供待查項目。AI 產出必須回到規則檢查與人工審批。",
+            suitable_when_zh="標準流程已穩定，且自由文字、附件或複雜例外成為主要新增負擔時。",
+            not_suitable_when_zh="第一階段仍在整理欄位、規則與責任時，不應把 AI 作為主要方案。",
+            typical_scope_zh="後續以脫敏樣本評估文字與附件整理、例外提示及人工覆核。",
+            human_boundary_zh="AI 只提供整理與提示；主管仍作最終審批，IT 仍負責實際開通。",
+            expected_outputs_zh="例外整理結果、待查項目與人工修改紀錄。",
+            acceptance_focus_zh="先檢查例外提示的可用性與人工覆核負擔，不以自動核准率驗收。",
+            alternative_type="future_extension",
+            review_status=ReviewStatus.APPROVED,
+            content_version=_CONTENT_VERSION,
+            created_at=_STAMP,
+            updated_at=_STAMP,
+        ),
+        SolutionPattern(
+            solution_key="permission_request_automatic_provisioning_rejected",
+            recommendation_category="governed_assistive",
+            display_name_zh="自動核准與直接開通",
+            short_description_zh="由系統直接判定申請並寫入權限系統，本專案第一階段不採用。",
+            detailed_description_zh="此方向把規則結果直接轉成核准與開通動作，會越過主管最終審批與 IT 實際開通的責任分工。它只作為被拒絕的比較方向，不是可執行建議。",
+            suitable_when_zh="本專案目前沒有可接受的適用時機。",
+            not_suitable_when_zh="需要主管最終核准、IT 實際開通或保留完整稽核紀錄時，不得採用。",
+            typical_scope_zh="僅用於說明自動核准與直接寫入的風險，不列入 PoC。",
+            human_boundary_zh="不得移除主管核准與 IT 開通責任，不得由系統直接完成高風險權限動作。",
+            expected_outputs_zh="不建立實作交付物，只保留拒絕採用的理由。",
+            acceptance_focus_zh="確認沒有自動核准、直接寫入或繞過人工責任的流程。",
+            alternative_type="rejected",
             review_status=ReviewStatus.APPROVED,
             content_version=_CONTENT_VERSION,
             created_at=_STAMP,
@@ -97,7 +157,7 @@ def reviewed_solution_patterns() -> tuple[SolutionPattern, ...]:
     )
 
 
-def reviewed_cases() -> tuple[ReviewedCase, ...]:
+def _legacy_reviewed_cases() -> tuple[ReviewedCase, ...]:
     """Return source-backed cases whose report facts were manually written."""
 
     return (
@@ -267,6 +327,417 @@ def reviewed_cases() -> tuple[ReviewedCase, ...]:
             review_status=ReviewStatus.APPROVED,
             review_notes="案例只支援資料與驗證條件已具備時的比較，不能補足本專案缺少的標籤。",
             reviewed_at=_STAMP,
+            content_version=_CONTENT_VERSION,
+        ),
+    )
+
+
+def reviewed_cases() -> tuple[ReviewedCase, ...]:
+    """Return all approved cases, including the permission golden cases."""
+
+    return (*_legacy_reviewed_cases(), *permission_reviewed_cases())
+
+
+def _permission_case(
+    *,
+    case_id: str,
+    organization: str,
+    display_title_zh: str,
+    original_title: str,
+    summary: str,
+    problem: str,
+    approach: str,
+    outcomes: str,
+    transferable: str,
+    limitations: str,
+    source_name: str,
+    source_url: str,
+    grade: ReviewedEvidenceGrade,
+) -> ReviewedCase:
+    """Create a manually authored permission case from an official source."""
+
+    return ReviewedCase(
+        case_id=case_id,
+        organization=organization,
+        title=display_title_zh,
+        display_title_zh=display_title_zh,
+        summary_zh=summary,
+        original_title=original_title,
+        case_summary_zh=summary,
+        problem_context_zh=problem,
+        implemented_approach_zh=approach,
+        documented_outcomes_zh=outcomes,
+        transferable_practices_zh=transferable,
+        limitations_zh=limitations,
+        applicable_solution_keys=["permission_request_rules_and_human_approval"],
+        applicable_conditions=["有明確的申請、核准與開通責任"],
+        non_applicable_conditions=["不能直接複製案例的產品、規模與部署環境"],
+        opportunity_types=[
+            OpportunityType.ENTERPRISE_KNOWLEDGE_AND_PROFESSIONAL_DOCUMENT_ASSIST
+        ],
+        business_problem=problem,
+        workflow_scope="員工存取申請、核准與開通流程",
+        solution_pattern="標準化申請、規則檢查、人工核准與可追溯開通",
+        required_inputs=["申請人、主管、資源與存取範圍"],
+        system_dependencies=["核准的身分與存取管理系統"],
+        governance_conditions=["保留核准、撤銷與存取檢視紀錄"],
+        decision_authority="human_final_decision",
+        processing_boundary="僅依核准流程處理，不由案例系統自行作出最終決定",
+        implementation_stage="正式環境案例；本專案只移植可驗證的流程做法",
+        implementation_method=approach,
+        reported_outcomes=[outcomes],
+        applicability_tags=[
+            "structured_request_intake",
+            "manager_approval",
+            "audit_trail",
+        ],
+        non_applicability_tags=["different_scale", "different_deployment"],
+        human_oversight=[
+            "主管或資源負責人保留核准責任，IT 或系統管理者依核准結果執行。"
+        ],
+        risks_or_limitations=[limitations],
+        evidence_type=EvidenceType.VENDOR_REPORTED,
+        evidence_grade=grade,
+        source_name=source_name,
+        source_url=source_url,
+        source_references=[CaseSourceReference(label=source_name, url=source_url)],
+        review_status=ReviewStatus.APPROVED,
+        review_notes="由人工依官方來源撰寫，未把產品功能說明當成企業成效。",
+        reviewed_at=_STAMP,
+        content_version="2026.07.29.2",
+    )
+
+
+def permission_reviewed_cases() -> tuple[ReviewedCase, ...]:
+    """Return the approved employee-access cases required by the golden route."""
+
+    return (
+        _permission_case(
+            case_id="case-08",
+            organization="Demandbase",
+            display_title_zh="Demandbase：以 Okta Identity Governance 統一存取申請與檢視",
+            original_title="Demandbase customer story",
+            summary="Demandbase 將存取申請、核准與存取檢視集中到 Okta Identity Governance，並保留角色型存取與人工核准流程。",
+            problem="原先以人工方式追蹤存取認證，需在身分資料與試算表之間轉換，撤銷權限也容易遺漏。",
+            approach="導入 Okta Identity Governance，結合 Lifecycle Management、Workflows 與 Access Governance，讓員工可提出申請，主管可在既有協作介面檢視與核准，並將存取認證與撤銷流程集中管理。",
+            outcomes="官方案例記載其建立較一致的角色型存取與核准流程，並把存取認證與撤銷工作從人工追蹤轉為集中治理；來源未提供本專案可直接套用的申請完整率。",
+            transferable="可移植的是集中申請入口、角色與權限對照、主管核准、撤銷追蹤及檢視紀錄。",
+            limitations="案例已有 Okta 身分環境與既定治理產品；本專案仍需先確認申請欄位、規則、主管責任與 IT 開通方式，不能直接複製其自動化程度。",
+            source_name="Okta 客戶案例：Demandbase",
+            source_url="https://www.okta.com/en-se/customers/demandbase/",
+            grade=ReviewedEvidenceGrade.B,
+        ),
+        _permission_case(
+            case_id="case-09",
+            organization="Cenibra",
+            display_title_zh="Cenibra：以 Microsoft Entra ID Governance 重建身分治理",
+            original_title="Cenibra modernizes digital governance with Microsoft Entra ID Governance",
+            summary="Cenibra 以 Microsoft Entra ID Governance 重整跨系統的身分生命週期、申請核准與風險控制。",
+            problem="既有身分治理平台接近停止維護，且需要在八十多個系統、約二千四百名使用者與稽核要求之間維持流程連續性。",
+            approach="Cenibra 以 Microsoft Entra ID Governance 為核心，透過 PowerApps 統一存取申請入口、在 Teams 中支援主管核准，並與 GRC 與職責分離分析整合；轉換採分波段進行。",
+            outcomes="Microsoft 官方案例記載 Wave 1 達成 46% 的營運改善，降低人工身分工作並提升稽核準備度；後續降低 60% 至 70% 人工 IAM 工作量仍是擴大後的預期。",
+            transferable="可移植的是標準化申請入口、分階段導入、主管核准、規則與風險檢查、開通結果追蹤及稽核可追溯性。",
+            limitations="案例涉及八十多個系統、既有 Microsoft 生態與 GRC 整合，規模和部署條件遠高於本專案第一階段，不能把其自動化與成效直接當成本專案承諾。",
+            source_name="Microsoft 客戶案例：Cenibra",
+            source_url="https://www.microsoft.com/en/customers/story/26155-cenibra-celulose-nipo-brasileira-sa-microsoft-entra-id-governance",
+            grade=ReviewedEvidenceGrade.B,
+        ),
+        _permission_case(
+            case_id="case-10",
+            organization="Varo",
+            display_title_zh="Varo：以 Okta Identity Governance 管理生命週期與臨時存取",
+            original_title="Varo balances rapid growth and heightened security using Workforce Identity",
+            summary="Varo 以 Okta Identity Governance 集中身分生命週期、存取申請、主管核准與存取認證。",
+            problem="快速成長的銀行需要集中管理新進、異動與離職人員的存取，也需要處理短期與臨時的存取申請。",
+            approach="Varo 使用 Okta Identity Governance 建立單一身分控制平面、角色型存取與臨時存取核准流程，並將申請文件與存取認證保留在治理報表中。",
+            outcomes="Okta 官方案例記載自動開通使新員工入職時間降低超過 90%，存取認證流程加快 50%；這些是 Varo 案例結果，不是本專案的預估成效。",
+            transferable="可移植的是集中申請、角色型存取、主管核准、臨時存取期限、存取檢視與核准紀錄。",
+            limitations="Varo 已有 Okta 產品整合與大規模身分基礎；本專案第一階段不直接自動開通，仍由 IT 依主管核准結果執行。",
+            source_name="Okta 客戶案例：Varo",
+            source_url="https://www.okta.com/customers/varo/",
+            grade=ReviewedEvidenceGrade.B,
+        ),
+        _permission_case(
+            case_id="case-11",
+            organization="cellcentric",
+            display_title_zh="cellcentric：以 Microsoft Entra entitlement management 管理特權存取",
+            original_title="cellcentric secures assignment of administrative privileges with Microsoft Entra Verified ID and Microsoft Entra entitlement management",
+            summary="cellcentric 以 Microsoft Entra entitlement management 建立特權角色的申請、資格確認、期限與重新申請流程。",
+            problem="特權帳號原本依賴人工加入與移除，既容易延遲，也可能讓離職或角色異動人員保留過久的高權限。",
+            approach="cellcentric 以資格申請、身分確認、角色啟用與八小時存取期限串成受控流程，並以 Microsoft Entra entitlement management 管理 access package、申請與期限。",
+            outcomes="Microsoft 官方案例記載此流程已在正式環境使用，並讓特權角色的申請與期限管理比原先人工流程更快、更易操作；案例並未證明一般員工申請流程的成效。",
+            transferable="可移植的是最小權限、申請與核准、臨時存取、到期、重新申請及完整活動紀錄。",
+            limitations="案例聚焦特權角色與 Microsoft Entra Verified ID，與本專案一般員工權限申請不同；只能作為期限與稽核做法的 supporting case。",
+            source_name="Microsoft 客戶案例：cellcentric",
+            source_url="https://www.microsoft.com/en-us/customers/story/18853-cellcentric-microsoft-entra-id",
+            grade=ReviewedEvidenceGrade.B,
+        ),
+    )
+
+
+def solution_case_links() -> tuple[SolutionCaseLink, ...]:
+    """Return explicit many-to-many case relations for approved routes."""
+
+    return (
+        SolutionCaseLink(
+            solution_key="knowledge_retrieval_human_review",
+            case_id="case-01",
+            support_type="primary",
+            supported_practice_keys=["audit_trail"],
+            applicability_note_zh="支持核准內容、人工覆核與可追溯來源的做法。",
+            limitation_note_zh="不支持員工權限申請、規則衝突檢查或 IT 開通。",
+            review_status=ReviewStatus.APPROVED,
+            content_version=_CONTENT_VERSION,
+        ),
+        SolutionCaseLink(
+            solution_key="knowledge_retrieval_human_review",
+            case_id="case-02",
+            support_type="supporting",
+            supported_practice_keys=["audit_trail"],
+            applicability_note_zh="只支持知識輔助與人工確認的流程做法。",
+            limitation_note_zh="不支持本專案的權限申請與規則檢查。",
+            review_status=ReviewStatus.APPROVED,
+            content_version=_CONTENT_VERSION,
+        ),
+        SolutionCaseLink(
+            solution_key="knowledge_retrieval_human_review",
+            case_id="case-04",
+            support_type="supporting",
+            supported_practice_keys=["structured_request_intake"],
+            applicability_note_zh="只支持文件整理與人工覆核前置工作。",
+            limitation_note_zh="不支持權限核准或直接套用到其他流程。",
+            review_status=ReviewStatus.APPROVED,
+            content_version=_CONTENT_VERSION,
+        ),
+        SolutionCaseLink(
+            solution_key="data_readiness_validation",
+            case_id="case-07",
+            support_type="supporting",
+            supported_practice_keys=["structured_request_intake"],
+            applicability_note_zh="支持先建立資料樣本、標籤與驗證設計。",
+            limitation_note_zh="不支持員工權限申請或存取核准。",
+            review_status=ReviewStatus.APPROVED,
+            content_version=_CONTENT_VERSION,
+        ),
+        SolutionCaseLink(
+            solution_key="permission_request_rules_and_human_approval",
+            case_id="case-08",
+            support_type="primary",
+            supported_practice_keys=[
+                "structured_request_intake",
+                "required_field_validation",
+                "policy_rule_validation",
+                "manager_approval",
+                "provisioning_separation",
+                "exception_handling",
+                "audit_trail",
+                "access_review",
+            ],
+            applicability_note_zh="支持集中申請、角色對照、主管核准、撤銷追蹤與稽核紀錄。",
+            limitation_note_zh="不能複製其 Okta 產品環境與自動化程度；本專案先不直接開通。",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+        SolutionCaseLink(
+            solution_key="permission_request_rules_and_human_approval",
+            case_id="case-09",
+            support_type="supporting",
+            supported_practice_keys=[
+                "structured_request_intake",
+                "required_field_validation",
+                "policy_rule_validation",
+                "manager_approval",
+                "resource_owner_approval",
+                "provisioning_separation",
+                "exception_handling",
+                "audit_trail",
+                "access_review",
+            ],
+            applicability_note_zh="支持標準化入口、分階段導入、核准、風險檢查與稽核追蹤。",
+            limitation_note_zh="案例規模與整合環境較大，不能直接複製其系統整合與量化成效。",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+        SolutionCaseLink(
+            solution_key="permission_request_rules_and_human_approval",
+            case_id="case-10",
+            support_type="supporting",
+            supported_practice_keys=[
+                "manager_approval",
+                "provisioning_separation",
+                "access_review",
+                "temporary_access",
+                "access_expiration",
+                "audit_trail",
+            ],
+            applicability_note_zh="支持角色型存取、臨時申請、主管核准與存取檢視。",
+            limitation_note_zh="不能複製 Varo 的產品整合與自動開通成效。",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+        SolutionCaseLink(
+            solution_key="permission_request_rules_and_human_approval",
+            case_id="case-11",
+            support_type="supporting",
+            supported_practice_keys=[
+                "manager_approval",
+                "provisioning_separation",
+                "temporary_access",
+                "access_expiration",
+                "audit_trail",
+            ],
+            applicability_note_zh="只支持期限、重新申請、特權開通分離與活動紀錄。",
+            limitation_note_zh="案例是特權角色情境，不能直接代表一般員工權限申請。",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+    )
+
+
+def implementation_references() -> tuple[ReviewedImplementationReference, ...]:
+    """Return official implementation references separate from enterprise cases."""
+
+    return (
+        ReviewedImplementationReference(
+            reference_key="microsoft_entra_request_process",
+            display_title_zh="Microsoft Entra：存取套件申請與核准流程",
+            publisher="Microsoft",
+            summary_zh="說明存取套件申請如何進入待核准狀態，以及申請人與核准人的流程責任。",
+            supported_practice_keys=[
+                "structured_request_intake",
+                "manager_approval",
+                "audit_trail",
+            ],
+            source_name="Microsoft Learn：存取套件申請流程",
+            source_url="https://learn.microsoft.com/en-us/entra/id-governance/entitlement-management-process",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+        ReviewedImplementationReference(
+            reference_key="microsoft_entra_lifecycle_workflows",
+            display_title_zh="Microsoft Entra：生命週期工作流程",
+            publisher="Microsoft",
+            summary_zh="說明新進、異動與離職流程，以及工作流程歷程與稽核紀錄的實施方向。",
+            supported_practice_keys=[
+                "provisioning_separation",
+                "audit_trail",
+                "access_review",
+            ],
+            source_name="Microsoft Learn：生命週期工作流程",
+            source_url="https://learn.microsoft.com/en-us/entra/id-governance/what-are-lifecycle-workflows",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+        ReviewedImplementationReference(
+            reference_key="okta_access_requests",
+            display_title_zh="Okta：Access Requests 申請與核准序列",
+            publisher="Okta",
+            summary_zh="說明必要問題、核准與工作任務如何組成存取申請流程，並可保留活動紀錄。",
+            supported_practice_keys=[
+                "structured_request_intake",
+                "required_field_validation",
+                "manager_approval",
+                "exception_handling",
+            ],
+            source_name="Okta Help：Access Requests",
+            source_url="https://help.okta.com/oie/en-us/content/topics/identity-governance/access-requests/ar-overview.htm",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+        ReviewedImplementationReference(
+            reference_key="okta_access_certifications",
+            display_title_zh="Okta：Access Certifications 存取認證",
+            publisher="Okta",
+            summary_zh="說明定期存取檢視、撤銷與稽核證據的實施方向。",
+            supported_practice_keys=[
+                "access_review",
+                "access_expiration",
+                "audit_trail",
+            ],
+            source_name="Okta Help：Access Certifications",
+            source_url="https://help.okta.com/en-us/Content/Topics/identity-governance/access-certification/iga-access-cert.htm",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+        ReviewedImplementationReference(
+            reference_key="sailpoint_access_requests",
+            display_title_zh="SailPoint：存取申請與核准流程",
+            publisher="SailPoint",
+            summary_zh="說明使用者提出存取申請、審核人核准或拒絕、核准後再執行開通，以及查詢歷程紀錄。",
+            supported_practice_keys=[
+                "structured_request_intake",
+                "manager_approval",
+                "provisioning_separation",
+                "audit_trail",
+            ],
+            source_name="SailPoint Documentation：Access Request Overview",
+            source_url="https://documentation.sailpoint.com/saas/help/requests/index.html",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+        ReviewedImplementationReference(
+            reference_key="servicenow_access_management_automation",
+            display_title_zh="ServiceNow：存取管理自動化",
+            publisher="ServiceNow",
+            summary_zh="說明以服務目錄提交存取申請、由流程處理核准與後續任務，並支援多種身分系統。",
+            supported_practice_keys=[
+                "structured_request_intake",
+                "manager_approval",
+                "provisioning_separation",
+                "exception_handling",
+            ],
+            source_name="ServiceNow Documentation：Access Management Automation",
+            source_url="https://www.servicenow.com/docs/r/platform-user-interface/service-portal/access-management.html",
+            review_status=ReviewStatus.APPROVED,
+            content_version="2026.07.29.2",
+        ),
+    )
+
+
+def golden_scenario_coverage() -> tuple[GoldenScenarioCoverage, ...]:
+    return (
+        GoldenScenarioCoverage(
+            scenario_id="knowledge_assist",
+            expected_solution_key="knowledge_retrieval_human_review",
+            required_practice_keys=[],
+            minimum_primary_cases=1,
+            minimum_supporting_cases=0,
+            minimum_implementation_references=0,
+            content_version=_CONTENT_VERSION,
+        ),
+        GoldenScenarioCoverage(
+            scenario_id="expense_rules",
+            expected_solution_key="rules_and_human_approval",
+            required_practice_keys=[],
+            minimum_primary_cases=0,
+            minimum_supporting_cases=0,
+            minimum_implementation_references=0,
+            content_version=_CONTENT_VERSION,
+        ),
+        GoldenScenarioCoverage(
+            scenario_id="governed_access",
+            expected_solution_key="permission_request_rules_and_human_approval",
+            required_practice_keys=[
+                "structured_request_intake",
+                "required_field_validation",
+                "policy_rule_validation",
+                "manager_approval",
+                "provisioning_separation",
+                "exception_handling",
+                "audit_trail",
+            ],
+            minimum_primary_cases=1,
+            minimum_supporting_cases=1,
+            minimum_implementation_references=1,
+            content_version="2026.07.29.2",
+        ),
+        GoldenScenarioCoverage(
+            scenario_id="maintenance_coverage_gap",
+            expected_solution_key="data_readiness_validation",
+            required_practice_keys=[],
+            minimum_primary_cases=0,
+            minimum_supporting_cases=0,
+            minimum_implementation_references=0,
             content_version=_CONTENT_VERSION,
         ),
     )

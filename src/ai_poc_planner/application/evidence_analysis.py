@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from pydantic import ValidationError
 
 from ai_poc_planner.application.case_centered_assessment import (
+    _is_controlled_permission_request_workflow,
     build_case_centered_assessment,
     build_deterministic_gate_evaluation,
     build_deterministic_scores,
@@ -46,7 +47,10 @@ from ai_poc_planner.domain.project_history import FactRevision, ProjectVersion
 from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import CurrentVersionRequiredError
-from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
+from ai_poc_planner.persistence.solution_catalog import (
+    CatalogCoverageError,
+    SQLiteSolutionCatalogRepository,
+)
 from ai_poc_planner.providers.analysis_contracts import (
     option_detail_contract,
     stage_a0_contract,
@@ -600,7 +604,7 @@ class EvidenceAnalysisService:
         # Only confirmed project facts may select the reviewed-case catalogue.
         opportunity_types = list(infer_opportunity_types(facts))
         recommendation_category = derive_recommendation_category(facts, gates)
-        solution = self._approved_solution(recommendation_category)
+        solution = self._approved_solution(recommendation_category, facts=facts)
         if solution is None:
             raise EvidenceAnalysisError("approved_solution_not_found")
         if solution.recommendation_category != recommendation_category.value:
@@ -609,6 +613,7 @@ class EvidenceAnalysisService:
         if catalog is None:
             raise EvidenceAnalysisError("catalogue_unavailable")
         cases = catalog.list_approved_cases_for_solution(solution.solution_key)
+        links = catalog.list_approved_case_links_for_solution(solution.solution_key)
 
         case_centered = build_case_centered_assessment(
             cases=cases,
@@ -618,7 +623,24 @@ class EvidenceAnalysisService:
             recommendation_title=solution.display_name_zh,
             gate_results=gates,
             option_kind=selected.option_kind.value,
+            eligible_case_ids={item.case_id for item in links},
+            support_type_by_case={
+                item.case_id: item.support_type
+                for item in links
+                if item.support_type != "contra"
+            },
         )
+        if solution.solution_key == "permission_request_rules_and_human_approval":
+            try:
+                catalog.require_coverage(
+                    "governed_access",
+                    solution.solution_key,
+                    matched_case_ids=[
+                        item.case.case_id for item in case_centered.matched_cases
+                    ],
+                )
+            except CatalogCoverageError as error:
+                raise EvidenceAnalysisError(error.code) from error
         return ValidatedAnalysisResult(
             id=self._uuid_factory(),
             version_id=version.id,
@@ -640,10 +662,22 @@ class EvidenceAnalysisService:
             case_centered=case_centered,
         )
 
-    def _approved_solution(self, category: RecommendationCategory):
+    def _approved_solution(
+        self,
+        category: RecommendationCategory,
+        *,
+        facts: tuple[FactRevision, ...] = (),
+    ):
         catalog = getattr(self, "_catalog", None)
         if catalog is None:
             raise EvidenceAnalysisError("catalogue_unavailable")
+        if (
+            category is RecommendationCategory.RULES_FIRST
+            and _is_controlled_permission_request_workflow(
+                {fact.fact_key: fact for fact in facts}
+            )
+        ):
+            return catalog.get_solution("permission_request_rules_and_human_approval")
         return catalog.get_approved_solution_for_category(category)
 
     @staticmethod

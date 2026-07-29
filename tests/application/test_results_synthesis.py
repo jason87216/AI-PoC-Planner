@@ -323,7 +323,9 @@ def test_governed_access_report_excludes_unrelated_retrieval_content() -> None:
         "規則提示正確率",
         "主管審批處理時間",
         "例外紀錄完整性",
-        "目前沒有足夠相關的已審核成熟案例",
+        "Demandbase",
+        "Cenibra",
+        "Varo",
     ):
         assert required in main_report
 
@@ -342,7 +344,12 @@ def test_governed_access_report_excludes_unrelated_retrieval_content() -> None:
         assert prohibited not in main_report
 
     assert "目前沒有直接案例支持" not in main_report
-    assert "本次未找到可直接參照的已審核案例" in main_report
+    assert "目前沒有足夠相關的已審核成熟案例" not in main_report
+    assert "本次未找到可直接參照的已審核案例" not in main_report
+    assert len(_synthesis("governed_access").recommendation_narrative) > len(
+        _synthesis("governed_access").comparison_narrative
+    )
+    assert len(_synthesis("governed_access").option_comparison) == 4
 
 
 def test_roadmap_contains_immediate_actions_and_has_no_standalone_next_steps() -> None:

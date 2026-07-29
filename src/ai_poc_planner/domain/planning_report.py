@@ -80,6 +80,7 @@ class OptionComparison(ContractModel):
     case_evidence: NonEmptyStr = "本次未找到可直接參照的已審核案例。"
     transferable_practice: NonEmptyStr = "尚待確認可移植做法。"
     cannot_copy: list[NonEmptyStr] = Field(default_factory=list)
+    supporting_references: list[NonEmptyStr] = Field(default_factory=list)
     # Legacy columns are accepted for old persisted reports but are not part of
     # the redesigned report payload.
     suitable_reason: str = Field(default="", exclude=True)
@@ -172,6 +173,10 @@ class ReviewedCaseContent(ContractModel):
     limitations_zh: NonEmptyStr
     source_name: NonEmptyStr
     source_url: NonEmptyStr
+    support_type: str = "supporting"
+    supported_practice_keys: list[NonEmptyStr] = Field(default_factory=list)
+    applicability_note_zh: str = ""
+    limitation_note_zh: str = ""
 
 
 class ReportSynthesis(ContractModel):

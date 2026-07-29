@@ -173,10 +173,15 @@ Delivered:
 
 Verification:
 
-- `618 passed, 6 skipped` before the final populated UAT refresh;
-- Ruff, formatting, and diff checks passed;
-- headed Chrome loaded the Local UI. No completed project existed in the Local runtime,
-  so the existing-project re-entry check was not performed.
+- the populated permission-request UAT uses a fresh persistent state root and artifact
+  directory, with schema `8`, `ReportSynthesis` `2.2`, three approved matching cases,
+  and three persisted interview findings;
+- API first/refresh/history downloads are byte-identical; UI first/history downloads
+  are byte-identical and line-for-line identical to the API report;
+- refresh and history re-entry issue report reads only, with no report-generation POST;
+- `622 passed, 6 skipped`, Ruff, formatting, and diff checks passed;
+- headed Chrome verified the Results UI's integrated comparison chapter and download
+  flow without standalone case cards or raw interview content.
 
 ### Checkpoint P6
 

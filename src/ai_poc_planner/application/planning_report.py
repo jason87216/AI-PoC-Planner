@@ -455,7 +455,12 @@ class PlanningReportService:
             raise PlanningReportError("analysis_not_found")
         profile = self._profile(version)
         facts = self._history.list_current_facts(project_id, version_number)
-        solution, reviewed_cases = self._catalogue_for_report(analysis, facts)
+        (
+            solution,
+            reviewed_cases,
+            case_links,
+            implementation_references,
+        ) = self._catalogue_for_report(analysis, facts)
         tokens = {
             f"F{i:03d}": fact
             for i, fact in enumerate(
@@ -533,6 +538,8 @@ class PlanningReportService:
             report=draft,
             interview_questions=questions,
             messages=messages,
+            case_links=case_links,
+            implementation_references=implementation_references,
         )
         markdown = render_synthesis_markdown(synthesis)
         result = PersistedPlanningReport(
@@ -696,17 +703,44 @@ class PlanningReportService:
             is not result.recommendation_category
         ):
             raise PlanningReportError("project_solution_mismatch")
+        case_links = self._catalog.list_approved_case_links_for_solution(
+            solution.solution_key
+        )
         cases = []
         for match in result.matched_cases:
             case = self._catalog.get_approved_case(match.case.case_id)
-            if (
-                case is None
-                or solution.solution_key not in case.applicable_solution_keys
-                or case.model_dump(mode="json") != match.case.model_dump(mode="json")
+            if case is None or case.model_dump(mode="json") != match.case.model_dump(
+                mode="json"
             ):
                 raise PlanningReportError("reviewed_case_mismatch")
             cases.append(case)
-        return solution, tuple(cases)
+        linked_case_ids = {
+            link.case_id for link in case_links if link.support_type != "contra"
+        }
+        if (
+            not {match.case.case_id for match in result.matched_cases}
+            <= linked_case_ids
+        ):
+            raise PlanningReportError("reviewed_case_mismatch")
+        if solution.solution_key == "permission_request_rules_and_human_approval":
+            try:
+                self._catalog.require_coverage(
+                    "governed_access",
+                    solution.solution_key,
+                    matched_case_ids=[
+                        match.case.case_id for match in result.matched_cases
+                    ],
+                )
+            except Exception as error:
+                raise PlanningReportError("CATALOG_COVERAGE_ERROR") from error
+        return (
+            solution,
+            tuple(cases),
+            tuple(case_links),
+            self._catalog.list_approved_implementation_references(
+                solution.solution_key
+            ),
+        )
 
     def _interview_records(
         self, version_id: UUID, project_id: UUID, version_number: int

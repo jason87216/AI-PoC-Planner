@@ -217,8 +217,10 @@ def test_opportunity_inference_uses_confirmed_facts_not_model_options() -> None:
     assert OpportunityType.PREDICTIVE_MAINTENANCE not in inferred
 
 
-def test_permission_request_rules_with_human_approval_prefer_governed_route() -> None:
-    """A missing validation set must not hide a controlled access workflow."""
+def test_permission_request_rules_with_human_approval_prefer_rules_first_route() -> (
+    None
+):
+    """A controlled permission workflow is rules-first, not AI-assistive."""
 
     facts = (
         _fact(
@@ -237,6 +239,6 @@ def test_permission_request_rules_with_human_approval_prefer_governed_route() ->
         ),
     )
 
-    assert derive_recommendation_category(facts, ()) is (
-        RecommendationCategory.GOVERNED_ASSISTIVE
+    assert (
+        derive_recommendation_category(facts, ()) is RecommendationCategory.RULES_FIRST
     )

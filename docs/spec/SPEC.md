@@ -174,10 +174,10 @@ fit and gap comparison. FAISS is not required.
 
 A controlled permission-request route requires confirmed evidence of an access
 request, fixed rule checks, and human approval together. It maps to the
-approved governed access solution pattern even when validation samples are not
-yet available; a generic mention of access or knowledge material is
-insufficient. This prevents data-readiness gaps from obscuring the project's
-actual rules-and-approval workflow.
+approved `permission_request_rules_and_human_approval` solution pattern. Its
+first phase standardizes application fields, checks fixed rules, preserves
+manager approval, and leaves actual provisioning to IT; it does not
+automatically approve requests or write directly to the permission system.
 
 ### Report contract
 
@@ -185,10 +185,12 @@ The canonical `ReportSynthesis` contains: project evaluation summary; the
 reviewed formal recommendation and rationale; concise interview findings;
 integrated solution/case/project-gap comparison; implementation roadmap, risks,
 and acceptance; and a technical appendix. The comparison presents the reviewed
-solution, each matching reviewed case with a named source link, then the
-solution/case table and current/target/gap table. It may state that no sufficient
-reviewed case exists; it must not force an unrelated case. UI and Markdown use
-the same persisted synthesis and source links.
+solution, each matching reviewed case with a named source link, then one
+integrated solution/case table and a current/target/gap table. It may state that
+no sufficient reviewed case exists; it must not force an unrelated case. UI and
+Markdown use the same persisted synthesis and source links. The permission-
+request route has approved evidence links for Demandbase, Cenibra, and Varo,
+each explicitly related to the rules-and-approval solution key.
 
 For the governed access route, comparison alternatives must remain relevant to
 the rules-and-approval workflow. It must not introduce an unrelated knowledge

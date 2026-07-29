@@ -191,7 +191,7 @@ def test_results_ui_does_not_expose_internal_details_or_forbidden_layers() -> No
     assert "traceback" not in source.casefold()
     assert source.count("st.expander") == 1
     assert "report_synthesis_view" in source
-    assert "來源：[" in source
+    assert "case_evidence" in source
     assert "source_url" in source
 
 

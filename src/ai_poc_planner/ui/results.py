@@ -178,6 +178,7 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
                             if field
                             in {
                                 "supporting_cases",
+                                "supporting_references",
                                 "cannot_copy",
                                 "actions",
                                 "outputs",
@@ -255,6 +256,7 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
                 "case_evidence",
                 "transferable_practice",
                 "cannot_copy",
+                "supporting_references",
                 "conclusion",
                 "recommended",
             ),

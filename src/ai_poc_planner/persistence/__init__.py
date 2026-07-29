@@ -36,9 +36,11 @@ from ai_poc_planner.persistence.schema import (
     initialize_database,
     read_schema_version,
 )
+from ai_poc_planner.persistence.solution_catalog import CatalogCoverageError
 
 __all__ = [
     "CURRENT_SCHEMA_VERSION",
+    "CatalogCoverageError",
     "CompletedVersionImmutableError",
     "CurrentVersionRequiredError",
     "DatabaseOperationError",

@@ -13,7 +13,7 @@ from ai_poc_planner.persistence.errors import (
     UnsupportedSchemaVersionError,
 )
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 8
 _PROJECT_COLUMNS = frozenset(
     {
         "id",
@@ -93,6 +93,7 @@ _SOLUTION_PATTERN_COLUMNS = frozenset(
         "human_boundary_zh",
         "expected_outputs_zh",
         "acceptance_focus_zh",
+        "alternative_type",
         "review_status",
         "content_version",
         "created_at",
@@ -127,7 +128,7 @@ _REVIEWED_CASE_COLUMNS = frozenset(
 _CREATE_SOLUTION_PATTERNS_TABLE = """
 CREATE TABLE IF NOT EXISTS solution_patterns (
     solution_key TEXT PRIMARY KEY NOT NULL,
-    recommendation_category TEXT NOT NULL UNIQUE,
+    recommendation_category TEXT NOT NULL,
     display_name_zh TEXT NOT NULL,
     short_description_zh TEXT NOT NULL,
     detailed_description_zh TEXT NOT NULL,
@@ -137,6 +138,7 @@ CREATE TABLE IF NOT EXISTS solution_patterns (
     human_boundary_zh TEXT NOT NULL,
     expected_outputs_zh TEXT NOT NULL,
     acceptance_focus_zh TEXT NOT NULL,
+    alternative_type TEXT,
     review_status TEXT NOT NULL,
     content_version TEXT NOT NULL,
     created_at TEXT NOT NULL,
@@ -166,6 +168,81 @@ CREATE TABLE IF NOT EXISTS reviewed_cases (
     reviewed_at TEXT NOT NULL,
     content_version TEXT NOT NULL,
     payload_json TEXT NOT NULL
+)
+"""
+_SOLUTION_CASE_LINK_COLUMNS = frozenset(
+    {
+        "solution_key",
+        "case_id",
+        "support_type",
+        "supported_practice_keys_json",
+        "applicability_note_zh",
+        "limitation_note_zh",
+        "review_status",
+        "content_version",
+    }
+)
+_CREATE_SOLUTION_CASE_LINKS_TABLE = """
+CREATE TABLE IF NOT EXISTS solution_case_links (
+    solution_key TEXT NOT NULL REFERENCES solution_patterns(solution_key),
+    case_id TEXT NOT NULL REFERENCES reviewed_cases(case_id),
+    support_type TEXT NOT NULL CHECK (support_type IN ('primary', 'supporting', 'contra')),
+    supported_practice_keys_json TEXT NOT NULL,
+    applicability_note_zh TEXT NOT NULL,
+    limitation_note_zh TEXT NOT NULL,
+    review_status TEXT NOT NULL,
+    content_version TEXT NOT NULL,
+    PRIMARY KEY (solution_key, case_id, support_type)
+)
+"""
+_IMPLEMENTATION_REFERENCE_COLUMNS = frozenset(
+    {
+        "reference_key",
+        "display_title_zh",
+        "publisher",
+        "summary_zh",
+        "supported_practice_keys_json",
+        "source_name",
+        "source_url",
+        "review_status",
+        "content_version",
+        "payload_json",
+    }
+)
+_CREATE_IMPLEMENTATION_REFERENCES_TABLE = """
+CREATE TABLE IF NOT EXISTS reviewed_implementation_references (
+    reference_key TEXT PRIMARY KEY NOT NULL,
+    display_title_zh TEXT NOT NULL,
+    publisher TEXT NOT NULL,
+    summary_zh TEXT NOT NULL,
+    supported_practice_keys_json TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    review_status TEXT NOT NULL,
+    content_version TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+)
+"""
+_GOLDEN_COVERAGE_COLUMNS = frozenset(
+    {
+        "scenario_id",
+        "expected_solution_key",
+        "required_practice_keys_json",
+        "minimum_primary_cases",
+        "minimum_supporting_cases",
+        "minimum_implementation_references",
+        "content_version",
+    }
+)
+_CREATE_GOLDEN_COVERAGE_TABLE = """
+CREATE TABLE IF NOT EXISTS golden_scenario_coverage (
+    scenario_id TEXT PRIMARY KEY NOT NULL,
+    expected_solution_key TEXT NOT NULL REFERENCES solution_patterns(solution_key),
+    required_practice_keys_json TEXT NOT NULL,
+    minimum_primary_cases INTEGER NOT NULL CHECK (minimum_primary_cases >= 0),
+    minimum_supporting_cases INTEGER NOT NULL CHECK (minimum_supporting_cases >= 0),
+    minimum_implementation_references INTEGER NOT NULL CHECK (minimum_implementation_references >= 0),
+    content_version TEXT NOT NULL
 )
 """
 _PLANNING_PROJECT_COLUMNS = frozenset(
@@ -822,6 +899,13 @@ def _validate_phase_five_tables(connection: sqlite3.Connection) -> None:
 def _validate_catalog_tables(connection: sqlite3.Connection) -> None:
     _validate_columns(connection, "solution_patterns", _SOLUTION_PATTERN_COLUMNS)
     _validate_columns(connection, "reviewed_cases", _REVIEWED_CASE_COLUMNS)
+    _validate_columns(connection, "solution_case_links", _SOLUTION_CASE_LINK_COLUMNS)
+    _validate_columns(
+        connection,
+        "reviewed_implementation_references",
+        _IMPLEMENTATION_REFERENCE_COLUMNS,
+    )
+    _validate_columns(connection, "golden_scenario_coverage", _GOLDEN_COVERAGE_COLUMNS)
 
 
 def _create_phase_two_schema(connection: sqlite3.Connection) -> None:
@@ -893,14 +977,64 @@ def _create_phase_five_schema(connection: sqlite3.Connection) -> None:
 def _create_catalog_schema(connection: sqlite3.Connection) -> None:
     connection.execute(_CREATE_SOLUTION_PATTERNS_TABLE)
     connection.execute(_CREATE_REVIEWED_CASES_TABLE)
+    connection.execute(_CREATE_SOLUTION_CASE_LINKS_TABLE)
+    connection.execute(_CREATE_IMPLEMENTATION_REFERENCES_TABLE)
+    connection.execute(_CREATE_GOLDEN_COVERAGE_TABLE)
+
+
+def _rebuild_solution_patterns_without_category_unique(
+    connection: sqlite3.Connection,
+) -> None:
+    """Upgrade v7's one-row-per-category table for many candidate routes."""
+
+    indexes = connection.execute("PRAGMA index_list(solution_patterns)").fetchall()
+    has_category_unique = False
+    for index in indexes:
+        if not index[2]:
+            continue
+        columns = connection.execute(f"PRAGMA index_info({index[1]})").fetchall()
+        if [row[2] for row in columns] == ["recommendation_category"]:
+            has_category_unique = True
+            break
+    if not has_category_unique:
+        return
+    connection.execute("ALTER TABLE solution_patterns RENAME TO solution_patterns_v7")
+    connection.execute(_CREATE_SOLUTION_PATTERNS_TABLE)
+    old_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(solution_patterns_v7)")
+    }
+    alternative_expression = (
+        "alternative_type" if "alternative_type" in old_columns else "NULL"
+    )
+    connection.execute(
+        f"""
+        INSERT INTO solution_patterns (
+            solution_key, recommendation_category, display_name_zh,
+            short_description_zh, detailed_description_zh, suitable_when_zh,
+            not_suitable_when_zh, typical_scope_zh, human_boundary_zh,
+            expected_outputs_zh, acceptance_focus_zh, alternative_type,
+            review_status, content_version, created_at, updated_at
+        )
+        SELECT solution_key, recommendation_category, display_name_zh,
+            short_description_zh, detailed_description_zh, suitable_when_zh,
+            not_suitable_when_zh, typical_scope_zh, human_boundary_zh,
+            expected_outputs_zh, acceptance_focus_zh, {alternative_expression},
+            review_status, content_version, created_at, updated_at
+        FROM solution_patterns_v7
+        """
+    )
+    connection.execute("DROP TABLE solution_patterns_v7")
 
 
 def _seed_reviewed_catalogue(connection: sqlite3.Connection) -> None:
     """Upsert versioned editorial content without letting a provider write it."""
 
     from ai_poc_planner.persistence.catalog_seed import (
+        golden_scenario_coverage,
+        implementation_references,
         reviewed_cases,
         reviewed_solution_patterns,
+        solution_case_links,
     )
 
     for solution in reviewed_solution_patterns():
@@ -964,6 +1098,75 @@ def _seed_reviewed_catalogue(connection: sqlite3.Connection) -> None:
             """,
             tuple(values[column] for column in columns),
         )
+    for link in solution_case_links():
+        values = link.model_dump(mode="json")
+        values["supported_practice_keys_json"] = json.dumps(
+            values.pop("supported_practice_keys"), ensure_ascii=False
+        )
+        columns = tuple(values)
+        placeholders = ", ".join("?" for _ in columns)
+        updates = ", ".join(
+            f"{column} = excluded.{column}"
+            for column in columns
+            if column not in {"solution_key", "case_id", "support_type"}
+        )
+        connection.execute(
+            f"""
+            INSERT INTO solution_case_links ({", ".join(columns)})
+            VALUES ({placeholders})
+            ON CONFLICT(solution_key, case_id, support_type) DO UPDATE SET {updates}
+            WHERE excluded.content_version > solution_case_links.content_version
+            """,
+            tuple(values[column] for column in columns),
+        )
+    for reference in implementation_references():
+        payload = reference.model_dump(mode="json")
+        supported_practice_keys = payload.pop("supported_practice_keys")
+        values = {
+            **payload,
+            "supported_practice_keys_json": json.dumps(
+                supported_practice_keys, ensure_ascii=False
+            ),
+            "source_url": str(reference.source_url),
+            "payload_json": json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        }
+        columns = tuple(values)
+        placeholders = ", ".join("?" for _ in columns)
+        updates = ", ".join(
+            f"{column} = excluded.{column}"
+            for column in columns
+            if column != "reference_key"
+        )
+        connection.execute(
+            f"""
+            INSERT INTO reviewed_implementation_references ({", ".join(columns)})
+            VALUES ({placeholders})
+            ON CONFLICT(reference_key) DO UPDATE SET {updates}
+            WHERE excluded.content_version > reviewed_implementation_references.content_version
+            """,
+            tuple(values[column] for column in columns),
+        )
+    for coverage in golden_scenario_coverage():
+        values = coverage.model_dump(mode="json")
+        values["required_practice_keys_json"] = json.dumps(
+            values.pop("required_practice_keys"), ensure_ascii=False
+        )
+        columns = tuple(values)
+        placeholders = ", ".join("?" for _ in columns)
+        updates = ", ".join(
+            f"{column} = excluded.{column}"
+            for column in columns
+            if column != "scenario_id"
+        )
+        connection.execute(
+            f"""
+            INSERT INTO golden_scenario_coverage ({", ".join(columns)})
+            VALUES ({placeholders})
+            ON CONFLICT(scenario_id) DO UPDATE SET {updates}
+            WHERE excluded.content_version > golden_scenario_coverage.content_version
+            """,
+            tuple(values[column] for column in columns),
+        )
 
 
 def _phase_two_table_count(connection: sqlite3.Connection) -> int:
@@ -988,9 +1191,9 @@ def _rollback_quietly(connection: sqlite3.Connection) -> None:
 
 
 def initialize_database(connection: sqlite3.Connection) -> None:
-    """Create schema v7 or additively upgrade supported legacy databases."""
+    """Create schema v8 or additively upgrade supported legacy databases."""
     version = read_schema_version(connection)
-    if version not in {0, 1, 2, 3, 4, 5, 6, CURRENT_SCHEMA_VERSION}:
+    if version not in {0, 1, 2, 3, 4, 5, 6, 7, CURRENT_SCHEMA_VERSION}:
         raise UnsupportedSchemaVersionError(
             "database schema version is not supported by this application"
         )
@@ -999,6 +1202,7 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         try:
             _ensure_case_centered_column(connection)
             _create_catalog_schema(connection)
+            _rebuild_solution_patterns_without_category_unique(connection)
             _seed_reviewed_catalogue(connection)
             _validate_current_schema(connection)
             connection.commit()
@@ -1029,6 +1233,7 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         _create_phase_five_schema(connection)
         _validate_phase_five_tables(connection)
         _create_catalog_schema(connection)
+        _rebuild_solution_patterns_without_category_unique(connection)
         _seed_reviewed_catalogue(connection)
         _validate_catalog_tables(connection)
         connection.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION}")

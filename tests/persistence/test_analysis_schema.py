@@ -14,12 +14,12 @@ from ai_poc_planner.persistence.schema import (
 )
 
 
-def test_fresh_database_creates_v7_analysis_report_and_catalogue_tables() -> None:
+def test_fresh_database_creates_v8_analysis_report_and_catalogue_tables() -> None:
     connection = sqlite3.connect(":memory:")
     initialize_database(connection)
 
-    assert CURRENT_SCHEMA_VERSION == 7
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert CURRENT_SCHEMA_VERSION == 8
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     tables = {
         row[0]
         for row in connection.execute(
@@ -35,10 +35,13 @@ def test_fresh_database_creates_v7_analysis_report_and_catalogue_tables() -> Non
         "planning_reports",
         "solution_patterns",
         "reviewed_cases",
+        "solution_case_links",
+        "reviewed_implementation_references",
+        "golden_scenario_coverage",
     } <= tables
 
 
-def test_v4_database_additively_upgrades_to_v7() -> None:
+def test_v4_database_additively_upgrades_to_v8() -> None:
     connection = sqlite3.connect(":memory:")
     initialize_database(connection)
     connection.execute("DROP TABLE planning_analysis_gate_results")
@@ -47,7 +50,7 @@ def test_v4_database_additively_upgrades_to_v7() -> None:
 
     initialize_database(connection)
 
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
 
 
 def test_future_and_incomplete_schema_are_rejected() -> None:

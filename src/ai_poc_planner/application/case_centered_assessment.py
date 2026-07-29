@@ -278,6 +278,10 @@ _PERMISSION_RULE_SIGNAL_WORDS = (
     "規則檢查",
     "規則判斷",
     "權限規則",
+    "權限範本",
+    "固定規則",
+    "必填欄位",
+    "漏填",
     "rule check",
     "rule validation",
 )
@@ -956,6 +960,8 @@ def rank_case_matches(
     solution_key: str,
     gate_results: Sequence[ProgramGateResult],
     limit: int = 3,
+    eligible_case_ids: set[str] | None = None,
+    support_type_by_case: Mapping[str, str] | None = None,
 ) -> tuple[MatchedCaseAssessment, ...]:
     """Filter reviewed cases, calculate fit, then combine value and fit."""
 
@@ -966,10 +972,14 @@ def rank_case_matches(
     assessment_facts = build_deterministic_assessment_facts(facts_tuple)
     gate_ids = {item.rule_id for item in gate_results}
     ranked: list[tuple[float, int, int, str, MatchedCaseAssessment]] = []
+    eligible = eligible_case_ids
     for case in cases:
         if case.review_status is not ReviewStatus.APPROVED:
             continue
-        if solution_key not in case.applicable_solution_keys:
+        if eligible is not None:
+            if case.case_id not in eligible:
+                continue
+        elif solution_key not in case.applicable_solution_keys:
             continue
         if not opportunities.intersection(
             item.value for item in case.opportunity_types
@@ -1001,7 +1011,21 @@ def rank_case_matches(
             )
         )
     ranked.sort(key=lambda item: item[:4])
-    return tuple(item[4] for item in ranked[:limit])
+    ordered = [item[4] for item in ranked]
+    if support_type_by_case:
+        selected: list[MatchedCaseAssessment] = []
+        for support_type in ("primary", "supporting"):
+            selected.extend(
+                item
+                for item in ordered
+                if support_type_by_case.get(item.case.case_id) == support_type
+                and item not in selected
+            )
+            if len(selected) >= limit:
+                break
+        selected.extend(item for item in ordered if item not in selected)
+        ordered = selected
+    return tuple(ordered[:limit])
 
 
 def _case_conditions_conflict(
@@ -1043,9 +1067,9 @@ def derive_recommendation_category(
     facts_tuple = tuple(facts)
     assessment_facts = build_deterministic_assessment_facts(facts_tuple)
     gate_ids = {item.rule_id for item in gate_results}
-    if "HG-03" in gate_ids or _is_controlled_permission_request_workflow(
-        _all_fact_map(facts_tuple)
-    ):
+    if _is_controlled_permission_request_workflow(_all_fact_map(facts_tuple)):
+        return RecommendationCategory.RULES_FIRST
+    if "HG-03" in gate_ids:
         return RecommendationCategory.GOVERNED_ASSISTIVE
     if (
         assessment_facts.technical_fit.traditional_solution_preferred
@@ -1129,6 +1153,8 @@ def build_case_centered_assessment(
     recommendation_title: str,
     gate_results: Sequence[ProgramGateResult],
     option_kind: str,
+    eligible_case_ids: set[str] | None = None,
+    support_type_by_case: Mapping[str, str] | None = None,
 ) -> CaseCenteredAssessment:
     facts_tuple = tuple(facts)
     matches = rank_case_matches(
@@ -1138,6 +1164,8 @@ def build_case_centered_assessment(
         solution_key=solution_key,
         gate_results=gate_results,
         limit=3,
+        eligible_case_ids=eligible_case_ids,
+        support_type_by_case=support_type_by_case,
     )
     practices = [item for match in matches if (item := _practice(match)) is not None]
     impacts = [_gate_impact(gate) for gate in gate_results]

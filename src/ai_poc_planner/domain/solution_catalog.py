@@ -28,6 +28,9 @@ class SolutionPattern(ContractModel):
     human_boundary_zh: NonEmptyStr
     expected_outputs_zh: NonEmptyStr
     acceptance_focus_zh: NonEmptyStr
+    alternative_type: (
+        Literal["baseline", "recommended", "future_extension", "rejected"] | None
+    ) = None
     review_status: ReviewStatus
     content_version: NonEmptyStr
     created_at: NonEmptyStr
