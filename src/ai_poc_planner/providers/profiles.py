@@ -16,6 +16,12 @@ from pydantic import (
 )
 
 from ai_poc_planner.domain.models import ContractModel, NonEmptyStr, UtcDateTime
+from ai_poc_planner.providers.capabilities import (
+    AuthenticationMode,
+    OpenAICompatibleCapabilities,
+    ReasoningParameter,
+    TokenParameter,
+)
 from ai_poc_planner.providers.base import (
     ProviderConnectionMessage,
     ProviderConnectionState,
@@ -34,6 +40,7 @@ class ModelProfilePublic(ContractModel):
     model_name: NonEmptyStr
     structured_output_mode: StructuredOutputMode | None = None
     reasoning_effort: ReasoningEffort | None = None
+    capabilities: OpenAICompatibleCapabilities | None = None
     is_selected: bool
     is_enabled: bool
     created_at: UtcDateTime
@@ -64,12 +71,62 @@ class ModelProfile(ModelProfilePublic):
 
     api_key: SecretStr | None = Field(default=None, repr=False)
 
+    @property
+    def effective_structured_output_mode(self) -> StructuredOutputMode:
+        """Return the single preferred mode used by runtime orchestration."""
+
+        return self.structured_output_mode or StructuredOutputMode.JSON_OBJECT
+
+    @property
+    def effective_capabilities(self) -> OpenAICompatibleCapabilities:
+        """Normalize legacy profiles once at the profile boundary."""
+
+        if self.capabilities is not None:
+            return self.capabilities
+        return OpenAICompatibleCapabilities(
+            authentication=AuthenticationMode.BEARER_OPTIONAL,
+            token_parameter=TokenParameter.MAX_TOKENS,
+            reasoning_parameter=(
+                ReasoningParameter.REASONING_EFFORT
+                if self.reasoning_effort is not None
+                else ReasoningParameter.UNSUPPORTED
+            ),
+            json_schema=self.structured_output_mode is StructuredOutputMode.JSON_SCHEMA,
+            json_object=self.structured_output_mode
+            is not StructuredOutputMode.JSON_SCHEMA,
+        )
+
+    @model_validator(mode="after")
+    def validate_effective_capabilities(self) -> Self:
+        capabilities = self.effective_capabilities
+        api_key = (
+            self.api_key.get_secret_value().strip() if self.api_key is not None else ""
+        )
+        if (
+            capabilities.authentication is AuthenticationMode.BEARER_REQUIRED
+            and not api_key
+        ):
+            raise ValueError("model_profile_auth_required")
+        if capabilities.authentication is AuthenticationMode.NONE and api_key:
+            raise ValueError("model_profile_auth_forbidden")
+        if (
+            capabilities.reasoning_parameter is ReasoningParameter.UNSUPPORTED
+            and self.reasoning_effort is not None
+        ):
+            raise ValueError("model_profile_reasoning_unsupported")
+        preferred = self.effective_structured_output_mode
+        if preferred is StructuredOutputMode.JSON_SCHEMA and not capabilities.json_schema:
+            raise ValueError("model_profile_structured_output_invalid")
+        if preferred is StructuredOutputMode.JSON_OBJECT and not capabilities.json_object:
+            raise ValueError("model_profile_structured_output_invalid")
+        return self
+
     def to_public(self) -> ModelProfilePublic:
         """Return the explicit public contract without an API key field."""
 
-        return ModelProfilePublic.model_validate(
-            self.model_dump(mode="json", exclude={"api_key"})
-        )
+        payload = self.model_dump(mode="json", exclude={"api_key"})
+        payload["capabilities"] = self.effective_capabilities.model_dump(mode="json")
+        return ModelProfilePublic.model_validate(payload)
 
     def to_private_storage_json(self) -> str:
         """Serialize plaintext API-key data for the future P1.2 private repository.

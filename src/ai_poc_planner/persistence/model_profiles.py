@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
+from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.base import ReasoningEffort, StructuredOutputMode
 from ai_poc_planner.providers.profiles import ModelProfile
 
@@ -24,6 +25,11 @@ class ModelProfileRepositoryError(RuntimeError):
     """Stable, secret-safe base error for local model-profile persistence."""
 
     code = "model_profile_repository_error"
+
+    def __init__(self, message: str | None = None) -> None:
+        resolved = message or self.code
+        super().__init__(resolved)
+        self.code = resolved
 
 
 class ModelProfileNotFoundError(ModelProfileRepositoryError):
@@ -40,6 +46,14 @@ class SelectedModelProfileDisabledError(ModelProfileRepositoryError):
 
 class InvalidStoredModelProfilesError(ModelProfileRepositoryError):
     code = "invalid_stored_model_profiles"
+
+
+_SAFE_PROFILE_VALIDATION_CODES = {
+    "model_profile_auth_required",
+    "model_profile_auth_forbidden",
+    "model_profile_reasoning_unsupported",
+    "model_profile_structured_output_invalid",
+}
 
 
 def _utc_now() -> datetime:
@@ -116,6 +130,7 @@ class LocalModelProfileRepository:
         api_key: str | None = None,
         structured_output_mode: StructuredOutputMode | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        capabilities: OpenAICompatibleCapabilities | None = None,
         is_enabled: bool = True,
     ) -> ModelProfile:
         with self._lock:
@@ -130,15 +145,14 @@ class LocalModelProfileRepository:
                     api_key=_normalized_api_key(api_key),
                     structured_output_mode=structured_output_mode,
                     reasoning_effort=reasoning_effort,
+                    capabilities=capabilities,
                     is_selected=False,
                     is_enabled=is_enabled,
                     created_at=timestamp,
                     updated_at=timestamp,
                 )
             except ValidationError as error:
-                raise ModelProfileRepositoryError(
-                    "model profile input is invalid"
-                ) from error
+                raise self._profile_validation_error(error) from error
             self._ensure_unique(profiles, profile)
             self._write([*profiles, profile])
             return profile
@@ -153,6 +167,7 @@ class LocalModelProfileRepository:
         api_key: str | None | object = _UNSET,
         structured_output_mode: StructuredOutputMode | None | object = _UNSET,
         reasoning_effort: ReasoningEffort | None | object = _UNSET,
+        capabilities: OpenAICompatibleCapabilities | None | object = _UNSET,
         is_enabled: bool | None = None,
     ) -> ModelProfile:
         with self._lock:
@@ -182,6 +197,11 @@ class LocalModelProfileRepository:
                         if reasoning_effort is _UNSET
                         else reasoning_effort
                     ),
+                    capabilities=(
+                        current.capabilities
+                        if capabilities is _UNSET
+                        else capabilities
+                    ),
                     is_selected=(
                         current.is_selected if is_enabled is not False else False
                     ),
@@ -190,9 +210,7 @@ class LocalModelProfileRepository:
                     updated_at=self._clock(),
                 )
             except ValidationError as error:
-                raise ModelProfileRepositoryError(
-                    "model profile input is invalid"
-                ) from error
+                raise self._profile_validation_error(error) from error
             self._ensure_unique(profiles, updated, exclude_id=current.id)
             replacement = [
                 updated if item.id == current.id else item for item in profiles
@@ -303,6 +321,17 @@ class LocalModelProfileRepository:
             raise ValueError("duplicate model profile name")
         if len(selected) > 1 or any(not profile.is_enabled for profile in selected):
             raise ValueError("invalid selected model profile")
+
+    @staticmethod
+    def _profile_validation_error(error: ValidationError) -> ModelProfileRepositoryError:
+        """Map known profile policy failures without exposing raw validation input."""
+
+        for item in error.errors():
+            message = str(item.get("msg", ""))
+            for code in _SAFE_PROFILE_VALIDATION_CODES:
+                if code in message:
+                    return ModelProfileRepositoryError(code)
+        return ModelProfileRepositoryError("model profile input is invalid")
 
     def _write(self, profiles: list[ModelProfile]) -> None:
         self._validate_profiles(profiles)
