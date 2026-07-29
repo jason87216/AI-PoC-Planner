@@ -121,6 +121,18 @@ def test_interview_findings_are_compact_and_never_expose_raw_questions() -> None
     assert scope_finding.topic == "第一階段範圍"
     assert scope_finding.assessment_impact == "用來限制第一階段的工作範圍。"
 
+    for fact_key, topic in (
+        ("approval_process_detail", "審批流程與例外"),
+        ("audit_trail_requirements", "稽核紀錄要求"),
+    ):
+        finding = build_interview_findings(
+            questions=[question.model_copy(update={"fact_key": fact_key})],
+            messages=[answer],
+            facts=list(_facts(scenario)),
+        )[0]
+        assert finding.topic == topic
+        assert finding.topic != "其他已確認事項"
+
 
 def test_fallback_writes_a_complete_recommendation_article() -> None:
     synthesis = _synthesis("maintenance_coverage_gap")
@@ -278,7 +290,8 @@ def test_comparison_combines_options_cases_and_project_gap_in_one_section() -> N
     assert recommended.supporting_cases
     assert "Morgan Stanley" in " ".join(recommended.supporting_cases)
     assert all(
-        item.supporting_cases or "目前沒有直接案例支持" in item.case_evidence
+        item.supporting_cases
+        or "本次未找到可直接參照的已審核案例" in item.case_evidence
         for item in synthesis.option_comparison
     )
     assert (
@@ -327,6 +340,9 @@ def test_governed_access_report_excludes_unrelated_retrieval_content() -> None:
         "客服回覆",
     ):
         assert prohibited not in main_report
+
+    assert "目前沒有直接案例支持" not in main_report
+    assert "本次未找到可直接參照的已審核案例" in main_report
 
 
 def test_roadmap_contains_immediate_actions_and_has_no_standalone_next_steps() -> None:

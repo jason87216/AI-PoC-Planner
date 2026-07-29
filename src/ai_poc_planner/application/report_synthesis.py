@@ -42,6 +42,7 @@ _FACT_LABELS = {
     "users_and_owners": "使用者與負責人",
     "known_constraints": "已知限制",
     "human_final_decision": "人工最終決策",
+    "approval_process_detail": "審批流程與例外",
     "processing_boundary": "資料處理邊界",
     "first_phase_scope": "第一階段範圍",
     "auditability_requirements": "追溯與稽核",
@@ -50,6 +51,7 @@ _FACT_LABELS = {
     "success_conditions": "驗收條件",
     "process_scope": "第一階段範圍",
     "audit_trail_detail": "追溯與稽核",
+    "audit_trail_requirements": "稽核紀錄要求",
     "validation_sample": "驗證樣本",
     "fault_labels": "故障標籤",
 }
@@ -68,6 +70,7 @@ _TOPIC_IMPACTS = {
     "users_and_owners": "用來界定使用者、品質責任與例外交接。",
     "known_constraints": "用來限制第一階段範圍與部署方式。",
     "human_final_decision": "明確保留人工確認與對外回覆責任。",
+    "approval_process_detail": "用來界定主管核准、拒絕與例外處理的流程。",
     "processing_boundary": "用來限定資料可在何種受控環境中處理。",
     "first_phase_scope": "用來限制第一階段的工作範圍。",
     "auditability_requirements": "用來保留追溯、覆核與例外處理紀錄。",
@@ -76,6 +79,7 @@ _TOPIC_IMPACTS = {
     "success_conditions": "用來定義第一階段的通過條件。",
     "process_scope": "用來限制第一階段的工作範圍。",
     "audit_trail_detail": "用來保留追溯、覆核與例外處理紀錄。",
+    "audit_trail_requirements": "用來確保審批人、時間、備註與例外紀錄可供查詢與稽核。",
     "validation_sample": "提醒驗證樣本仍待確認，不能視為已具備。",
     "fault_labels": "提醒標籤定義仍待確認，不能直接承諾模型成果。",
 }
@@ -217,7 +221,7 @@ def build_interview_findings(
         answer = answers.get(str(question.answer_message_id))
         findings.append(
             InterviewFinding(
-                topic=_FACT_LABELS.get(key, "其他已確認事項"),
+                topic=_FACT_LABELS.get(key, "訪談補充重點"),
                 confirmed_content=_natural_text(
                     answer or _fact_display(fact_by_key.get(key)),
                     fallback="待確認。",
@@ -304,9 +308,9 @@ def _option_comparison(
             OptionComparison(
                 option=alternative.display_name_zh,
                 positioning=alternative.short_description_zh,
-                case_evidence="目前沒有直接案例支持；此方向僅作為比較基線。",
+                case_evidence="本次未找到可直接參照的已審核案例；此方向僅作為比較參考。",
                 transferable_practice=alternative.typical_scope_zh,
-                cannot_copy=["沒有直接對應的成熟案例，不應推定外部做法可直接套用。"],
+                cannot_copy=["目前沒有可直接套用的外部做法，仍需依本專案條件驗證。"],
                 conclusion="可作為比較基線，暫不列為正式推薦。",
             )
         )
@@ -787,7 +791,9 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
             for value in (
                 ("正式推薦：" if item.recommended else "") + item.option,
                 item.positioning,
-                _joined(item.supporting_cases, empty="目前沒有直接案例支持。"),
+                _joined(
+                    item.supporting_cases, empty="本次未找到可直接參照的已審核案例。"
+                ),
                 item.case_evidence,
                 item.transferable_practice,
                 _joined(item.cannot_copy),

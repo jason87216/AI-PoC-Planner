@@ -77,7 +77,7 @@ class OptionComparison(ContractModel):
     recommended: bool = False
     positioning: NonEmptyStr = "尚待比較。"
     supporting_cases: list[NonEmptyStr] = Field(default_factory=list)
-    case_evidence: NonEmptyStr = "目前沒有直接案例支持。"
+    case_evidence: NonEmptyStr = "本次未找到可直接參照的已審核案例。"
     transferable_practice: NonEmptyStr = "尚待確認可移植做法。"
     cannot_copy: list[NonEmptyStr] = Field(default_factory=list)
     # Legacy columns are accepted for old persisted reports but are not part of

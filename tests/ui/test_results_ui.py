@@ -263,7 +263,7 @@ def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> Non
                         "option": "規則與流程標準化",
                         "positioning": "以固定規則檢查。",
                         "supporting_cases": [],
-                        "case_evidence": "目前沒有直接案例支持。",
+                        "case_evidence": "本次未找到可直接參照的已審核案例。",
                         "transferable_practice": "保留人工確認。",
                         "cannot_copy": [],
                         "conclusion": "比較基線。",
