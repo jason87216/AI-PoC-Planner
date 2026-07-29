@@ -2,155 +2,158 @@
 
 ## Status
 
-This plan supersedes the fake-model-first product roadmap. It starts from the
-technical assets in `main`, but no phase is authorised by this documentation
-reset until its checkpoint is approved.
+AI PoC Planner 已完成從 real-provider foundation、durable project history、Discovery、Assessment、reviewed-case matching、article-style Results，到 P7.1 本機 UAT runtime 的主要產品流程。
+
+目前下一個 implementation phase 是 **P7.2 provider compatibility and structured-output policy**。P7.2 尚未開始實作。
 
 ## Guiding decisions
 
-- A real OpenAI-compatible provider is a prerequisite for formal analysis.
-- Fake providers are deterministic test doubles, never a public-product mode.
-- Provider, durable project/version/conversation state, and fact validation are
-  built before product UI work.
-- The Streamlit UI remains the first product surface, but it follows the
-  provider and workflow contracts rather than defining them.
-- Each phase produces small, reviewable PRs. A checkpoint is a human approval
-  gate, not merely a green test suite.
+- 正式分析必須使用專案綁定、已啟用且測試通過的真實 model profile。
+- 所有真實模型呼叫共用單一 OpenAI-compatible provider adapter。
+- fake provider 是 deterministic automated-test double，不是產品模式。
+- 禁止 silent provider、model 或 fake-provider fallback。
+- LLM 負責模糊需求理解與敘事；matching、recommendation category、scoring、hard gates 與正式一致性由 deterministic code 負責。
+- 每個 phase 以小型、可審查 PR 完成；技術測試通過不自動等於產品 checkpoint 通過。
 
-## Dependency sequence
+## Phase status
 
-```text
-Phase 0 specification reset
-  -> Phase 1 model profiles + real provider connection
-  -> Phase 2 projects, versions, conversation, confirmed facts
-  -> Phase 3 AI understanding + bounded interview
-  -> Phase 4 AI recommendations + rubric + hard-gate validation
-  -> Phase 5 reviewed cases + formal Markdown report
-  -> Phase 6 Streamlit product UI
-  -> Phase 7 install/start/stop entry points
-  -> Phase 8 portfolio UAT and release readiness
-```
+| Phase | Status | Current baseline |
+| --- | --- | --- |
+| Phase 0 | Complete | viable-MVP 規格與 real-provider-first 邊界 |
+| Phase 1 | Complete | project-bound model profiles 與單一 OpenAI-compatible adapter |
+| Phase 2 | Complete | project/version、visible conversation、confirmed facts 與 SQLite persistence |
+| Phase 3 | Complete | requirement understanding、correction、confirmation 與 bounded Discovery |
+| Phase 4 | Complete | structured options、六維評分、recommendation category 與 hard gates |
+| Phase 5 | Complete | reviewed cases、PlanningRun 與 persisted Markdown report |
+| Phase 6 | Complete | FastAPI／Streamlit 產品流程、history re-entry、Results 與 download |
+| P7.1 | Complete | 本機啟動／狀態／停止與 UAT runtime |
+| P7.2 | Next | provider compatibility and structured-output policy |
+| Phase 8 | Pending | product-owner、portfolio 與 release UAT |
 
-Phases 1–5 are sequential. Phase 6 can begin only once Phase 3 contracts are
-stable, but its analysis/report screens wait for Phases 4–5. Phase 7 waits for
-the production-shaped API/UI launch contract. Phase 8 waits for all prior
-checkpoints.
+## Phase 7 — Local runtime and provider compatibility
 
-## Phase 0 — Specification reset
+### P7.1 — Local UAT runtime — Complete
 
-| Item | Definition |
-| --- | --- |
-| Input | PR #8 UAT findings and current technical baseline |
-| Modification scope | README, project log, specification, plan, and tasks only |
-| Output | Approved viable-MVP product contract and deprecation record |
-| Automated test | Markdown links/commands and `git diff --check` review |
-| Human UAT | Product owner verifies real provider precedes UI and fake flow is not MVP proof |
-| Checkpoint | Explicit approval before any code branch |
+P7.1 已完成：
 
-## Phase 1 — Real model profile and OpenAI-compatible connection
+- 專案自有 `.venv` 與 runtime identity 驗證；
+- FastAPI／Streamlit 的啟動、監督、狀態與停止；
+- UI 使用 `18501-18599`；
+- API 使用 `18610-18699`；
+- 不使用 `8000` 作為產品預設埠；
+- Local／Uat state isolation；
+- browser launch 與 safe logs。
 
-| Item | Definition |
-| --- | --- |
-| Input | Approved profile contract and ignored-local-config decision |
-| Modification scope | Provider/profile contracts, local JSON repository, API status/test endpoints, adapter, tests; no interview/report/UI rewrite |
-| Output | CRUD model profiles, selected-profile status, connection test, and a formal-analysis guard |
-| Automated test | Contract/repository/API tests; opt-in llama.cpp integration test; fake tests stay offline |
-| Human UAT | Create/select/test a local llama.cpp profile with empty API key; failed/no profile blocks formal analysis |
-| Checkpoint | A real endpoint is demonstrably called; no automatic fake fallback |
+P7.1 只負責本機 runtime，不負責安裝 provider、下載模型、建立雲端帳號或發佈 consumer installer。
 
-## Phase 2 — Project versions, visible conversation, and confirmed facts
+### P7.2 — Provider compatibility and structured-output policy — Next
 
-| Item | Definition |
-| --- | --- |
-| Input | Phase 1 provider status and approved data-model design |
-| Modification scope | Pydantic contracts, persistence/repository/migration, service/API tests |
-| Output | Projects, immutable completed versions, visible conversation, fact confirmation/reference status |
-| Automated test | Version immutability, reload, fact protection, contradiction/missing-data validation |
-| Human UAT | Create a project, reload it, and change a completed plan into a new version |
-| Checkpoint | Durable state can support the interview without exposing internal IDs |
+#### Formal goal
 
-## Phase 3 — AI requirement understanding and bounded interview
+以同一個 OpenAI-compatible adapter，一致支援：
 
-| Item | Definition |
-| --- | --- |
-| Input | Phase 1 real adapter and Phase 2 durable conversation/facts |
-| Modification scope | Interview prompts/contracts, application service/API, provider tests; no scoring/report overhaul |
-| Output | Initial brief, AI understanding/confirmation, at most three rounds of at most three contextual questions, user corrections |
-| Automated test | Prompt-output schema validation, bounded rounds/questions, unknown answer, correction, no-chain-of-thought persistence |
-| Human UAT | A real model asks context-specific questions and updates facts after correction |
-| Checkpoint | Confirmed-fact and conversation UX is product-credible before analysis is added |
+- NVIDIA OpenAI-compatible 雲端驗證基線；
+- 使用者自行啟動的本機 llama.cpp OpenAI-compatible endpoint。
 
-## Phase 4 — AI options, rubric scoring, and hard-gate validation
+P7.2 不建立第二套 provider adapter，也不加入多 provider business logic。
 
-| Item | Definition |
-| --- | --- |
-| Input | Confirmed facts and bounded interview completion |
-| Modification scope | Analysis contracts, AI rubric response validation, deterministic total/gates, API tests |
-| Output | AI/non-AI/hybrid options, six fact-backed ratings, data gaps/risks/improvement conditions, enforced gates |
-| Automated test | Score range/reference completeness, weighted total, invalid/contradictory evidence, every hard-gate conflict |
-| Human UAT | Real-model output can recommend non-AI or hybrid and cannot bypass gates |
-| Checkpoint | Analysis is useful and governed, not a fixed-rule simulation |
+#### In scope
 
-## Phase 5 — Local success cases and formal report
+- provider capability policy；
+- model-profile capability contract；
+- authentication capability；
+- token parameter capability；
+- reasoning parameter capability；
+- structured-output capability；
+- readiness、discovery、analysis、report 四條 structured-output 路徑的一致策略；
+- 有限次 JSON Schema → JSON Object fallback；
+- fallback 後仍執行嚴格 Pydantic validation；
+- 安全且可行動的 provider errors；
+- NVIDIA／llama.cpp compatibility matrix；
+- reload、history、download 重用 persisted state，不重新呼叫 provider；
+- deterministic results 在不同 endpoint 間保持 provider-independent。
 
-| Item | Definition |
-| --- | --- |
-| Input | Valid analysis and approved manually reviewed case format |
-| Modification scope | Case data/validation/filtering, report assembly/rendering, tests |
-| Output | Source-backed local cases and full Markdown report contract |
-| Automated test | Case schema/review status, no invented source/metric fields, report section and fact-reference completeness |
-| Human UAT | Business reviewer judges the report actionable, including cost assumptions, roles, deployment comparison, and next steps |
-| Checkpoint | Report is a planning deliverable rather than technical score output |
+#### Structured-output policy
 
-## Phase 6 — Streamlit product UI
+1. Model profile 明確宣告 endpoint 支援的 authentication、token、reasoning 與 structured-output capabilities。
+2. Adapter 依 capability contract 產生單一、可預測的 request shape，不以隱性重試猜測 provider 行為。
+3. 優先使用 JSON Schema structured output。
+4. 只有在已定義且可辨識的 capability failure 時，允許有限次降級至 JSON Object。
+5. JSON Object 回應仍必須通過相同的嚴格 Pydantic validation；validation failure 不得被容錯為成功。
+6. 不允許改用其他 provider、其他 model、fake provider 或未綁定 profile。
+7. 所有錯誤必須可行動，且不得包含 secrets、Authorization header 或 raw provider response。
 
-| Item | Definition |
-| --- | --- |
-| Input | Stable Phase 1–5 APIs and product contracts |
-| Modification scope | Streamlit product pages and thin HTTP client only; no business-rule recomputation in UI |
-| Output | Home/history, model settings, brief, confirmation, interview, analysis, and report views |
-| Automated test | Client/error/smoke tests plus no direct persistence/application/provider imports |
-| Human UAT | Complete a real-model flow without seeing UUIDs, raw JSON, API URLs, or developer warnings |
-| Checkpoint | Product usability passes before launcher work |
+#### Out of scope
 
-## Phase 7 — Install, start, and stop entry points
+- 自動安裝或下載模型；
+- Ollama、LM Studio、vLLM 專用 adapter；
+- Docker；
+- 雲端部署與帳號建立；
+- 多 provider business logic；
+- 修改 deterministic matching、recommendation category、scoring 或 hard gates；
+- 重構 `report_synthesis.py`；
+- 擴充 reviewed-case catalog；
+- consumer installer 或 release packaging。
 
-| Item | Definition |
-| --- | --- |
-| Input | Stable local API/UI launch contract |
-| Modification scope | Windows batch entry points, local configuration/bootstrap, smoke tests/docs |
-| Output | Install/start/stop scripts that manage local FastAPI and Streamlit processes |
-| Automated test | Script/static checks and controlled local smoke where feasible |
-| Human UAT | Fresh Windows user installs, starts one command, sees no email prompt/telemetry, and stops reliably |
-| Checkpoint | No manual two-terminal startup remains |
+### P7.2a — Representative dual-endpoint validation
 
-## Phase 8 — Portfolio UAT and release preparation
+P7.2a 使用一個代表情境，對 NVIDIA 與一個本機 llama.cpp endpoint 驗證：
 
-| Item | Definition |
-| --- | --- |
-| Input | All prior checkpoints and a manually started real provider |
-| Modification scope | Documentation, acceptance evidence, safe sample data, release-only fixes |
-| Output | UAT evidence and an honest public README |
-| Automated test | Full suite, lint, formatting, security/ignored-artifact review |
-| Human UAT | End-to-end viable-MVP flow, connection failure, non-AI recommendation, reload/versioning, and report review |
-| Checkpoint | Product owner approves release candidate |
+- readiness；
+- discovery；
+- analysis；
+- report；
+- authentication／optional local token；
+- token／reasoning parameter policy；
+- JSON Schema → JSON Object bounded fallback；
+- strict Pydantic validation；
+- safe actionable errors；
+- reload／history／download 不重新呼叫 provider。
+
+P7.2a 的 checkpoint 是「一個代表情境的雙端點路徑成立」。P7.2a 通過不得寫成完整 P7.2 已完成。
+
+### P7.2b — Full golden-scenario compatibility matrix
+
+P7.2b 在 P7.2a 通過後：
+
+- 擴展至四個 golden scenarios；
+- 對 NVIDIA 與 llama.cpp 完成完整 compatibility matrix；
+- 比較 readiness、discovery、analysis、report 的成功與失敗行為；
+- 驗證 matching、recommendation category、scores、hard gates 與 persisted formal results provider-independent；
+- 完成產品與技術驗收。
+
+只有 P7.2b matrix 與驗收完成後，才可宣告 P7.2 Complete。
+
+## Phase 8 — Portfolio and release UAT
+
+Phase 8 在 P7.2 完成後執行：
+
+- 產品擁有者審查 Traditional Chinese wording 與 business usefulness；
+- 驗證 blocked-no-provider、Discovery、Assessment、Results、history re-entry 與 download；
+- 驗證 provider compatibility evidence；
+- 完成 portfolio README 與 release-readiness review。
 
 ## Testing policy
 
 | Layer | Purpose |
 | --- | --- |
-| Unit/contract | Pydantic schemas, fact references, score bounds, gates, case/report validation |
-| Repository/service | Local JSON profiles, project/version/conversation persistence, immutable version transitions |
-| API | Profile status/testing, formal-analysis guard, interview/analysis/report response contracts |
-| Fake-provider | Deterministic automated behavior only; no claim of product usefulness |
-| Opt-in integration | Manually running llama.cpp server; never default CI prerequisite |
-| UI | Thin-client/smoke coverage and human real-model UAT |
+| Unit／contract | Pydantic schemas、capability policy、fact references、scores、gates |
+| Repository／service | profiles、projects、versions、PlanningRun、reports 與 immutable transitions |
+| API | readiness、Discovery、Assessment、Report 與 safe errors |
+| Fake-provider | deterministic automated behavior only |
+| Opt-in integration | NVIDIA 與使用者自行啟動的 llama.cpp endpoint |
+| UI／UAT | FastAPI-bound Streamlit flow、reload、history、download 與 browser behavior |
+
+真實 provider UAT 必須明確 opt-in，不得要求 CI 保存 secrets 或自動安裝模型。
 
 ## Definition of done
 
-The viable MVP is done only when a user can select a tested real model profile,
-complete the confirmation/interview flow, obtain a fact-backed AI/non-AI/hybrid
-recommendation constrained by hard gates, save/reopen an immutable project
-version, and export an actionable Markdown report through the product UI and
-single-machine launch flow. A fake-model path alone never satisfies this
-definition.
+P7.2 只有在以下條件全部成立時才完成：
+
+- 單一 OpenAI-compatible adapter 通過 NVIDIA／llama.cpp 雙端點矩陣；
+- 四個 golden scenarios 完成 readiness、discovery、analysis、report 驗證；
+- bounded fallback 與 strict validation 行為一致；
+- deterministic results provider-independent；
+- reload、history、download 不重新呼叫 provider；
+- errors 安全且可行動；
+- 產品與技術 checkpoint 均通過。
