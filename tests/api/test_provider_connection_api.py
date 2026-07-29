@@ -16,7 +16,7 @@ RAW_MARKER = "provider-raw-marker-7d14"
 
 class SuccessfulAdapter:
     def complete(self, **_: object) -> str:
-        return "connection ok"
+        return '{"status":"ok"}'
 
 
 class FailingAdapter:
@@ -33,7 +33,7 @@ class CapturingDefaultAdapter:
         self.clients.append(client)
 
     def complete(self, **_: object) -> str:
-        return "connection ok"
+        return '{"status":"ok"}'
 
 
 class InjectedClientAdapter:
@@ -41,7 +41,7 @@ class InjectedClientAdapter:
         self.client = client
 
     def complete(self, **_: object) -> str:
-        return "connection ok"
+        return '{"status":"ok"}'
 
 
 def _client(tmp_path: Path, adapter: object = SuccessfulAdapter()) -> TestClient:
@@ -96,6 +96,57 @@ def test_profile_crud_returns_only_public_contract_and_safe_validation(
     assert deleted.status_code == 204
 
 
+def test_profile_capabilities_round_trip_and_key_patch_semantics(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    profile = client.post(
+        "/v1/model-profiles",
+        json={
+            "profile_name": "Explicit",
+            "base_url": "http://localhost:8080/v1",
+            "model_name": "qwen-local",
+            "api_key": SECRET_MARKER,
+            "structured_output_mode": "json_schema",
+            "capabilities": {
+                "authentication": "bearer_optional",
+                "token_parameter": "max_tokens",
+                "reasoning_parameter": "unsupported",
+                "json_schema": True,
+                "json_object": True,
+            },
+        },
+    )
+    assert profile.status_code == 201
+    public = profile.json()
+    assert public["capabilities"]["json_schema"] is True
+    assert "api_key" not in public
+
+    omitted = client.patch(
+        f"/v1/model-profiles/{public['id']}", json={"model_name": "qwen-local-2"}
+    )
+    assert omitted.status_code == 200
+    assert omitted.json()["capabilities"]["json_schema"] is True
+
+    forbidden = client.patch(
+        f"/v1/model-profiles/{public['id']}",
+        json={"capabilities": {"authentication": "none", "json_object": True}},
+    )
+    assert forbidden.status_code == 409
+    assert forbidden.json()["error"]["code"] == "model_profile_auth_forbidden"
+
+    cleared = client.patch(
+        f"/v1/model-profiles/{public['id']}",
+        json={
+            "api_key": None,
+            "structured_output_mode": "json_object",
+            "capabilities": {"authentication": "none", "json_object": True},
+        },
+    )
+    assert cleared.status_code == 200
+    assert "api_key" not in cleared.json()
+
+
 def test_selected_status_connection_test_and_readiness_guard(tmp_path: Path) -> None:
     client = _client(tmp_path)
     profile = _create_profile(client)
@@ -144,6 +195,9 @@ def test_failed_connection_keeps_safe_failed_status_without_raw_response(
 
     assert response.status_code == 200
     assert response.json()["connection_state"] == "failed"
+    assert response.json()["failure"]["code"] == "provider_unavailable"
+    assert response.json()["failure"]["operation"] == "readiness"
+    assert response.json()["failure"]["retryable"] is True
     assert RAW_MARKER not in response.text
 
 

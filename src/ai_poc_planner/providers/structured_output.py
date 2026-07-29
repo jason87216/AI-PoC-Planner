@@ -10,7 +10,11 @@ from typing import Protocol
 
 from pydantic import BaseModel, ValidationError
 
-from ai_poc_planner.providers.base import ProviderError, ReasoningEffort, StructuredOutputMode
+from ai_poc_planner.providers.base import (
+    ProviderError,
+    ReasoningEffort,
+    StructuredOutputMode,
+)
 from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.errors import (
     ProviderOperation,
@@ -84,7 +88,7 @@ class StructuredOutputExecutor:
                     provider_contract.model_json_schema()
                 )
             except (TypeError, ValueError, KeyError) as error:
-                raise StructuredOutputContentError from error
+                raise StructuredOutputContentError("provider_schema_invalid") from error
 
         attempts = 0
         mode_attempts = 0
@@ -117,6 +121,7 @@ class StructuredOutputExecutor:
                     and mode is StructuredOutputMode.JSON_SCHEMA
                     and capabilities.json_object
                     and not fallback_used
+                    and mode_attempts == 1
                 ):
                     mode = StructuredOutputMode.JSON_OBJECT
                     schema = None
@@ -174,7 +179,7 @@ class StructuredOutputExecutor:
         response_format = (
             JSONSchemaResponseFormat(name=schema_name, schema=schema or {})
             if mode is StructuredOutputMode.JSON_SCHEMA
-            else JSONObjectResponseFormat()
+            else JSONObjectResponseFormat(name=schema_name)
         )
         return adapter.complete(
             messages=messages,
@@ -222,7 +227,9 @@ class StructuredOutputExecutor:
         ] + [{"role": "user", "content": prompt}]
 
     @staticmethod
-    def _provider_error(code: str, operation: ProviderOperation) -> ProviderOperationError:
+    def _provider_error(
+        code: str, operation: ProviderOperation
+    ) -> ProviderOperationError:
         return ProviderOperationError(SafeProviderFailure.from_code(code, operation))
 
 

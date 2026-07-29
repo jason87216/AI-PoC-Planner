@@ -33,10 +33,15 @@ _USER_ACTIONS: dict[str, str] = {
     "provider_invalid_response": "請確認端點回傳 OpenAI-compatible chat completion。",
     "provider_output_truncated": "請提高輸出預算後再試。",
     "provider_output_invalid": "請重試；若持續失敗，請檢查結構化輸出能力。",
+    "provider_schema_invalid": "目前的結構化輸出契約無法送出，請檢查 profile 設定。",
     "model_profile_auth_required": "請輸入 API key，或改用不需要認證的端點。",
     "model_profile_auth_forbidden": "此認證模式不允許保存 API key，請清除後再試。",
-    "model_profile_reasoning_unsupported": "此端點不支援 reasoning effort，請清除該設定。",
-    "model_profile_structured_output_invalid": "請至少啟用一種並選擇支援的結構化輸出模式。",
+    "model_profile_reasoning_unsupported": (
+        "此端點不支援 reasoning effort，請清除該設定。"
+    ),
+    "model_profile_structured_output_invalid": (
+        "請至少啟用一種並選擇支援的結構化輸出模式。"
+    ),
 }
 
 _RETRYABLE = {

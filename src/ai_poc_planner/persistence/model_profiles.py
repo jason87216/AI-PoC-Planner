@@ -26,10 +26,9 @@ class ModelProfileRepositoryError(RuntimeError):
 
     code = "model_profile_repository_error"
 
-    def __init__(self, message: str | None = None) -> None:
-        resolved = message or self.code
-        super().__init__(resolved)
-        self.code = resolved
+    def __init__(self, message: str | None = None, *, code: str | None = None) -> None:
+        super().__init__(message or type(self).code)
+        self.code = code or type(self).code
 
 
 class ModelProfileNotFoundError(ModelProfileRepositoryError):
@@ -330,7 +329,7 @@ class LocalModelProfileRepository:
             message = str(item.get("msg", ""))
             for code in _SAFE_PROFILE_VALIDATION_CODES:
                 if code in message:
-                    return ModelProfileRepositoryError(code)
+                    return ModelProfileRepositoryError(code, code=code)
         return ModelProfileRepositoryError("model profile input is invalid")
 
     def _write(self, profiles: list[ModelProfile]) -> None:

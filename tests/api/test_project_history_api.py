@@ -9,7 +9,7 @@ from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepositor
 
 class ConnectedAdapter:
     def complete(self, **_: object) -> str:
-        return "connected"
+        return '{"status":"ok"}'
 
 
 SENSITIVE_MARKER = "not-a-real-secret-marker"

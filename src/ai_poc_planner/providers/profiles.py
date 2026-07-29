@@ -16,18 +16,19 @@ from pydantic import (
 )
 
 from ai_poc_planner.domain.models import ContractModel, NonEmptyStr, UtcDateTime
-from ai_poc_planner.providers.capabilities import (
-    AuthenticationMode,
-    OpenAICompatibleCapabilities,
-    ReasoningParameter,
-    TokenParameter,
-)
 from ai_poc_planner.providers.base import (
     ProviderConnectionMessage,
     ProviderConnectionState,
     ReasoningEffort,
     StructuredOutputMode,
 )
+from ai_poc_planner.providers.capabilities import (
+    AuthenticationMode,
+    OpenAICompatibleCapabilities,
+    ReasoningParameter,
+    TokenParameter,
+)
+from ai_poc_planner.providers.errors import SafeProviderFailure
 
 
 class ModelProfilePublic(ContractModel):
@@ -115,9 +116,15 @@ class ModelProfile(ModelProfilePublic):
         ):
             raise ValueError("model_profile_reasoning_unsupported")
         preferred = self.effective_structured_output_mode
-        if preferred is StructuredOutputMode.JSON_SCHEMA and not capabilities.json_schema:
+        if (
+            preferred is StructuredOutputMode.JSON_SCHEMA
+            and not capabilities.json_schema
+        ):
             raise ValueError("model_profile_structured_output_invalid")
-        if preferred is StructuredOutputMode.JSON_OBJECT and not capabilities.json_object:
+        if (
+            preferred is StructuredOutputMode.JSON_OBJECT
+            and not capabilities.json_object
+        ):
             raise ValueError("model_profile_structured_output_invalid")
         return self
 
@@ -161,6 +168,9 @@ class ProviderConnectionStatus(ContractModel):
     tested_at: UtcDateTime | None
     user_message: ProviderConnectionMessage
     model_name: NonEmptyStr
+    failure: SafeProviderFailure | None = None
+    mode_used: StructuredOutputMode | None = None
+    fallback_used: bool = False
 
     @computed_field
     @property
@@ -177,6 +187,20 @@ class ProviderConnectionStatus(ContractModel):
         expected_message = ProviderConnectionMessage[self.connection_state.name]
         if self.user_message is not expected_message:
             raise ValueError("user_message must match connection_state")
+        if self.connection_state is ProviderConnectionState.CONNECTED:
+            if self.failure is not None:
+                raise ValueError("connected status cannot contain failure")
+        elif self.connection_state is ProviderConnectionState.FAILED:
+            if self.failure is None:
+                raise ValueError("failed status requires safe failure")
+        elif self.failure is not None:
+            raise ValueError("non-failed status cannot contain failure")
+        if self.connection_state in {
+            ProviderConnectionState.UNTESTED,
+            ProviderConnectionState.TESTING,
+            ProviderConnectionState.DISABLED,
+        } and self.fallback_used:
+            raise ValueError("non-completed status cannot contain fallback metadata")
         if self.connection_state is ProviderConnectionState.CONNECTED:
             if self.tested_at is None:
                 raise ValueError("connected status requires tested_at")

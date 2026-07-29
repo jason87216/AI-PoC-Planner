@@ -13,7 +13,10 @@ from ai_poc_planner.application.case_centered_assessment import (
     derive_recommendation_category,
 )
 from ai_poc_planner.application.project_history import ProjectHistoryService
-from ai_poc_planner.application.provider_readiness import ProviderReadinessService
+from ai_poc_planner.application.provider_readiness import (
+    ProviderReadinessError,
+    ProviderReadinessService,
+)
 from ai_poc_planner.application.report_synthesis import (
     build_report_synthesis,
     render_synthesis_markdown,
@@ -45,9 +48,12 @@ from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import InterviewSessionNotFoundError
 from ai_poc_planner.persistence.report import SQLitePlanningReportRepository
 from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
-from ai_poc_planner.providers.json_schema import normalize_provider_schema
-from ai_poc_planner.providers.openai_compatible import JSONSchemaResponseFormat
+from ai_poc_planner.providers.errors import ProviderOperation, ProviderOperationError
 from ai_poc_planner.providers.profiles import ModelProfile
+from ai_poc_planner.providers.structured_output import (
+    StructuredOutputContentError,
+    StructuredOutputExecutor,
+)
 
 
 class PlanningReportError(RuntimeError):
@@ -519,7 +525,9 @@ class PlanningReportService:
                         raise
                 else:
                     break
-        except PlanningReportError:
+        except PlanningReportError as error:
+            if error.code not in {"provider_output_invalid", "confirmed_evidence_required"}:
+                raise
             draft = _fallback_report_draft(tokens, analysis)
         draft = draft.model_copy(
             update={
@@ -573,6 +581,8 @@ class PlanningReportService:
             if snapshot is None:
                 raise PlanningReportError("provider_profile_mismatch")
             self._readiness.require_profile_ready(snapshot.profile_id)
+        except ProviderReadinessError as error:
+            raise PlanningReportError(error.code) from error
         except Exception as error:
             raise PlanningReportError("provider_not_ready") from error
         snapshot = version.selected_model
@@ -628,26 +638,24 @@ class PlanningReportService:
                 "section mentioning KPI. Every section must reference at least one "
                 "confirmed fact token."
             )
-        for attempt in range(2):
-            try:
-                raw = adapter.complete(
-                    messages=messages,
-                    temperature=0,
-                    max_tokens=2048,
-                    response_format=JSONSchemaResponseFormat(
-                        name=name,
-                        schema=normalize_provider_schema(contract.model_json_schema()),
-                    ),
-                    reasoning_effort=profile.reasoning_effort,
-                )
-                return contract.model_validate(self._parse_json(raw))
-            except Exception as error:
-                if attempt:
-                    raise PlanningReportError("provider_output_invalid") from error
-                messages[0]["content"] += (
-                    " Repair only the schema error and return one complete JSON object."
-                )
-        raise AssertionError("unreachable")
+        try:
+            execution = StructuredOutputExecutor().execute(
+                adapter=adapter,
+                capabilities=profile.effective_capabilities,
+                preferred_mode=profile.effective_structured_output_mode,
+                operation=ProviderOperation.REPORT,
+                schema_name=name,
+                provider_contract=contract,
+                messages=messages,
+                logical_max_tokens=2048,
+                temperature=0,
+                reasoning_effort=profile.reasoning_effort,
+            )
+            return execution.value
+        except ProviderOperationError as error:
+            raise PlanningReportError(error.code) from error
+        except StructuredOutputContentError as error:
+            raise PlanningReportError(error.code) from error
 
     @staticmethod
     def _validate_refs(
@@ -673,15 +681,6 @@ class PlanningReportService:
             for number in re.findall(r"\d+(?:\.\d+)?", section.content):
                 if number not in allowed_numbers:
                     raise PlanningReportError("provider_output_invalid")
-
-    @staticmethod
-    def _parse_json(raw: str) -> object:
-        value = raw.strip()
-        if value.startswith("```json") and value.endswith("```"):
-            value = value[7:-3].strip()
-        if not (value.startswith("{") and value.endswith("}")):
-            raise PlanningReportError("provider_output_invalid")
-        return json.loads(value)
 
     def _catalogue_for_report(
         self,

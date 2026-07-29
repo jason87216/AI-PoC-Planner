@@ -17,13 +17,12 @@ from pydantic import (
 )
 
 from ai_poc_planner.domain.models import ContractModel, JSONValue, NonEmptyStr
+from ai_poc_planner.providers.base import ProviderError, ReasoningEffort
 from ai_poc_planner.providers.capabilities import (
     AuthenticationMode,
     OpenAICompatibleCapabilities,
     ReasoningParameter,
-    TokenParameter,
 )
-from ai_poc_planner.providers.base import ProviderError, ReasoningEffort
 
 _HTTP_URL = TypeAdapter(AnyHttpUrl)
 
@@ -79,6 +78,8 @@ class JSONObjectResponseFormat(ContractModel):
     The caller still owns complete JSON parsing and Pydantic validation.  This
     mode is an explicit request capability, not a provider-name heuristic.
     """
+
+    name: NonEmptyStr | None = None
 
     def as_request_value(self) -> dict[str, JSONValue]:
         return {"type": "json_object"}
@@ -202,11 +203,17 @@ class OpenAICompatibleChatAdapter:
                 payload["reasoning_effort"] = selected_reasoning_effort
             if response_format is not None:
                 requested_type = response_format.as_request_value().get("type")
-                if requested_type == "json_schema" and not self._capabilities.json_schema:
+                if (
+                    requested_type == "json_schema"
+                    and not self._capabilities.json_schema
+                ):
                     raise OpenAICompatibleProviderError(
                         "provider_structured_output_unsupported"
                     )
-                if requested_type == "json_object" and not self._capabilities.json_object:
+                if (
+                    requested_type == "json_object"
+                    and not self._capabilities.json_object
+                ):
                     raise OpenAICompatibleProviderError(
                         "provider_structured_output_unsupported"
                     )
