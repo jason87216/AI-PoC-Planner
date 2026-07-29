@@ -396,9 +396,9 @@ def _case_table_support(
     transferable = "；".join(
         _unique([case.transferable_practices_zh for case in cases])
     )
-    cannot_copy = _unique(
-        [case.limitation_note_zh or case.limitations_zh for case in cases]
-    )
+    cannot_copy = [
+        "案例已有成熟產品與較大規模整合；本專案先不直接開通，也不複製案例量化成效。"
+    ]
     return evidence, transferable, cannot_copy
 
 
@@ -1193,14 +1193,7 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
                 ("正式推薦：" if item.recommended else "") + item.option,
                 item.positioning,
                 _joined(item.supporting_cases, empty="未有已審核案例可提供直接佐證。"),
-                (
-                    item.case_evidence
-                    + (
-                        "；正式實施參考：" + _joined(item.supporting_references)
-                        if item.supporting_references
-                        else ""
-                    )
-                ),
+                item.case_evidence,
                 item.transferable_practice,
                 _joined_verbatim(item.cannot_copy),
                 item.conclusion,
