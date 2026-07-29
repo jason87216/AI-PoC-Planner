@@ -119,9 +119,17 @@ with st.form("create_model_profile", clear_on_submit=True):
             "json_object": "JSON Object",
         }[value],
     )
+    reasoning_parameter = st.selectbox(
+        "Reasoning parameter",
+        ["unsupported", "reasoning_effort"],
+    )
     reasoning_effort = st.selectbox(
         "推理強度（選填）",
-        options=["", "low", "medium", "high"],
+        options=(
+            ["", "low", "medium", "high"]
+            if reasoning_parameter != "unsupported"
+            else [""]
+        ),
         format_func=lambda value: {
             "": "不指定",
             "low": "低",
@@ -139,9 +147,6 @@ with st.form("create_model_profile", clear_on_submit=True):
         )
         token_parameter = st.selectbox(
             "Token parameter", ["max_tokens", "max_completion_tokens"]
-        )
-        reasoning_parameter = st.selectbox(
-            "Reasoning parameter", ["unsupported", "reasoning_effort"]
         )
         supports_json_schema = st.checkbox("Supports JSON Schema", value=True)
         supports_json_object = st.checkbox("Supports JSON Object", value=True)
@@ -236,10 +241,19 @@ if profiles:
         )
         update_reasoning_effort = st.selectbox(
             "Reasoning effort",
-            ["", "low", "medium", "high"],
-            index=["", "low", "medium", "high"].index(
-                selected_profile.get("reasoning_effort") or ""
+            options=(
+                ["", "low", "medium", "high"]
+                if update_reasoning_parameter != "unsupported"
+                else [""]
             ),
+            index=(
+                ["", "low", "medium", "high"].index(
+                    selected_profile.get("reasoning_effort") or ""
+                )
+                if update_reasoning_parameter != "unsupported"
+                else 0
+            ),
+            disabled=update_reasoning_parameter == "unsupported",
         )
         update_clear_api_key = st.checkbox("清除已保存 API key")
         updated_name = st.text_input("設定名稱（留白則不變）")
