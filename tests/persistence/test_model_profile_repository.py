@@ -86,7 +86,10 @@ def test_legacy_profile_json_without_capabilities_loads_with_safe_defaults(
 
     restored = repository.get(profile.id)
 
-    assert restored.effective_capabilities.authentication is AuthenticationMode.BEARER_OPTIONAL
+    assert (
+        restored.effective_capabilities.authentication
+        is AuthenticationMode.BEARER_OPTIONAL
+    )
     assert restored.effective_capabilities.token_parameter is TokenParameter.MAX_TOKENS
     assert restored.effective_capabilities.json_schema is False
     assert restored.effective_capabilities.json_object is True
@@ -117,7 +120,10 @@ def test_explicit_capabilities_round_trip_and_omitted_update_preserves_them(
     preserved = repository.update(profile.id, model_name="cloud-model-v2")
 
     assert restored.capabilities == capabilities
-    assert restored.effective_capabilities.token_parameter is TokenParameter.MAX_COMPLETION_TOKENS
+    assert (
+        restored.effective_capabilities.token_parameter
+        is TokenParameter.MAX_COMPLETION_TOKENS
+    )
     assert preserved.capabilities == capabilities
 
 
@@ -140,7 +146,10 @@ def test_capabilities_can_be_cleared_to_legacy_inference(tmp_path: Path) -> None
     restored = repository.update(profile.id, capabilities=None)
 
     assert restored.capabilities is None
-    assert restored.effective_capabilities.authentication is AuthenticationMode.BEARER_OPTIONAL
+    assert (
+        restored.effective_capabilities.authentication
+        is AuthenticationMode.BEARER_OPTIONAL
+    )
 
 
 def test_none_authentication_clears_key_only_when_explicitly_requested(
@@ -161,7 +170,9 @@ def test_none_authentication_clears_key_only_when_explicitly_requested(
         json_object=True,
     )
 
-    with pytest.raises(ModelProfileRepositoryError, match="model_profile_auth_forbidden"):
+    with pytest.raises(
+        ModelProfileRepositoryError, match="model_profile_auth_forbidden"
+    ):
         repository.update(profile.id, capabilities=none_capabilities)
 
     cleared = repository.update(

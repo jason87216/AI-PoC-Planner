@@ -195,11 +195,15 @@ class ProviderConnectionStatus(ContractModel):
                 raise ValueError("failed status requires safe failure")
         elif self.failure is not None:
             raise ValueError("non-failed status cannot contain failure")
-        if self.connection_state in {
-            ProviderConnectionState.UNTESTED,
-            ProviderConnectionState.TESTING,
-            ProviderConnectionState.DISABLED,
-        } and self.fallback_used:
+        if (
+            self.connection_state
+            in {
+                ProviderConnectionState.UNTESTED,
+                ProviderConnectionState.TESTING,
+                ProviderConnectionState.DISABLED,
+            }
+            and self.fallback_used
+        ):
             raise ValueError("non-completed status cannot contain fallback metadata")
         if self.connection_state is ProviderConnectionState.CONNECTED:
             if self.tested_at is None:

@@ -63,7 +63,9 @@ class RecordingAdapter:
         return str(outcome)
 
 
-def _caps(*, schema: bool = True, object_mode: bool = True) -> OpenAICompatibleCapabilities:
+def _caps(
+    *, schema: bool = True, object_mode: bool = True
+) -> OpenAICompatibleCapabilities:
     return OpenAICompatibleCapabilities(json_schema=schema, json_object=object_mode)
 
 
@@ -110,7 +112,7 @@ def test_object_first_success_uses_object_mode() -> None:
 
 @pytest.mark.parametrize(
     "bad_content",
-    ["not json", "[1]", "prefix {\"status\":\"ok\"}", "```json\n{\"status\":\"ok\"}"],
+    ["not json", "[1]", 'prefix {"status":"ok"}', '```json\n{"status":"ok"}'],
 )
 def test_invalid_content_repairs_once_without_switching_mode(bad_content: str) -> None:
     adapter = RecordingAdapter([bad_content, '{"status":"ok"}'])

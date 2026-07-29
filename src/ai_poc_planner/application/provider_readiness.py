@@ -36,9 +36,7 @@ class ConnectionProbe(ContractModel):
 class ProviderReadinessError(RuntimeError):
     """Stable safe error for API callers; no provider body or secret is retained."""
 
-    def __init__(
-        self, code: str, failure: SafeProviderFailure | None = None
-    ) -> None:
+    def __init__(self, code: str, failure: SafeProviderFailure | None = None) -> None:
         self.code = code
         self.failure = failure
         super().__init__(code)

@@ -143,13 +143,18 @@ def test_report_only_flow_commits_assessed_snapshot_and_completes_version(
     fresh_adapter = ReportAdapter()
     with TestClient(_app(database_path, profile_path, fresh_adapter)) as restarted:
         assert restarted.get(endpoint).json() == report
-        assert restarted.get(
-            f"/v1/projects/{fixture.project_id}/versions/1"
-        ).json()["status"] == "complete"
+        assert (
+            restarted.get(f"/v1/projects/{fixture.project_id}/versions/1").json()[
+                "status"
+            ]
+            == "complete"
+        )
     assert fresh_adapter.calls == []
 
 
-@pytest.mark.parametrize("adapter_type", [UnavailableReportAdapter, InvalidReportContentAdapter])
+@pytest.mark.parametrize(
+    "adapter_type", [UnavailableReportAdapter, InvalidReportContentAdapter]
+)
 def test_report_provider_failure_boundaries_do_not_silently_persist_or_fallback(
     tmp_path: Path, adapter_type: type[ReportAdapter]
 ) -> None:
@@ -168,7 +173,9 @@ def test_report_provider_failure_boundaries_do_not_silently_persist_or_fallback(
             },
         ).json()
         client.post(f"/v1/model-profiles/{profile['id']}/select")
-        assert client.post(f"/v1/model-profiles/{profile['id']}/test").status_code == 200
+        assert (
+            client.post(f"/v1/model-profiles/{profile['id']}/test").status_code == 200
+        )
         connection = database_connection(database_path)
         try:
             initialize_database(connection)
@@ -194,9 +201,12 @@ def test_report_provider_failure_boundaries_do_not_silently_persist_or_fallback(
                 "user_action": "請稍後重試，並確認服務目前可用。",
             }
             assert client.get(endpoint).status_code == 404
-            assert client.get(
-                f"/v1/projects/{fixture.project_id}/versions/1"
-            ).json()["status"] == "assessed"
+            assert (
+                client.get(f"/v1/projects/{fixture.project_id}/versions/1").json()[
+                    "status"
+                ]
+                == "assessed"
+            )
         else:
             assert created.status_code == 201, created.json()
             assert client.get(endpoint).status_code == 200

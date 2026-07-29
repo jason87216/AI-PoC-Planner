@@ -181,7 +181,9 @@ def test_unsupported_reasoning_rejects_configured_effort() -> None:
 
 
 def test_capabilities_require_preferred_structured_mode_to_be_supported() -> None:
-    with pytest.raises(ValidationError, match="model_profile_structured_output_invalid"):
+    with pytest.raises(
+        ValidationError, match="model_profile_structured_output_invalid"
+    ):
         _profile(
             structured_output_mode=StructuredOutputMode.JSON_SCHEMA,
             capabilities=_capabilities(json_schema=False, json_object=True),

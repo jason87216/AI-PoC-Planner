@@ -5,18 +5,18 @@ import json
 import httpx
 import pytest
 
+from ai_poc_planner.providers.capabilities import (
+    AuthenticationMode,
+    OpenAICompatibleCapabilities,
+    ReasoningParameter,
+    TokenParameter,
+)
 from ai_poc_planner.providers.openai_compatible import (
     JSONObjectResponseFormat,
     JSONSchemaResponseFormat,
     OpenAIChatCompletionRequest,
     OpenAICompatibleChatAdapter,
     OpenAICompatibleProviderError,
-)
-from ai_poc_planner.providers.capabilities import (
-    AuthenticationMode,
-    OpenAICompatibleCapabilities,
-    ReasoningParameter,
-    TokenParameter,
 )
 
 SECRET_MARKER = "adapter-secret-marker-8d2f6c31"

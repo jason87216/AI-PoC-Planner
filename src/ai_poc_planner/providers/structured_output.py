@@ -128,10 +128,14 @@ class StructuredOutputExecutor:
                     fallback_used = True
                     mode_attempts = 0
                     continue
-                if error.code in {
-                    "provider_invalid_response",
-                    "provider_output_truncated",
-                } and mode_attempts == 1:
+                if (
+                    error.code
+                    in {
+                        "provider_invalid_response",
+                        "provider_output_truncated",
+                    }
+                    and mode_attempts == 1
+                ):
                     messages = self._repair_messages(messages, provider_contract)
                     continue
                 raise self._provider_error(error.code, operation) from error

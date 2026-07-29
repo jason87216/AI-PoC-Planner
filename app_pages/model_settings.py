@@ -206,13 +206,15 @@ if profiles:
             ),
         )
         update_token_parameter = st.selectbox(
-            "Token parameter", ["max_tokens", "max_completion_tokens"],
+            "Token parameter",
+            ["max_tokens", "max_completion_tokens"],
             index=["max_tokens", "max_completion_tokens"].index(
                 current_capabilities.get("token_parameter", "max_tokens")
             ),
         )
         update_reasoning_parameter = st.selectbox(
-            "Reasoning parameter", ["unsupported", "reasoning_effort"],
+            "Reasoning parameter",
+            ["unsupported", "reasoning_effort"],
             index=["unsupported", "reasoning_effort"].index(
                 current_capabilities.get("reasoning_parameter", "unsupported")
             ),
@@ -226,7 +228,8 @@ if profiles:
             value=bool(current_capabilities.get("json_object", True)),
         )
         update_preferred_mode = st.selectbox(
-            "Preferred structured-output mode", ["json_schema", "json_object"],
+            "Preferred structured-output mode",
+            ["json_schema", "json_object"],
             index=0
             if selected_profile.get("structured_output_mode") == "json_schema"
             else 1,

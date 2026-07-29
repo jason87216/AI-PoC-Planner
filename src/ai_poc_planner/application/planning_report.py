@@ -526,7 +526,10 @@ class PlanningReportService:
                 else:
                     break
         except PlanningReportError as error:
-            if error.code not in {"provider_output_invalid", "confirmed_evidence_required"}:
+            if error.code not in {
+                "provider_output_invalid",
+                "confirmed_evidence_required",
+            }:
                 raise
             draft = _fallback_report_draft(tokens, analysis)
         draft = draft.model_copy(

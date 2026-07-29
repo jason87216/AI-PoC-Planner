@@ -611,7 +611,9 @@ def create_app(
         _: Request, error: ProviderReadinessError
     ) -> JSONResponse:
         if error.failure is not None:
-            return _provider_error_response(error.code, error.failure.operation, uuid4())
+            return _provider_error_response(
+                error.code, error.failure.operation, uuid4()
+            )
         return _error_response(409, error.code, uuid4())
 
     @app.exception_handler(ProviderOperationError)
@@ -644,7 +646,9 @@ def create_app(
     @app.exception_handler(PlanningReportError)
     async def report_error(_: Request, error: PlanningReportError) -> JSONResponse:
         if error.code in _SAFE_PROVIDER_CODES:
-            return _provider_error_response(error.code, ProviderOperation.REPORT, uuid4())
+            return _provider_error_response(
+                error.code, ProviderOperation.REPORT, uuid4()
+            )
         status = 502 if error.code == "provider_output_invalid" else 409
         if error.code in {"report_not_found", "analysis_not_found"}:
             status = 404

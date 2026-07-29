@@ -31,7 +31,9 @@ from ai_poc_planner.providers.errors import ProviderOperation
 from ai_poc_planner.providers.profiles import ModelProfile
 from ai_poc_planner.providers.structured_output import StructuredOutputExecutor
 
-SCENARIOS_PATH = Path(__file__).parents[1] / "fixtures" / "product_acceptance" / "scenarios.json"
+SCENARIOS_PATH = (
+    Path(__file__).parents[1] / "fixtures" / "product_acceptance" / "scenarios.json"
+)
 GOVERNED_ACCESS = next(
     item
     for item in json.loads(SCENARIOS_PATH.read_text(encoding="utf-8"))
@@ -146,7 +148,11 @@ def test_governed_access_representative_profiles_share_executor_policy(
 
     assert result.value.status == "ok"
     assert recorder.calls == [
-        {"operation": "readiness", "schema_name": "connection_probe", "mode": expected_mode}
+        {
+            "operation": "readiness",
+            "schema_name": "connection_probe",
+            "mode": expected_mode,
+        }
     ]
     assert profile.api_key is None or "synthetic" in profile.api_key.get_secret_value()
 

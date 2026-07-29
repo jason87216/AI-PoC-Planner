@@ -13,8 +13,8 @@ from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
-from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.base import ReasoningEffort, StructuredOutputMode
+from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.profiles import ModelProfile
 
 _SCHEMA_VERSION = "1.0"
@@ -197,9 +197,7 @@ class LocalModelProfileRepository:
                         else reasoning_effort
                     ),
                     capabilities=(
-                        current.capabilities
-                        if capabilities is _UNSET
-                        else capabilities
+                        current.capabilities if capabilities is _UNSET else capabilities
                     ),
                     is_selected=(
                         current.is_selected if is_enabled is not False else False
@@ -322,7 +320,9 @@ class LocalModelProfileRepository:
             raise ValueError("invalid selected model profile")
 
     @staticmethod
-    def _profile_validation_error(error: ValidationError) -> ModelProfileRepositoryError:
+    def _profile_validation_error(
+        error: ValidationError,
+    ) -> ModelProfileRepositoryError:
         """Map known profile policy failures without exposing raw validation input."""
 
         for item in error.errors():
