@@ -37,6 +37,16 @@ from ai_poc_planner.providers.profiles import (
     ModelProfilePublic,
     ProviderConnectionStatus,
 )
+from ai_poc_planner.providers.errors import (
+    ProviderOperation,
+    ProviderOperationError,
+    SafeProviderFailure,
+)
+from ai_poc_planner.providers.structured_output import (
+    StructuredOutputContentError,
+    StructuredOutputExecution,
+    StructuredOutputExecutor,
+)
 
 __all__ = [
     "AssessmentToolInputs",
@@ -62,8 +72,14 @@ __all__ = [
     "ProviderError",
     "ProviderPreparation",
     "ProviderRequest",
+    "ProviderOperation",
+    "ProviderOperationError",
     "ReasoningEffort",
     "ReasoningParameter",
+    "SafeProviderFailure",
     "StructuredOutputMode",
+    "StructuredOutputContentError",
+    "StructuredOutputExecution",
+    "StructuredOutputExecutor",
     "TokenParameter",
 ]
