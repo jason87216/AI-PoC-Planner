@@ -15,8 +15,11 @@ from ai_poc_planner.application.report_synthesis import (
     build_interview_findings,
 )
 from ai_poc_planner.domain.discovery import InterviewQuestion
-from ai_poc_planner.domain.enums import InterviewRole, VisibleMessageKind
-from ai_poc_planner.domain.project_history import VisibleConversationMessage
+from ai_poc_planner.domain.enums import FactStatus, InterviewRole, VisibleMessageKind
+from ai_poc_planner.domain.project_history import (
+    FactRevision,
+    VisibleConversationMessage,
+)
 from ai_poc_planner.domain.solution_catalog import SolutionPattern
 from ai_poc_planner.persistence.catalog_seed import (
     implementation_references,
@@ -124,7 +127,7 @@ def test_interview_findings_are_compact_and_never_expose_raw_questions() -> None
     assert scope_finding.assessment_impact == "用來限制第一階段的工作範圍。"
 
     for fact_key, topic in (
-        ("approval_process_detail", "審批流程與例外"),
+        ("approval_process_detail", "核准流程與例外"),
         ("audit_trail_requirements", "稽核紀錄要求"),
     ):
         finding = build_interview_findings(
@@ -134,6 +137,67 @@ def test_interview_findings_are_compact_and_never_expose_raw_questions() -> None
         )[0]
         assert finding.topic == topic
         assert finding.topic != "其他已確認事項"
+
+
+def test_interview_findings_include_all_confirmed_facts_without_new_questions() -> None:
+    now = datetime.now(UTC)
+    version_id = uuid4()
+    facts = list(_facts(_scenario("governed_access")))
+    for fact_key, value in (
+        ("first_phase_scope", "第一階段只整理電子郵件與試算表申請，先不自動核准。"),
+        ("manager_approval_responsibility", "主管保留每一筆權限申請的最終核准權。"),
+        (
+            "it_provisioning_responsibility",
+            "IT 人員依核准結果實際開通，不由 AI 直接寫入權限系統。",
+        ),
+        ("rules_conflict_check", "提交時檢查必填欄位、固定規則與權限衝突。"),
+        (
+            "audit_trail_requirements",
+            "系統保留申請、規則結果、核准人與時間的稽核紀錄。",
+        ),
+        ("validation_metric", "驗收檢查格式完整率、規則提示正確率與例外紀錄完整性。"),
+    ):
+        facts.append(
+            FactRevision(
+                id=uuid4(),
+                version_id=version_id,
+                fact_key=fact_key,
+                value=value,
+                status=FactStatus.CONFIRMED,
+                reference_message_ids=[uuid4()],
+                created_at=now,
+            )
+        )
+
+    findings = build_interview_findings(questions=[], messages=[], facts=facts)
+    topics = {item.topic for item in findings}
+
+    assert {
+        "第一階段範圍",
+        "主管核准責任",
+        "IT 開通責任",
+        "規則與衝突檢查",
+        "稽核紀錄要求",
+        "驗收指標",
+    } <= topics
+    assert any(
+        item.confirmed_content == "主管保留每一筆權限申請的最終核准權。"
+        for item in findings
+    )
+
+
+def test_permission_report_filters_unrelated_digitization_gate_conditions() -> None:
+    markdown = render_synthesis_markdown(_synthesis("governed_access"))
+
+    assert "OCR" not in markdown
+    assert "數位化" not in markdown
+
+
+def test_permission_report_uses_taiwan_approval_terms() -> None:
+    markdown = render_synthesis_markdown(_synthesis("governed_access"))
+
+    assert "人工審批" not in markdown
+    assert "審批" not in markdown
 
 
 def test_fallback_writes_a_complete_recommendation_article() -> None:
@@ -160,7 +224,7 @@ def test_synthesis_uses_reviewed_catalogue_content() -> None:
     solution = SolutionPattern(
         solution_key="permission_request_rules_and_human_approval",
         recommendation_category="governed_assistive",
-        display_name_zh="權限申請標準化、規則檢查與人工審批",
+        display_name_zh="權限申請標準化、規則檢查與人工核准",
         short_description_zh="將申請格式、規則檢查與人工核准串成可追溯流程。",
         detailed_description_zh=(
             "先標準化申請欄位與權限範本，再執行固定規則檢查；"
@@ -389,7 +453,7 @@ def test_governed_access_report_excludes_unrelated_retrieval_content() -> None:
     main_report = _main_report(markdown)
 
     for required in (
-        "權限申請標準化、規則檢查與人工審批",
+        "權限申請標準化、規則檢查與人工核准",
         "主管保留最終核准",
         "IT 依已核准結果開通",
         "不處理自動開通",

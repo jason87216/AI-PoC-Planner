@@ -48,7 +48,7 @@ _FACT_LABELS = {
     "users_and_owners": "使用者與負責人",
     "known_constraints": "已知限制",
     "human_final_decision": "人工最終決策",
-    "approval_process_detail": "審批流程與例外",
+    "approval_process_detail": "核准流程與例外",
     "processing_boundary": "資料處理邊界",
     "first_phase_scope": "第一階段範圍",
     "auditability_requirements": "追溯與稽核",
@@ -85,7 +85,7 @@ _TOPIC_IMPACTS = {
     "success_conditions": "用來定義第一階段的通過條件。",
     "process_scope": "用來限制第一階段的工作範圍。",
     "audit_trail_detail": "用來保留追溯、覆核與例外處理紀錄。",
-    "audit_trail_requirements": "用來確保審批人、時間、備註與例外紀錄可供查詢與稽核。",
+    "audit_trail_requirements": "用來確保核准人、時間、備註與例外紀錄可供查詢與稽核。",
     "validation_sample": "提醒驗證樣本仍待確認，不能視為已具備。",
     "fault_labels": "提醒標籤定義仍待確認，不能直接承諾模型成果。",
 }
@@ -130,7 +130,7 @@ _PRACTICE_LABELS = {
 _SIMPLIFIED_REPLACEMENTS = {
     "申请": "申請",
     "规则": "規則",
-    "审批": "審批",
+    "审批": "核准",
     "审核": "審核",
     "记录": "紀錄",
     "查询": "查詢",
@@ -389,27 +389,54 @@ def build_interview_findings(
     answers = {str(message.id): message.content for message in messages}
     fact_by_key = _fact_map(facts)
     findings: list[InterviewFinding] = []
-    for question in sorted(
+    ordered_questions = sorted(
         questions, key=lambda item: (item.round_number, item.position)
-    ):
+    )
+    answer_by_key: dict[str, str] = {}
+    for question in ordered_questions:
         key = question.fact_key.strip().casefold()
+        answer = answers.get(str(question.answer_message_id), "").strip()
+        if answer:
+            answer_by_key[key] = answer
+
+    confirmed_facts = {
+        fact.fact_key.strip().casefold(): fact
+        for fact in facts
+        if fact.status is FactStatus.CONFIRMED
+    }
+    seen_keys: set[str] = set()
+
+    def add_finding(key: str, fact: FactRevision | None) -> None:
         topic = _INTERVIEW_TOPIC_ALIASES.get(key) or _FACT_LABELS.get(key)
         impact = _INTERVIEW_IMPACT_ALIASES.get(key) or _TOPIC_IMPACTS.get(key)
         if topic is None or impact is None:
-            # Unknown provider fact keys are merged elsewhere or hidden; never
-            # invent a generic visible topic for them.
-            continue
-        answer = answers.get(str(question.answer_message_id))
+            return
+        seen_keys.add(key)
         findings.append(
             InterviewFinding(
                 topic=topic,
                 confirmed_content=_natural_text(
-                    answer or _fact_display(fact_by_key.get(key)),
+                    answer_by_key.get(key) or _fact_display(fact),
                     fallback="待確認。",
                 ),
                 assessment_impact=impact,
             )
         )
+
+    # Keep the current round's answer-backed findings first, then append every
+    # confirmed persisted fact so refresh/history cannot erase earlier findings.
+    for question in ordered_questions:
+        key = question.fact_key.strip().casefold()
+        if key in seen_keys:
+            continue
+        if key not in confirmed_facts and key not in answer_by_key:
+            continue
+        add_finding(key, confirmed_facts.get(key) or fact_by_key.get(key))
+    for fact in facts:
+        key = fact.fact_key.strip().casefold()
+        if key in seen_keys or key not in confirmed_facts:
+            continue
+        add_finding(key, confirmed_facts[key])
     return findings
 
 
@@ -629,13 +656,13 @@ def _comparison_narrative(
 ) -> str:
     names = "、".join(item.option for item in options)
     recommended = next(item for item in options if item.recommended)
-    if title == "權限申請標準化、規則檢查與人工審批":
+    if title == "權限申請標準化、規則檢查與人工核准":
         case_names = "、".join(recommended.supporting_cases) or "本次沒有匹配案例"
         return "\n\n".join(
             [
                 "本次主要比較電子郵件與試算表人工標準化、標準化申請搭配固定規則與人工核准，以及未來處理自由文字與附件的 AI 輔助；另列出自動核准與直接開通作為明確拒絕的方向。這些方向的差異在於申請入口、規則檢查、人工責任與是否直接執行開通。",
                 f"本次實際匹配的成熟案例為{case_names}。這些案例分別支持集中申請、核准、期限或稽核等做法；案例的產品環境、組織規模與既有整合不同，因此只能作為成熟做法的參考，不能直接複製自動化程度或案例成效。",
-                "本專案最大的差距是目前仍以電子郵件與試算表收件，申請欄位、衝突規則、例外處理、主管核准與 IT 開通紀錄尚未形成單一流程；這與案例已具備的身分治理平台和整合能力不同。綜合比較後仍選擇「權限申請標準化、規則檢查與人工審批」，因為它先處理已確認的流程問題，又保留主管與 IT 的責任邊界，並能在第一階段以可驗收資料驗證。",
+                "本專案最大的差距是目前仍以電子郵件與試算表收件，申請欄位、衝突規則、例外處理、主管核准與 IT 開通紀錄尚未形成單一流程；這與案例已具備的身分治理平台和整合能力不同。綜合比較後仍選擇「權限申請標準化、規則檢查與人工核准」，因為它先處理已確認的流程問題，又保留主管與 IT 的責任邊界，並能在第一階段以可驗收資料驗證。",
             ]
         )
     unknowns = [
@@ -685,7 +712,7 @@ def _target_copy(category: str) -> tuple[str, str, str, str, str, str]:
             "使用經核准的資料與權限範本，建立可追溯的申請紀錄。",
             "只在核准或脫敏環境中試行，不直接寫入高風險系統。",
             "以最小權限、保存規則與人工覆核紀錄限制使用範圍。",
-            "以申請格式完整率、規則提示正確率、主管審批處理時間與例外紀錄完整性驗收。",
+            "以申請格式完整率、規則提示正確率、主管核准處理時間與例外紀錄完整性驗收。",
         ),
         "readiness_first": (
             "先盤點資料、定義標籤與建立可驗證的工作流程。",
@@ -725,7 +752,7 @@ def _current_target_comparison(
             (
                 "資料",
                 "已有員工資料、權限清單、電子郵件與試算表，但格式、版本與代表性尚未統一。",
-                "申請資料、規則結果、審批與開通紀錄形成同一筆可追溯測試資料。",
+                "申請資料、規則結果、核准與開通紀錄形成同一筆可追溯測試資料。",
                 "職位—權限範本、必填欄位與測試樣本仍待確認。",
                 "第一階段先整理核准欄位與代表性申請，並建立錯誤分類。",
             ),
@@ -745,8 +772,8 @@ def _current_target_comparison(
             ),
             (
                 "驗收方式",
-                "目前尚未有同一組樣本可同時檢查格式完整性、規則提示、審批時間與例外紀錄。",
-                "以代表性申請驗收格式完整率、規則提示正確率、主管審批處理時間、例外紀錄完整性與稽核紀錄完整性。",
+                "目前尚未有同一組樣本可同時檢查格式完整性、規則提示、核准時間與例外紀錄。",
+                "以代表性申請驗收格式完整率、規則提示正確率、主管核准處理時間、例外紀錄完整性與稽核紀錄完整性。",
                 "驗證集、錯誤分類與通過門檻仍待確認。",
                 "先建立可重複的申請樣本與人工對照結果，再依五項指標判斷是否進入擴大評估。",
             ),
@@ -893,10 +920,10 @@ def _roadmap(analysis: ValidatedAnalysisResult, category: str) -> list[RoadmapPh
                     "檢查必填欄位與規則衝突",
                     "把規則結果交由主管核准或退回",
                     "由 IT 依核准結果完成模擬或人工開通",
-                    "記錄申請、規則結果、審批人、時間與 IT 處理結果",
+                    "記錄申請、規則結果、核准人、時間與 IT 處理結果",
                 ],
                 inputs=["代表性申請樣本", "已確認規則", "核准環境"],
-                outputs=["規則檢查結果", "審批與開通紀錄", "例外清單"],
+                outputs=["規則檢查結果", "核准與開通紀錄", "例外清單"],
                 human_decision_boundary="主管作最終核准；IT 作實際開通；系統不得取代兩者。",
                 not_doing=[
                     "不自動核准",
@@ -905,7 +932,7 @@ def _roadmap(analysis: ValidatedAnalysisResult, category: str) -> list[RoadmapPh
                 ],
                 remaining_gaps=["依驗收結果確認是否需要系統整合。"],
                 acceptance_criteria=[
-                    "格式完整率、規則提示正確率、主管審批處理時間、例外紀錄完整性與稽核紀錄完整性可被量測。"
+                    "格式完整率、規則提示正確率、主管核准處理時間、例外紀錄完整性與稽核紀錄完整性可被量測。"
                 ],
             ),
             RoadmapPhase(
@@ -988,7 +1015,9 @@ def _score_improvement(dimension: str) -> str:
     }.get(dimension, "依第一階段驗證結果更新。")
 
 
-def _appendix(analysis: ValidatedAnalysisResult) -> ReportAppendix:
+def _appendix(
+    analysis: ValidatedAnalysisResult, *, solution_key: str = ""
+) -> ReportAppendix:
     scores = [
         ScoreAppendixRow(
             dimension=_SCORE_LABELS.get(score.dimension.value, "評估面向"),
@@ -1005,6 +1034,13 @@ def _appendix(analysis: ValidatedAnalysisResult) -> ReportAppendix:
     )
     gates_by_limit: dict[str, GateAppendixRow] = {}
     for gate in gate_source:
+        release_conditions = list(getattr(gate, "release_conditions", []) or [])
+        if solution_key == "permission_request_rules_and_human_approval":
+            release_conditions = [
+                item
+                for item in release_conditions
+                if not any(term in item for term in ("OCR", "數位化"))
+            ]
         row = GateAppendixRow(
             gate_id="內部檢核項目",
             limit_content=_natural_text(
@@ -1019,7 +1055,7 @@ def _appendix(analysis: ValidatedAnalysisResult) -> ReportAppendix:
                 fallback="可先在受控範圍內完成資料、流程與人工確認準備。",
             ),
             release_condition=_natural_text(
-                "；".join(getattr(gate, "release_conditions", [])),
+                "；".join(release_conditions),
                 fallback="待相關條件確認後再重新評估。",
             ),
         )
@@ -1201,7 +1237,7 @@ def build_report_synthesis(
         ),
         implementation_roadmap=_roadmap(analysis, category),
         major_risks_and_boundaries=_major_risks(category),
-        appendix=_appendix(analysis),
+        appendix=_appendix(analysis, solution_key=solution.solution_key),
     )
 
 
@@ -1236,7 +1272,7 @@ def validate_report_quality(synthesis: ReportSynthesis, markdown: str) -> None:
         errors.append("adjacent_duplicate_paragraph")
     if synthesis.recommended_solution is not None and (
         synthesis.recommended_solution.display_name_zh
-        == "權限申請標準化、規則檢查與人工審批"
+        == "權限申請標準化、規則檢查與人工核准"
     ):
         if len(synthesis.option_comparison) != 4 and synthesis.reviewed_cases:
             errors.append("permission_route_count")
@@ -1282,7 +1318,7 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
             for item in synthesis.interview_findings
         )
     else:
-        lines.append("目前沒有新增的訪談發現；後續確認事項會直接更新此表。")
+        lines.append("目前沒有已確認的訪談結論。")
     lines.extend(
         [
             "",

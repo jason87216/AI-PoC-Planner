@@ -204,14 +204,14 @@ def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> Non
                 "schema_version": "2.2",
                 "executive_narrative": "先顯示結論。",
                 "recommended_solution": {
-                    "display_name_zh": "權限申請標準化、規則檢查與人工審批",
+                    "display_name_zh": "權限申請標準化、規則檢查與人工核准",
                     "short_description_zh": "以固定規則檢查申請內容。",
-                    "detailed_description_zh": "先整理申請格式，再由主管審批。",
+                    "detailed_description_zh": "先整理申請格式，再由主管核准。",
                     "suitable_when_zh": "規則與責任可以明確界定時。",
                     "not_suitable_when_zh": "規則尚未釐清時。",
-                    "typical_scope_zh": "申請表、規則清單與審批紀錄。",
-                    "human_boundary_zh": "主管保留最終審批。",
-                    "expected_outputs_zh": "規則結果與審批紀錄。",
+                    "typical_scope_zh": "申請表、規則清單與核准紀錄。",
+                    "human_boundary_zh": "主管保留最終核准。",
+                    "expected_outputs_zh": "規則結果與核准紀錄。",
                     "acceptance_focus_zh": "檢查漏項與例外處理。",
                     "solution_key": "hidden-solution-key",
                 },
@@ -321,7 +321,7 @@ def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> Non
         False,
     ]
     assert view["recommended_solution"]["display_name_zh"] == (
-        "權限申請標準化、規則檢查與人工審批"
+        "權限申請標準化、規則檢查與人工核准"
     )
     assert view["reviewed_cases"][0]["source_name"] == "OpenAI 客戶案例：Morgan Stanley"
     assert view["reviewed_cases"][0]["source_url"] == "https://example.test/morgan"

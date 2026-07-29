@@ -749,12 +749,13 @@ class PlanningReportService:
 
         if self._sessions is None:
             return [], []
+        messages = self._history.list_messages(project_id, version_number)
+        questions: list[InterviewQuestion] = []
         try:
             session = self._sessions.get_session_for_version(version_id)
             questions = self._sessions.list_questions(session.id)
-            messages = self._history.list_messages(project_id, version_number)
         except InterviewSessionNotFoundError:
-            # Older assessed snapshots may predate the interview tables. Their
-            # deterministic report remains usable without pretending findings exist.
-            return [], []
+            # Older assessed snapshots may predate interview tables. Keep the
+            # visible messages available so persisted facts still have context.
+            pass
         return questions, messages

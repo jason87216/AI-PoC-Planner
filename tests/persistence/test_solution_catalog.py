@@ -16,7 +16,7 @@ def test_catalog_migration_seeds_only_reviewed_runtime_content(tmp_path) -> None
         )
         assert solution is not None
         assert solution.solution_key == "permission_request_rules_and_human_approval"
-        assert solution.display_name_zh == "權限申請標準化、規則檢查與人工審批"
+        assert solution.display_name_zh == "權限申請標準化、規則檢查與人工核准"
         assert solution.review_status.value == "approved"
 
         approved_cases = catalog.list_approved_cases_for_solution(solution.solution_key)
