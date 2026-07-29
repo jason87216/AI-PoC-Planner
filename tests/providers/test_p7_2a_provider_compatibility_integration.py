@@ -524,6 +524,12 @@ def test_live_p7_2a_governed_access_public_api_flow(
             assert client.get("/v1/projects").status_code == 200
             assert client.get(f"/v1/projects/{project_id}/versions").status_code == 200
             assert len(recorder.calls) == report_call_count
+            assert {call["operation"] for call in recorder.calls} >= {
+                "readiness",
+                "discovery",
+                "analysis",
+                "report",
+            }
 
         restart_recorder = LiveCallRecorder()
         restarted_app, restarted_provider_client = _live_app(
