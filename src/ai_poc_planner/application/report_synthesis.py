@@ -273,6 +273,9 @@ def _option_comparison(
         for item in candidate_solutions
         if item.review_status is ReviewStatus.APPROVED
     }
+    relevant_alternative_categories = {
+        "governed_assistive": {"rules_first", "readiness_first"},
+    }.get(category)
     alternative_categories: list[str] = []
     for option in analysis.options:
         if option.option_key == analysis.recommended_option_key:
@@ -287,6 +290,10 @@ def _option_comparison(
             alternative_category is None
             or alternative_category == category
             or alternative_category in alternative_categories
+            or (
+                relevant_alternative_categories is not None
+                and alternative_category not in relevant_alternative_categories
+            )
         ):
             continue
         alternative = solutions_by_category.get(alternative_category)
@@ -319,10 +326,10 @@ def _comparison_narrative(
         for fact in facts
         if fact.status in {FactStatus.UNKNOWN, FactStatus.MISSING}
     ]
-    case_sentence = (
-        "、".join(recommended.supporting_cases)
+    case_narrative = (
+        f"成熟案例方面，本次以{'、'.join(recommended.supporting_cases)}作為{title}中特定做法的參考。它們支持受控的資料使用、內容檢索或人工確認，但不代表本專案可以照搬相同的自動化程度。"
         if recommended.supporting_cases
-        else "目前沒有直接對應的成熟案例"
+        else f"本次沒有找到可支持「{title}」的已審核成熟案例，因此不把其他領域案例當成證據。正式判斷以已確認的流程規則、人工責任、資料條件與驗收範圍為準。"
     )
     gap_sentence = (
         "、".join(dict.fromkeys(unknowns)) or "實際資料版本、責任分工與驗證樣本"
@@ -330,7 +337,7 @@ def _comparison_narrative(
     return "\n\n".join(
         [
             f"本次主要比較{names}等方向；比較的目的不是重新排名，而是確認哪一種做法最能回應已確認的專案問題與限制。",
-            f"成熟案例方面，本次以{case_sentence}作為{title}中特定做法的參考。它們支持受控的資料使用、內容檢索或人工確認，但不代表本專案可以照搬相同的自動化程度。",
+            case_narrative,
             f"本專案與案例之間最大的差距在於{gap_sentence}仍須逐項確認。因此，案例只用來說明可移植的流程做法，不能取代本專案的資料、權限與驗收判斷。",
             f"綜合已確認需求、人工責任與可驗證範圍後，仍選擇「{title}」作為正式推薦；下表先呈現方案與案例的關係，再說明推薦方案會如何改變目前狀態。",
         ]
@@ -361,7 +368,7 @@ def _target_copy(category: str) -> tuple[str, str, str, str, str, str]:
             "使用經核准的資料與權限範本，建立可追溯的申請紀錄。",
             "只在核准或脫敏環境中試行，不直接寫入高風險系統。",
             "以最小權限、保存規則與人工覆核紀錄限制使用範圍。",
-            "以漏項減少、人工覆核可追溯性與例外處理品質驗收。",
+            "以申請格式完整率、規則提示正確率、主管審批處理時間與例外紀錄完整性驗收。",
         ),
         "readiness_first": (
             "先盤點資料、定義標籤與建立可驗證的工作流程。",

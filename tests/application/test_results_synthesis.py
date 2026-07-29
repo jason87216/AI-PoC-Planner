@@ -297,6 +297,38 @@ def test_comparison_combines_options_cases_and_project_gap_in_one_section() -> N
     assert "目前狀態與目標狀態" not in markdown
 
 
+def test_governed_access_report_excludes_unrelated_retrieval_content() -> None:
+    markdown = render_synthesis_markdown(_synthesis("governed_access"))
+    main_report = _main_report(markdown)
+
+    for required in (
+        "權限申請標準化、規則檢查與人工審批",
+        "主管保留最終審批",
+        "IT 依已核准結果開通",
+        "不處理自動開通",
+        "申請格式完整率",
+        "規則提示正確率",
+        "主管審批處理時間",
+        "例外紀錄完整性",
+        "目前沒有足夠相關的已審核成熟案例",
+    ):
+        assert required in main_report
+
+    for prohibited in (
+        "文件知識檢索與人工審核輔助",
+        "Morgan Stanley",
+        "Klarna",
+        "Ironclad",
+        "CrossTech",
+        "autonomous_action",
+        "盤點核准文件與 FAQ",
+        "內容檢索",
+        "來源引用",
+        "客服回覆",
+    ):
+        assert prohibited not in main_report
+
+
 def test_roadmap_contains_immediate_actions_and_has_no_standalone_next_steps() -> None:
     markdown = render_synthesis_markdown(_synthesis("knowledge_assist"))
 

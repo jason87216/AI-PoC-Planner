@@ -19,7 +19,7 @@ from ai_poc_planner.domain.reviewed_cases import (
 from ai_poc_planner.domain.solution_catalog import SolutionPattern
 
 _STAMP = "2026-07-28T00:00:00+00:00"
-_CONTENT_VERSION = "2026.07.28.2"
+_CONTENT_VERSION = "2026.07.29.1"
 
 
 def reviewed_solution_patterns() -> tuple[SolutionPattern, ...]:
@@ -71,7 +71,7 @@ def reviewed_solution_patterns() -> tuple[SolutionPattern, ...]:
             typical_scope_zh="先驗證申請表、職位—權限範本、規則清單、主管審批與稽核紀錄，不處理自動開通。",
             human_boundary_zh="主管保留最終審批；IT 依已核准結果開通；系統不得自行審批、拒絕或開通權限。",
             expected_outputs_zh="完整申請資料、規則檢查結果、人工審批紀錄、例外處理紀錄與可追溯稽核資料。",
-            acceptance_focus_zh="檢查漏項、規則命中、例外處理、人工審批與稽核紀錄是否完整，而非追求自動開通。",
+            acceptance_focus_zh="檢查申請格式完整率、規則提示正確率、主管審批處理時間、例外紀錄完整性與稽核紀錄完整性，而非追求自動開通。",
             review_status=ReviewStatus.APPROVED,
             content_version=_CONTENT_VERSION,
             created_at=_STAMP,

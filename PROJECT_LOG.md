@@ -13,7 +13,8 @@ Draft PR #24 is refining the Results report's reader-facing information hierarch
 - SQLite `solution_patterns` and `reviewed_cases` are now the runtime source of truth. Provider titles, translations, case facts, outcomes, and source URLs cannot enter the formal report.
 - Deterministic matching now requires the approved solution-key relation before fit/gap ranking; report creation fail-closes when the project route, stored solution, or stored case facts disagree.
 - The governed access route requires confirmed access-request, fixed-rule, and human-approval signals together. It formally recommends `權限申請標準化、規則檢查與人工審批`, even when validation samples remain pending; it does not fall back to document knowledge retrieval or generic data readiness.
-- The refreshed populated UAT passed with the governed access solution, the honest no-case fallback, UI/Markdown schema `2.2` parity, and history re-entry without regeneration. Its ignored artifact is `artifacts/results-catalog-consistency-uat-20260728/`.
+- A follow-up owner investigation found that the earlier governed-access UAT still inserted an unrelated knowledge-retrieval comparison row despite its no-case fallback. Governed reports now restrict comparison rows to the relevant rules and data-readiness baselines, do not use other-domain cases as evidence, and use application-format completeness, rule-prompt correctness, manager approval time, and exception-record completeness as the visible acceptance measures.
+- The earlier ignored artifact remains `artifacts/results-catalog-consistency-uat-20260728/`; a new isolated UAT artifact is required before claiming refreshed UAT completion.
 - Final verification passed: `619 passed, 6 skipped`, Ruff, format check, and `git diff --check`.
 
 ## Current status

@@ -190,6 +190,14 @@ solution/case table and current/target/gap table. It may state that no sufficien
 reviewed case exists; it must not force an unrelated case. UI and Markdown use
 the same persisted synthesis and source links.
 
+For the governed access route, comparison alternatives must remain relevant to
+the rules-and-approval workflow. It must not introduce an unrelated knowledge
+retrieval solution or its cases when no approved case supports the formal
+solution key. The reader-facing acceptance language must measure application
+format completeness, rule-prompt correctness, manager approval time, and
+exception-record completeness; it must not imply automatic approval or direct
+provisioning.
+
 The UI renders the readable report first. Raw Markdown, IDs, rule IDs, and
 technical evidence are not primary product content.
 
