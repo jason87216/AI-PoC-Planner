@@ -11,6 +11,7 @@ from ai_poc_planner.persistence.connection import database_connection
 from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.schema import initialize_database
+from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
 from tests.support.assessed_snapshot import build_assessed_snapshot
 
 
@@ -42,6 +43,7 @@ def test_existing_assessment_is_returned_without_provider_or_duplicate_run(
             adapter_factory=lambda _: (_ for _ in ()).throw(
                 AssertionError("provider must not be called")
             ),
+            catalog=SQLiteSolutionCatalogRepository(connection),
         )
         assert service.create(fixture.project_id, 1) == fixture.expected_analysis
     finally:

@@ -27,14 +27,21 @@ class SQLitePlanningReportRepository:
         if row is None:
             return None
         try:
+            stored_report = json.loads(row["report_json"])
+            synthesis = (
+                stored_report.pop("synthesis", None)
+                if isinstance(stored_report, dict)
+                else None
+            )
             return PersistedPlanningReport.model_validate(
                 {
                     "id": row["id"],
                     "version_id": row["version_id"],
                     "analysis_id": row["analysis_id"],
-                    "report": json.loads(row["report_json"]),
+                    "report": stored_report,
                     "markdown": row["markdown"],
                     "created_at": row["created_at"],
+                    "synthesis": synthesis,
                 }
             )
         except (json.JSONDecodeError, ValidationError, TypeError) as error:
@@ -49,7 +56,12 @@ class SQLitePlanningReportRepository:
                     str(report.version_id),
                     str(report.analysis_id),
                     json.dumps(
-                        report.report.model_dump(mode="json"),
+                        {
+                            **report.report.model_dump(mode="json"),
+                            "synthesis": report.synthesis.model_dump(mode="json")
+                            if report.synthesis is not None
+                            else None,
+                        },
                         ensure_ascii=False,
                         sort_keys=True,
                     ),

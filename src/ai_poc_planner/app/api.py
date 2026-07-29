@@ -126,6 +126,7 @@ from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepos
 from ai_poc_planner.persistence.projects import SQLiteProjectRepository
 from ai_poc_planner.persistence.report import SQLitePlanningReportRepository
 from ai_poc_planner.persistence.schema import initialize_database
+from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
 from ai_poc_planner.providers.base import (
     ModelProvider,
     ReasoningEffort,
@@ -433,9 +434,7 @@ def create_app(
                 selected_profile_getter=profile_repository.get_selected,
                 profile_getter=profile_repository.get,
                 adapter_factory=analysis_adapter_factory or default_analysis_adapter,
-                cases_path=Path(__file__).resolve().parents[3]
-                / "data"
-                / "reviewed_cases.json",
+                catalog=SQLiteSolutionCatalogRepository(connection),
             )
         finally:
             connection.close()
@@ -452,15 +451,14 @@ def create_app(
                     SQLiteProjectHistoryRepository(connection),
                     selected_profile_getter=profile_repository.get_selected,
                 ),
+                sessions=SQLiteDiscoveryRepository(connection),
                 analyses=SQLiteAnalysisRepository(connection),
                 reports=SQLitePlanningReportRepository(connection),
                 readiness=readiness,
                 selected_profile_getter=profile_repository.get_selected,
                 profile_getter=profile_repository.get,
                 adapter_factory=analysis_adapter_factory or default_analysis_adapter,
-                cases_path=Path(__file__).resolve().parents[3]
-                / "data"
-                / "reviewed_cases.json",
+                catalog=SQLiteSolutionCatalogRepository(connection),
             )
         finally:
             connection.close()

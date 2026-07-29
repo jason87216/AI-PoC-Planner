@@ -7,17 +7,22 @@ from __future__ import annotations
 import json
 import re
 from datetime import UTC, datetime
-from pathlib import Path
 from uuid import UUID, uuid4
 
-from ai_poc_planner.application.case_matching import match_cases
+from ai_poc_planner.application.case_centered_assessment import (
+    derive_recommendation_category,
+)
 from ai_poc_planner.application.project_history import ProjectHistoryService
 from ai_poc_planner.application.provider_readiness import ProviderReadinessService
+from ai_poc_planner.application.report_synthesis import (
+    build_report_synthesis,
+    render_synthesis_markdown,
+)
 from ai_poc_planner.domain.analysis import ValidatedAnalysisResult
 from ai_poc_planner.domain.case_centered import (
     CaseCenteredNarrative,
 )
-from ai_poc_planner.domain.catalog import OpportunityType
+from ai_poc_planner.domain.discovery import InterviewQuestion
 from ai_poc_planner.domain.enums import FactStatus, ProjectStatus
 from ai_poc_planner.domain.planning_report import (
     REPORT_SECTION_KEYS,
@@ -26,12 +31,20 @@ from ai_poc_planner.domain.planning_report import (
     PlanningReportPartA,
     PlanningReportPartB,
     ReportSectionDraft,
+    ReportSynthesis,
 )
-from ai_poc_planner.domain.project_history import FactRevision, ProjectVersion
+from ai_poc_planner.domain.project_history import (
+    FactRevision,
+    ProjectVersion,
+    VisibleConversationMessage,
+)
 from ai_poc_planner.domain.reviewed_cases import ReviewedCase
-from ai_poc_planner.infrastructure.local_case_repository import LocalCaseRepository
+from ai_poc_planner.domain.solution_catalog import SolutionPattern
 from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
+from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
+from ai_poc_planner.persistence.errors import InterviewSessionNotFoundError
 from ai_poc_planner.persistence.report import SQLitePlanningReportRepository
+from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
 from ai_poc_planner.providers.json_schema import normalize_provider_schema
 from ai_poc_planner.providers.openai_compatible import JSONSchemaResponseFormat
 from ai_poc_planner.providers.profiles import ModelProfile
@@ -47,12 +60,28 @@ def render_markdown(
     report: PlanningReportDraft,
     analysis: ValidatedAnalysisResult,
     facts: list[FactRevision],
-    cases: tuple[ReviewedCase, ...] = (),
+    *,
+    synthesis: ReportSynthesis | None = None,
+    solution: SolutionPattern | None = None,
+    reviewed_cases: tuple[ReviewedCase, ...] = (),
+    candidate_solutions: tuple[SolutionPattern, ...] = (),
 ) -> str:
     """Render in a fixed, business-readable order without provider internals."""
 
     if analysis.case_centered is not None:
-        return _render_case_centered_markdown(report, analysis, facts)
+        return render_synthesis_markdown(
+            synthesis
+            or build_report_synthesis(
+                analysis=analysis,
+                facts=facts,
+                solution=solution
+                if solution is not None
+                else _missing_solution_pattern(),
+                reviewed_cases=reviewed_cases,
+                candidate_solutions=candidate_solutions,
+                report=report,
+            )
+        )
     lines = [
         "# AI PoC Planning Report",
         "",
@@ -73,11 +102,6 @@ def render_markdown(
                 "Evidence: " + ", ".join(section.fact_refs),
             ]
         )
-    lines.extend(["", "## Relevant Reviewed Cases", ""])
-    lines.extend(
-        f"- {case.organization} ({case.evidence_grade}): {case.source_name} — {case.source_url}"
-        for case in cases
-    )
     lines.extend(["", "## Fact-Backed Scoring Appendix", ""])
     for score in analysis.scores:
         lines.append(
@@ -87,6 +111,10 @@ def render_markdown(
     for gate in analysis.gate_results:
         lines.append(f"- {gate.rule_id}: {gate.disposition.value} — {gate.reason}")
     return "\n".join(lines) + "\n"
+
+
+def _missing_solution_pattern() -> SolutionPattern:
+    raise PlanningReportError("approved_solution_not_found")
 
 
 def _label(value: object) -> str:
@@ -384,13 +412,14 @@ class PlanningReportService:
         self,
         *,
         history: ProjectHistoryService,
+        sessions: SQLiteDiscoveryRepository | None = None,
         analyses: SQLiteAnalysisRepository,
         reports: SQLitePlanningReportRepository,
         readiness: ProviderReadinessService,
         selected_profile_getter,
         profile_getter=None,
         adapter_factory,
-        cases_path: Path,
+        catalog: SQLiteSolutionCatalogRepository | None = None,
         clock=lambda: datetime.now(UTC),
     ) -> None:
         self._history, self._analyses, self._reports, self._readiness = (
@@ -399,13 +428,14 @@ class PlanningReportService:
             reports,
             readiness,
         )
+        self._sessions = sessions
         (
             self._selected_profile_getter,
             self._profile_getter,
             self._adapter_factory,
-            self._cases_path,
+            self._catalog,
             self._clock,
-        ) = selected_profile_getter, profile_getter, adapter_factory, cases_path, clock
+        ) = selected_profile_getter, profile_getter, adapter_factory, catalog, clock
 
     def get(self, project_id: UUID, version_number: int) -> PersistedPlanningReport:
         version = self._history.get_version(project_id, version_number)
@@ -425,6 +455,12 @@ class PlanningReportService:
             raise PlanningReportError("analysis_not_found")
         profile = self._profile(version)
         facts = self._history.list_current_facts(project_id, version_number)
+        (
+            solution,
+            reviewed_cases,
+            case_links,
+            implementation_references,
+        ) = self._catalogue_for_report(analysis, facts)
         tokens = {
             f"F{i:03d}": fact
             for i, fact in enumerate(
@@ -490,9 +526,22 @@ class PlanningReportService:
                 "case_centered_narrative": _case_centered_narrative(analysis),
             }
         )
-        markdown = render_markdown(
-            draft, analysis, facts, self._matched_cases(analysis)
+        questions, messages = self._interview_records(
+            version.id, project_id, version_number
         )
+        synthesis = build_report_synthesis(
+            analysis=analysis,
+            facts=facts,
+            solution=solution,
+            reviewed_cases=reviewed_cases,
+            candidate_solutions=self._catalog.list_approved_solutions(),
+            report=draft,
+            interview_questions=questions,
+            messages=messages,
+            case_links=case_links,
+            implementation_references=implementation_references,
+        )
+        markdown = render_synthesis_markdown(synthesis)
         result = PersistedPlanningReport(
             id=uuid4(),
             version_id=version.id,
@@ -500,6 +549,7 @@ class PlanningReportService:
             report=draft,
             markdown=markdown,
             created_at=self._clock(),
+            synthesis=synthesis,
         )
         with self._history._repository.transaction():
             if self._reports.get_by_version(version.id) is not None:
@@ -633,21 +683,79 @@ class PlanningReportService:
             raise PlanningReportError("provider_output_invalid")
         return json.loads(value)
 
-    def _matched_cases(
-        self, analysis: ValidatedAnalysisResult
-    ) -> tuple[ReviewedCase, ...]:
-        if analysis.case_centered is not None:
-            return tuple(item.case for item in analysis.case_centered.matched_cases)
-        option = next(
-            item
-            for item in analysis.options
-            if item.option_key == analysis.recommended_option_key
+    def _catalogue_for_report(
+        self,
+        analysis: ValidatedAnalysisResult,
+        facts: list[FactRevision],
+    ):
+        """Fail closed unless the persisted assessment still matches SQLite content."""
+
+        result = analysis.case_centered
+        if self._catalog is None or result is None:
+            raise PlanningReportError("report_catalogue_unavailable")
+        solution = self._catalog.get_solution(result.solution_key)
+        if solution is None:
+            raise PlanningReportError("approved_solution_not_found")
+        if (
+            solution.recommendation_category != result.recommendation_category.value
+            or solution.display_name_zh != result.recommendation_title
+            or derive_recommendation_category(facts, analysis.gate_results)
+            is not result.recommendation_category
+        ):
+            raise PlanningReportError("project_solution_mismatch")
+        case_links = self._catalog.list_approved_case_links_for_solution(
+            solution.solution_key
         )
-        reference = option.ai_opportunity
-        if reference is None or reference.kind != "catalog":
-            return ()
-        return match_cases(
-            LocalCaseRepository(self._cases_path).load(),
-            OpportunityType(reference.opportunity_type),
-            option.option_kind.value,
+        cases = []
+        for match in result.matched_cases:
+            case = self._catalog.get_approved_case(match.case.case_id)
+            if case is None or case.model_dump(mode="json") != match.case.model_dump(
+                mode="json"
+            ):
+                raise PlanningReportError("reviewed_case_mismatch")
+            cases.append(case)
+        linked_case_ids = {
+            link.case_id for link in case_links if link.support_type != "contra"
+        }
+        if (
+            not {match.case.case_id for match in result.matched_cases}
+            <= linked_case_ids
+        ):
+            raise PlanningReportError("reviewed_case_mismatch")
+        if solution.solution_key == "permission_request_rules_and_human_approval":
+            try:
+                self._catalog.require_coverage(
+                    "governed_access",
+                    solution.solution_key,
+                    matched_case_ids=[
+                        match.case.case_id for match in result.matched_cases
+                    ],
+                )
+            except Exception as error:
+                raise PlanningReportError("CATALOG_COVERAGE_ERROR") from error
+        return (
+            solution,
+            tuple(cases),
+            tuple(case_links),
+            self._catalog.list_approved_implementation_references(
+                solution.solution_key
+            ),
         )
+
+    def _interview_records(
+        self, version_id: UUID, project_id: UUID, version_number: int
+    ) -> tuple[list[InterviewQuestion], list[VisibleConversationMessage]]:
+        """Read visible interview records through the report application boundary."""
+
+        if self._sessions is None:
+            return [], []
+        messages = self._history.list_messages(project_id, version_number)
+        questions: list[InterviewQuestion] = []
+        try:
+            session = self._sessions.get_session_for_version(version_id)
+            questions = self._sessions.list_questions(session.id)
+        except InterviewSessionNotFoundError:
+            # Older assessed snapshots may predate interview tables. Keep the
+            # visible messages available so persisted facts still have context.
+            pass
+        return questions, messages

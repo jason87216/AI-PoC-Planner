@@ -144,6 +144,9 @@ class CaseCenteredAssessment(ContractModel):
     transferable_practices: list[TransferablePractice] = Field(default_factory=list)
     gate_impacts: list[HardGateImpact] = Field(default_factory=list)
     phased_path: list[ImplementationPhase] = Field(min_length=1)
+    # Stored with the deterministic result so a later report can prove that
+    # its display name and cases came from the same approved catalogue entry.
+    solution_key: NonEmptyStr = "legacy_unresolved"
     recommendation_title: NonEmptyStr
     recommendation_category: RecommendationCategory = RecommendationCategory.AI_HYBRID
     recommendation_basis: list[NonEmptyStr] = Field(min_length=1)

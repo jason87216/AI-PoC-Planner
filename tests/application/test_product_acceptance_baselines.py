@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -35,7 +36,12 @@ from ai_poc_planner.domain.enums import (
     ScoreDimension,
 )
 from ai_poc_planner.domain.project_history import FactRevision
-from ai_poc_planner.infrastructure.local_case_repository import LocalCaseRepository
+from ai_poc_planner.persistence.catalog_seed import (
+    reviewed_cases,
+    reviewed_solution_patterns,
+)
+from ai_poc_planner.persistence.schema import initialize_database
+from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
 from ai_poc_planner.ui.results import case_centered_overview
 from tests.fixtures.product_acceptance.schema import (
     ACCEPTANCE_RUBRIC,
@@ -44,7 +50,8 @@ from tests.fixtures.product_acceptance.schema import (
 )
 
 _ROOT = Path(__file__).parents[2]
-_CASES = LocalCaseRepository(_ROOT / "data" / "reviewed_cases.json").load()
+_CASES = reviewed_cases()
+_SOLUTIONS = reviewed_solution_patterns()
 _SCENARIOS = {item.scenario_id: item for item in load_acceptance_scenarios()}
 _DEFAULT_OPPORTUNITY = (
     OpportunityType.ENTERPRISE_KNOWLEDGE_AND_PROFESSIONAL_DOCUMENT_ASSIST
@@ -242,16 +249,35 @@ def _formal_result(
         ],
     )
     service = object.__new__(EvidenceAnalysisService)
-    service._cases_path = _ROOT / "data" / "reviewed_cases.json"
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    initialize_database(connection)
+    service._catalog = SQLiteSolutionCatalogRepository(connection)
     service._clock = lambda: datetime.now(UTC)
     service._uuid_factory = uuid4
-    return service._validated_result(
-        SimpleNamespace(id=uuid4()), draft, ordered_facts, tokens
-    )
+    try:
+        return service._validated_result(
+            SimpleNamespace(id=uuid4()), draft, ordered_facts, tokens
+        )
+    finally:
+        connection.close()
 
 
 def _formal_recommendation_category(result) -> str:
     return result.case_centered.recommendation_category.value
+
+
+def _solution_for_result(result):
+    return next(
+        item
+        for item in _SOLUTIONS
+        if item.solution_key == result.case_centered.solution_key
+    )
+
+
+def _reviewed_cases_for_result(result):
+    match_ids = {item.case.case_id for item in result.case_centered.matched_cases}
+    return tuple(item for item in _CASES if item.case_id in match_ids)
 
 
 def _flatten_text(value: object) -> str:
@@ -269,7 +295,12 @@ def _formal_outputs(result, facts: tuple[FactRevision, ...]) -> tuple[str, str, 
     )
     ui = _flatten_text(ui_view)
     markdown = render_markdown(
-        SimpleNamespace(section_items=lambda: ()), result, list(facts)
+        SimpleNamespace(section_items=lambda: ()),
+        result,
+        list(facts),
+        solution=_solution_for_result(result),
+        reviewed_cases=_reviewed_cases_for_result(result),
+        candidate_solutions=_SOLUTIONS,
     )
     return formal, ui, markdown
 
@@ -355,7 +386,7 @@ def test_formal_category_overrides_provider_hybrid_for_rules_first_case() -> Non
     )
 
     assert result.case_centered.recommendation_category.value == "rules_first"
-    assert result.case_centered.recommendation_title == "流程標準化與規則檢查路線"
+    assert result.case_centered.recommendation_title == "流程標準化、規則檢查與人工核准"
     assert (
         "hybrid" not in " ".join(result.case_centered.recommendation_basis).casefold()
     )
@@ -601,6 +632,9 @@ def test_api_ui_and_markdown_share_the_same_case_centered_result() -> None:
         SimpleNamespace(section_items=lambda: ()),
         result,
         _facts(_scenario("knowledge_assist")),
+        solution=_solution_for_result(result),
+        reviewed_cases=_reviewed_cases_for_result(result),
+        candidate_solutions=_SOLUTIONS,
     )
 
     assert ui_view["recommendation_title"] == result.case_centered.recommendation_title
@@ -609,8 +643,8 @@ def test_api_ui_and_markdown_share_the_same_case_centered_result() -> None:
     ]
     assert result.case_centered.recommendation_title in markdown
     assert all(
-        item.case.title in markdown for item in result.case_centered.matched_cases
+        item.case.organization in markdown
+        for item in result.case_centered.matched_cases
     )
-    assert all(
-        phase.phase_name in markdown for phase in result.case_centered.phased_path
-    )
+    assert "準備階段（立即行動）" in markdown
+    assert "第一階段 PoC" in markdown

@@ -47,5 +47,6 @@ Thumbs.db
 artifacts/
 tmp/
 temp/
+.pytest-tmp-*/
 *.tmp
 *.bak

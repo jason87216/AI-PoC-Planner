@@ -151,6 +151,38 @@ was not performed after the owner lost access to a usable local UI session. It i
 **deferred, not claimed as passed**, and is included in P8.1. P6 implementation work is
 otherwise closed; P6.6 is an acceptance baseline, not another product feature.
 
+### P6.7 Results Narrative and Comparison Redesign — Complete on feature branch
+
+Delivered:
+
+- a continuous enterprise assessment article with the executive conclusion before
+  technical score and gate details;
+- persisted interview findings, current/target comparison, candidate-option comparison,
+  reviewed-case comparison, recommendation, roadmap, boundaries, and a safe technical
+  appendix without standalone next actions;
+- SQLite-reviewed solution patterns and source-backed case content; approved catalog
+  records are the only formal source for user-facing solution names, case facts, and
+  source links;
+- deterministic solution–case–project consistency checks that reject mismatched
+  recommendation categories, unapproved content, unrelated cases, and stale case facts;
+- one canonical `ReportSynthesis` consumed by both the Results UI and Markdown;
+- deterministic fallback composition when provider narrative generation is unavailable;
+- regression tests for safe interview tracing, formal recommendation categories,
+  provider fallback, no rerun on re-entry, UI/Markdown parity, and appendix-only scores
+  and hard-gate identifiers.
+
+Verification:
+
+- the populated permission-request UAT uses a fresh persistent state root and artifact
+  directory, with schema `8`, `ReportSynthesis` `2.2`, three approved matching cases,
+  and three persisted interview findings;
+- API first/refresh/history downloads are byte-identical; UI first/history downloads
+  are byte-identical and line-for-line identical to the API report;
+- refresh and history re-entry issue report reads only, with no report-generation POST;
+- `622 passed, 6 skipped`, Ruff, formatting, and diff checks passed;
+- headed Chrome verified the Results UI's integrated comparison chapter and download
+  flow without standalone case cards or raw interview content.
+
 ### Checkpoint P6
 
 - P6.1–P6.6 implementation and technical acceptance are complete.

@@ -2,7 +2,20 @@
 
 ## Current goal
 
-PR #23 completes the P6.6 technical product-acceptance baseline and closes Phase 6 implementation. The next planned implementation is P7.2 provider compatibility and local inference; it has not started.
+Draft PR #24 is refining the Results report's reader-facing information hierarchy. P7.2 provider compatibility and local inference has not started.
+
+## Results Narrative and Comparison Redesign
+
+- `ReportSynthesis` 2.2 puts a complete deterministic recommendation article before the concise interview table and the integrated option, case, and project-gap comparison.
+- Mature cases are evidence for a candidate direction rather than an independent ranking; current/target/gap rows are the second table in that same comparison chapter.
+- Raw interview questions, evidence lists, internal fact tokens, and standalone next steps are removed from the reader-facing report. The collapsible technical appendix retains only Chinese six-dimension scores and hard-limit details without identifiers.
+- The same persisted `ReportSynthesis` is used by the Results UI and Markdown renderer; Streamlit continues to access report data through the FastAPI boundary.
+- SQLite `solution_patterns`, `reviewed_cases`, and their explicit solution/case/reference relations are now the runtime source of truth. Provider titles, translations, case facts, outcomes, and source URLs cannot enter the formal report.
+- Deterministic matching now requires the approved solution-key relation before fit/gap ranking; report creation fail-closes when the project route, stored solution, or stored case facts disagree.
+- The permission-request route requires confirmed access-request, fixed-rule, and human-approval signals together. It formally recommends `權限申請標準化、規則檢查與人工審批`, with manager final approval, IT provisioning, and no automatic approval or direct permission-system write in phase one.
+- A follow-up owner investigation found that the earlier governed-access UAT still inserted an unrelated knowledge-retrieval comparison row despite its no-case fallback, and then exposed generic interview/no-case labels. Governed reports now restrict comparison rows to relevant baselines, do not use other-domain cases as evidence, map approval and audit questions to readable topics, and use application-format completeness, rule-prompt correctness, manager approval time, and exception-record completeness as the visible acceptance measures.
+- The earlier artifacts remain preserved and were not reused or overwritten. The fresh populated UAT is `artifacts/results-catalog-consistency-uat-20260729-134851-final-clean/`; it uses a new persistent state root, schema `8`, `ReportSynthesis` `2.2`, three approved matching cases, and three persisted interview findings. API first/refresh/history downloads are byte-identical; UI first/history downloads are byte-identical and line-for-line identical to the API report.
+- Final verification passed: `622 passed, 6 skipped`, Ruff, format check, and `git diff --check`.
 
 ## Current status
 

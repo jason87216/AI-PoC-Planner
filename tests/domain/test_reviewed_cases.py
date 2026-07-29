@@ -23,6 +23,14 @@ def test_reviewed_case_library_records_validate() -> None:
     )
 
 
+def test_reviewed_case_library_has_human_maintained_chinese_display_fields() -> None:
+    records = json.loads(_DATA_PATH.read_text(encoding="utf-8"))
+
+    assert all(
+        record["display_title_zh"] and record["summary_zh"] for record in records
+    )
+
+
 def test_reviewed_case_rejects_missing_source_url() -> None:
     payload = _payload()
     payload.pop("source_url")

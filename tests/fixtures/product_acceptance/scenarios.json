@@ -108,7 +108,7 @@
       }
     ],
     "expected": {
-      "recommendation_category": "governed_assistive",
+      "recommendation_category": "rules_first",
       "opportunity_types": ["enterprise_knowledge_and_professional_document_assist"],
       "human_decision_boundary": "主管保留最終核准；AI 僅能整理、提示與規則檢查。",
       "deployment_constraint": "個人資料不得送到未核准外部模型；高風險權限不得自動開通。",

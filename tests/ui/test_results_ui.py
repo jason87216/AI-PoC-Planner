@@ -11,6 +11,7 @@ from ai_poc_planner.ui.results import (
     analysis_overview,
     markdown_download_name,
     report_sections,
+    report_synthesis_view,
     result_view_for_status,
     reviewed_case_sources,
 )
@@ -188,3 +189,152 @@ def test_results_ui_does_not_expose_internal_details_or_forbidden_layers() -> No
     assert "st.json" not in source
     assert "base_url" not in source
     assert "traceback" not in source.casefold()
+    assert source.count("st.expander") == 1
+    assert "report_synthesis_view" in source
+    assert "case_evidence" in source
+    assert "case_support_summaries" in source
+    assert "implementation_references" in source
+    assert "source_url" in source
+
+
+def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> None:
+    view = report_synthesis_view(
+        {
+            "synthesis": {
+                "schema_version": "2.2",
+                "executive_narrative": "先顯示結論。",
+                "recommended_solution": {
+                    "display_name_zh": "權限申請標準化、規則檢查與人工核准",
+                    "short_description_zh": "以固定規則檢查申請內容。",
+                    "detailed_description_zh": "先整理申請格式，再由主管核准。",
+                    "suitable_when_zh": "規則與責任可以明確界定時。",
+                    "not_suitable_when_zh": "規則尚未釐清時。",
+                    "typical_scope_zh": "申請表、規則清單與核准紀錄。",
+                    "human_boundary_zh": "主管保留最終核准。",
+                    "expected_outputs_zh": "規則結果與核准紀錄。",
+                    "acceptance_focus_zh": "檢查漏項與例外處理。",
+                    "solution_key": "hidden-solution-key",
+                },
+                "reviewed_cases": [
+                    {
+                        "display_title_zh": "Morgan Stanley：企業知識檢索與人工覆核",
+                        "organization": "Morgan Stanley",
+                        "case_summary_zh": "案例摘要。",
+                        "problem_context_zh": "需要從文件中查找資訊。",
+                        "implemented_approach_zh": "使用檢索與人工覆核。",
+                        "documented_outcomes_zh": "來源記錄採用與查找效率改善。",
+                        "transferable_practices_zh": "建立評估集與人工修訂。",
+                        "limitations_zh": "責任與部署環境不同。",
+                        "source_name": "OpenAI 客戶案例：Morgan Stanley",
+                        "source_url": "https://example.test/morgan",
+                        "case_id": "hidden-case-id",
+                    }
+                ],
+                "case_support_summaries": [
+                    {
+                        "case_title": "Morgan Stanley：企業知識檢索與人工覆核",
+                        "supported_practices": "人工覆核。",
+                        "project_adoption": "本專案先保留人工確認。",
+                    }
+                ],
+                "implementation_references": [
+                    {
+                        "topic": "流程實施",
+                        "display_title_zh": "官方文件",
+                        "purpose_zh": "說明流程責任。",
+                        "source_name": "官方文件來源",
+                        "source_url": "https://example.test/reference",
+                    }
+                ],
+                "interview_findings": [
+                    {
+                        "topic": "人工責任",
+                        "confirmed_content": "主管最終核准。",
+                        "assessment_impact": "限制自動化範圍。",
+                        "source_question": "誰最終核准？",
+                        "question_uuid": "hidden-question-id",
+                    }
+                ],
+                "comparison_narrative": "先說明比較範圍。\n\n再說明案例限制。",
+                "current_target_comparison": [
+                    {
+                        "aspect": "人工責任",
+                        "current_state": "主管最終核准。",
+                        "target_state": "AI 提供草稿，主管確認。",
+                        "main_gap": "覆核流程待確認。",
+                        "treatment": "保留確認步驟。",
+                    }
+                ],
+                "option_comparison": [
+                    {
+                        "option": "AI 檢索與人工確認",
+                        "positioning": "先檢索核准內容，再由人員確認。",
+                        "supporting_cases": ["Morgan Stanley：知識檢索與人工修訂"],
+                        "case_evidence": "案例支持檢索與人工修訂。",
+                        "transferable_practice": "保留來源與修改紀錄。",
+                        "cannot_copy": ["不可照搬自動化程度。"],
+                        "conclusion": "正式推薦。",
+                        "recommended": True,
+                        "option_key": "hidden-option-id",
+                    },
+                    {
+                        "option": "規則與流程標準化",
+                        "positioning": "以固定規則檢查。",
+                        "supporting_cases": [],
+                        "case_evidence": "本次未找到可直接參照的已審核案例。",
+                        "transferable_practice": "保留人工確認。",
+                        "cannot_copy": [],
+                        "conclusion": "比較基線。",
+                        "recommended": False,
+                    },
+                ],
+                "recommendation_narrative": "完整推薦理由。",
+                "implementation_roadmap": [
+                    {
+                        "phase": "準備階段（立即行動）",
+                        "actions": ["整理核准資料。"],
+                        "outputs": ["測試樣本。"],
+                        "human_decision_boundary": "人員確認。",
+                        "acceptance_criteria": ["可追溯。"],
+                    }
+                ],
+                "major_risks_and_boundaries": ["不自動對外發送。"],
+                "appendix": {
+                    "scores": [],
+                    "hard_gates": [],
+                    "safe_interview_qa": [],
+                    "evidence_basis": [],
+                    "fact_key": "hidden-fact-key",
+                },
+            }
+        }
+    )
+
+    assert view["executive_narrative"] == "先顯示結論。"
+    assert view["interview_findings"][0]["confirmed_content"] == "主管最終核准。"
+    assert view["comparison_narrative"].startswith("先說明")
+    assert view["option_comparison"][0]["supporting_cases"] == [
+        "Morgan Stanley：知識檢索與人工修訂"
+    ]
+    assert [item["recommended"] for item in view["option_comparison"]] == [
+        True,
+        False,
+    ]
+    assert view["recommended_solution"]["display_name_zh"] == (
+        "權限申請標準化、規則檢查與人工核准"
+    )
+    assert view["reviewed_cases"][0]["source_name"] == "OpenAI 客戶案例：Morgan Stanley"
+    assert view["reviewed_cases"][0]["source_url"] == "https://example.test/morgan"
+    assert view["case_support_summaries"][0]["case_title"].startswith("Morgan Stanley")
+    assert view["implementation_references"][0]["source_url"] == (
+        "https://example.test/reference"
+    )
+    assert "question_uuid" not in repr(view)
+    assert "hidden-question-id" not in repr(view)
+    assert "hidden-option-id" not in repr(view)
+    assert "fact_key" not in repr(view)
+    assert "source_question" not in repr(view)
+    assert "hidden-solution-key" not in repr(view)
+    assert "hidden-case-id" not in repr(view)
+    assert "safe_interview_qa" not in repr(view)
+    assert "evidence_basis" not in repr(view)
