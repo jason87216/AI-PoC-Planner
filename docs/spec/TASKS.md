@@ -102,7 +102,7 @@ Merge commit: `91bb6b45f9be2249d9cd9edfd11a309bd806f321`.
 - No product default on port `8000`.
 - Runtime does not install providers or models.
 
-### P7.2a Representative dual-endpoint compatibility — Next
+### P7.2a Representative dual-endpoint compatibility — In progress
 
 1. 定義 model-profile capability contract。
 2. 統一 readiness、discovery、analysis、report 四條 structured-output 呼叫策略。
@@ -122,6 +122,10 @@ Acceptance checkpoint:
 - NVIDIA 與一個使用者自行啟動的本機 llama.cpp endpoint，使用同一 adapter 通過一個代表情境。
 - deterministic matching、recommendation category、scoring 與 hard gates 不修改。
 - P7.2a 通過不得標記完整 P7.2 Complete。
+- 首次 NVIDIA／llama.cpp live UAT 已在 NVIDIA governed_access 的 deterministic
+  boundary validation 失敗；provider 產生的 `external_endpoint` 與確認的部署
+  限制衝突。修正 program-owned boundary policy 後，仍待獨立 diff review 與一次
+  全新的 live UAT；目前沒有通過的 live artifact。
 
 ### P7.2b Full golden-scenario compatibility matrix — Pending
 

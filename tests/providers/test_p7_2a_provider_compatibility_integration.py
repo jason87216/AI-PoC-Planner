@@ -886,7 +886,7 @@ def _assert_governed_access_deterministic_boundaries(
     assert result.no_case_reason is None
     assert result.recommendation_category == "rules_first"
     assert result.decision_authority == "human_final_decision"
-    assert result.processing_boundary in {"local_only", "private_endpoint"}
+    assert result.processing_boundary == "private_endpoint"
     assert not result.automatic_approval_allowed
     assert not result.direct_permission_write_allowed
     assert not result.unapproved_external_pii_allowed

@@ -9,6 +9,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from ai_poc_planner.application.assessment_policy import (
+    derive_decision_authority,
+    derive_processing_boundary,
+)
 from ai_poc_planner.application.case_centered_assessment import (
     _is_controlled_permission_request_workflow,
     build_case_centered_assessment,
@@ -137,9 +141,25 @@ class EvidenceAnalysisService:
         # Scores and gates are program-owned. The provider is only used for
         # structured option/narrative content; no provider rubric or gate result
         # is accepted as a formal assessment value.
-        draft = self._to_domain_draft(stage_a, option_details, facts, tokens)
+        formal_decision_authority = derive_decision_authority(facts)
+        formal_processing_boundary = derive_processing_boundary(facts)
+        draft = self._to_domain_draft(
+            stage_a,
+            option_details,
+            facts,
+            tokens,
+            formal_decision_authority=formal_decision_authority,
+            formal_processing_boundary=formal_processing_boundary,
+        )
         self._validate_references(draft, facts, tokens)
-        result = self._validated_result(version, draft, facts, tokens)
+        result = self._validated_result(
+            version,
+            draft,
+            facts,
+            tokens,
+            formal_decision_authority=formal_decision_authority,
+            formal_processing_boundary=formal_processing_boundary,
+        )
         with self._history._repository.transaction():
             current = sorted(
                 self._history.list_current_facts(project_id, version_number),
@@ -278,7 +298,15 @@ class EvidenceAnalysisService:
         ]
 
     @staticmethod
-    def _to_domain_draft(stage_a, details, facts, tokens) -> AIAnalysisDraft:
+    def _to_domain_draft(
+        stage_a,
+        details,
+        facts,
+        tokens,
+        *,
+        formal_decision_authority: DecisionAuthority,
+        formal_processing_boundary: ProcessingBoundary,
+    ) -> AIAnalysisDraft:
         options = []
         for index, (skeleton, detail) in enumerate(
             zip(stage_a.options, details, strict=True), 1
@@ -289,6 +317,8 @@ class EvidenceAnalysisService:
                 "option_kind": skeleton.option_kind,
                 "summary": skeleton.summary,
                 **detail.model_dump(mode="json"),
+                "decision_authority": formal_decision_authority,
+                "processing_boundary": formal_processing_boundary,
             }
             kind = data.pop("opportunity_source_kind", None)
             opportunity_type = data.pop("opportunity_type", None)
@@ -501,17 +531,39 @@ class EvidenceAnalysisService:
         draft: AIAnalysisDraft,
         facts: list[FactRevision],
         tokens: dict[str, UUID],
+        *,
+        formal_decision_authority: DecisionAuthority | None = None,
+        formal_processing_boundary: ProcessingBoundary | None = None,
     ) -> ValidatedAnalysisResult:
+        formal_decision_authority = (
+            formal_decision_authority or derive_decision_authority(facts)
+        )
+        formal_processing_boundary = (
+            formal_processing_boundary or derive_processing_boundary(facts)
+        )
+        formal_draft = draft.model_copy(
+            update={
+                "options": [
+                    option.model_copy(
+                        update={
+                            "decision_authority": formal_decision_authority,
+                            "processing_boundary": formal_processing_boundary,
+                        }
+                    )
+                    for option in draft.options
+                ]
+            }
+        )
         scores, weighted_total = build_deterministic_scores(facts, tokens)
         selected = next(
             item
-            for item in draft.options
-            if item.option_key == draft.recommended_option_key
+            for item in formal_draft.options
+            if item.option_key == formal_draft.recommended_option_key
         )
         evaluation = build_deterministic_gate_evaluation(
             facts,
-            selected_authority=selected.decision_authority,
-            selected_boundary=selected.processing_boundary,
+            selected_authority=formal_decision_authority,
+            selected_boundary=formal_processing_boundary,
         )
         gates = sorted(
             [
@@ -579,17 +631,17 @@ class EvidenceAnalysisService:
             rubric_version="1.0",
             hard_gate_version="case-centered-1",
             requirement_summary=draft.requirement_summary,
-            options=draft.options,
-            recommended_option_key=draft.recommended_option_key,
-            conclusion=draft.conclusion,
-            conclusion_rationale=draft.conclusion_rationale,
-            conclusion_fact_refs=sorted(draft.conclusion_fact_refs),
+            options=formal_draft.options,
+            recommended_option_key=formal_draft.recommended_option_key,
+            conclusion=formal_draft.conclusion,
+            conclusion_rationale=formal_draft.conclusion_rationale,
+            conclusion_fact_refs=sorted(formal_draft.conclusion_fact_refs),
             scores=scores,
             weighted_total=weighted_total,
             gate_results=gates,
             gate_disposition=evaluation.disposition,
-            overall_risks=draft.overall_risks,
-            unresolved_gaps=draft.unresolved_gaps,
+            overall_risks=formal_draft.overall_risks,
+            unresolved_gaps=formal_draft.unresolved_gaps,
             created_at=self._clock(),
             case_centered=case_centered,
         )

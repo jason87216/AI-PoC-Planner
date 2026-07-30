@@ -136,6 +136,14 @@ high-impact decisions, forbidden external processing, missing required human
 review, and other explicit safety/governance conflicts. AI cannot override a
 hard-gate result.
 
+Formal decision authority and processing boundary are program-owned values.
+They are derived only from confirmed project facts before formal options are
+persisted or passed to hard-gate evaluation; provider values are non-authoritative
+candidate descriptions. Processing-boundary precedence is local-only or
+on-premises restrictions first, then approved private/internal environments or
+unapproved-external-service restrictions, then an explicitly approved external
+processing route. Missing or conflicting evidence defaults to local-only.
+
 ### Case-centered assessment semantics
 
 Reviewed cases are primary assessment evidence, not an appendix. Only approved

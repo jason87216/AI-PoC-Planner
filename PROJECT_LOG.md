@@ -7,8 +7,10 @@
 - P6.7 已完成。
 - Results narrative、reviewed-case catalog consistency 與 report persistence 已通過產品驗收。
 - P7.1 本機 UAT runtime 已完成並維持目前啟動／停止基線。
-- Current goal：P7.2 provider compatibility and structured-output policy。
-- P7.2 尚未開始實作；本次只同步文件狀態與開發約束。
+- Current goal：P7.2a provider compatibility and structured-output policy（PR #26，Draft）。
+- 首次 NVIDIA／llama.cpp live UAT 已執行一次，於 NVIDIA governed_access 的
+  deterministic boundary validation 失敗；provider 產生的 `external_endpoint`
+  與已確認的外部處理限制衝突。P7.2a checkpoint 仍 pending，沒有通過的 live artifact。
 
 ## PR #24 closeout
 
@@ -31,7 +33,9 @@ PR #24 合併後，P6.7 不再是 feature-branch 狀態。
 - 所有真實模型呼叫共用單一 OpenAI-compatible adapter。
 - NVIDIA OpenAI-compatible provider 是目前真實驗證基線。
 - fake provider 僅用於 deterministic automated tests；禁止 silent runtime fallback。
-- P7.2 不修改 deterministic decision logic、report synthesis 或 reviewed-case catalog。
+- 正式 decision authority 與 processing boundary 由 confirmed facts 的
+  deterministic policy 決定；provider 值不得改變持久化正式結果或 hard-gate input。
+- P7.2 不修改 deterministic matching、scoring、hard gates、report synthesis 或 reviewed-case catalog。
 
 ## P7.2 checkpoints
 
@@ -84,7 +88,7 @@ P7.2b 在 P7.2a 通過後：
 
 ## Next action
 
-建立 P7.2a implementation branch 前，先完成 capability contract 與代表情境驗收規格。P7.2 程式開發目前保持未開始狀態。
+等待獨立 diff review；通過後再安排一次全新、隔離的 P7.2a live UAT。不得重跑已失敗的 runtime，也不得將 P7.2a 標記為完成。
 
 ## Deferred
 
