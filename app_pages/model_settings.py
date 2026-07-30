@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.model_profile_form import (
+    create_profile_authentication_error,
+    profile_payload,
+)
 from ai_poc_planner.ui.presentation import (
     connection_label,
     profile_label,
@@ -27,60 +29,6 @@ def _optional_choice(value: str) -> str | None:
 def _refresh_after_change(message: str) -> None:
     refresh_api_data()
     st.success(message)
-
-
-def _profile_payload(
-    *,
-    profile_name: str,
-    base_url: str,
-    model_name: str,
-    api_key: str,
-    structured_output_mode: str,
-    reasoning_effort: str,
-    authentication: str,
-    token_parameter: str,
-    reasoning_parameter: str,
-    supports_json_schema: bool,
-    supports_json_object: bool,
-    clear_api_key: bool,
-    is_enabled: bool,
-    include_required_fields: bool,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {"is_enabled": is_enabled}
-    if include_required_fields or profile_name:
-        payload["profile_name"] = profile_name
-    if include_required_fields or base_url:
-        payload["base_url"] = base_url
-    if include_required_fields or model_name:
-        payload["model_name"] = model_name
-    if clear_api_key:
-        payload["api_key"] = None
-    elif api_key:
-        payload["api_key"] = api_key
-    if structured_output_mode:
-        payload["structured_output_mode"] = structured_output_mode
-    if reasoning_parameter == "unsupported":
-        # Explicitly clear a previously saved effort when the capability changes.
-        payload["reasoning_effort"] = None
-    elif reasoning_effort:
-        payload["reasoning_effort"] = reasoning_effort
-    if include_required_fields or any(
-        [
-            authentication,
-            token_parameter,
-            reasoning_parameter,
-            supports_json_schema,
-            supports_json_object,
-        ]
-    ):
-        payload["capabilities"] = {
-            "authentication": authentication,
-            "token_parameter": token_parameter,
-            "reasoning_parameter": reasoning_parameter,
-            "json_schema": supports_json_schema,
-            "json_object": supports_json_object,
-        }
-    return payload
 
 
 st.title("模型設定")
@@ -156,7 +104,6 @@ with st.form("create_model_profile", clear_on_submit=True):
         preferred_mode = st.selectbox(
             "Preferred structured-output mode", ["json_schema", "json_object"]
         )
-        clear_api_key = st.checkbox("清除已保存 API key")
 
 if create_submitted and not (supports_json_schema or supports_json_object):
     st.error("至少要選擇一種 structured-output mode。")
@@ -167,12 +114,14 @@ elif create_submitted and (
     st.error("Preferred mode 必須在支援的模式中。")
 elif create_submitted and reasoning_parameter == "unsupported" and reasoning_effort:
     st.error("此端點不支援 reasoning effort，請清除該設定。")
-elif create_submitted and authentication == "none" and api_key and not clear_api_key:
-    st.error("none 認證模式不允許保存 API key，請清除輸入。")
+elif create_submitted and (
+    authentication_error := create_profile_authentication_error(authentication, api_key)
+):
+    st.error(authentication_error)
 elif create_submitted:
     try:
         get_api_client().create_profile(
-            _profile_payload(
+            profile_payload(
                 profile_name=profile_name,
                 base_url=base_url,
                 model_name=model_name,
@@ -184,7 +133,6 @@ elif create_submitted:
                 reasoning_parameter=reasoning_parameter,
                 supports_json_schema=supports_json_schema,
                 supports_json_object=supports_json_object,
-                clear_api_key=clear_api_key,
                 is_enabled=is_enabled,
                 include_required_fields=True,
             )
@@ -281,17 +229,11 @@ if profiles:
         and update_reasoning_effort
     ):
         st.error("此端點不支援 reasoning effort，請清除該設定。")
-    elif (
-        update_submitted
-        and update_clear_api_key is False
-        and update_authentication == "none"
-    ):
-        st.error("none 認證模式需要先清除已保存 API key。")
     elif update_submitted:
         try:
             get_api_client().update_profile(
                 profile_id,
-                _profile_payload(
+                profile_payload(
                     profile_name=updated_name,
                     base_url=updated_endpoint,
                     model_name=updated_model_name,

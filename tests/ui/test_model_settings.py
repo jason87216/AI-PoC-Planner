@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+from ai_poc_planner.ui.model_profile_form import (
+    create_profile_authentication_error,
+    profile_payload,
+)
+
+
+def _payload(**overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "profile_name": "",
+        "base_url": "",
+        "model_name": "",
+        "api_key": "",
+        "structured_output_mode": "json_object",
+        "reasoning_effort": "",
+        "authentication": "none",
+        "token_parameter": "max_tokens",
+        "reasoning_parameter": "unsupported",
+        "supports_json_schema": False,
+        "supports_json_object": True,
+        "is_enabled": True,
+        "include_required_fields": False,
+    }
+    values.update(overrides)
+    return profile_payload(**values)
+
+
+def test_create_none_profile_rejects_entered_key_without_clear_control() -> None:
+    assert (
+        create_profile_authentication_error("none", "entered-only-for-request")
+        == "none 認證模式不允許保存 API key，請清空目前輸入後再建立。"
+    )
+    assert create_profile_authentication_error("none", "") is None
+
+
+def test_update_none_without_clear_omits_api_key() -> None:
+    payload = _payload(api_key="", clear_api_key=False)
+
+    assert "api_key" not in payload
+    assert payload["capabilities"] == {
+        "authentication": "none",
+        "token_parameter": "max_tokens",
+        "reasoning_parameter": "unsupported",
+        "json_schema": False,
+        "json_object": True,
+    }
+
+
+def test_update_none_with_clear_sends_explicit_null_api_key() -> None:
+    payload = _payload(clear_api_key=True)
+
+    assert payload["api_key"] is None
