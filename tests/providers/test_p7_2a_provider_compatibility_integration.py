@@ -189,19 +189,25 @@ class OperationCallRecorder:
 
     def __init__(self) -> None:
         self.calls: list[dict[str, str]] = []
+        self.budget_calls: list[dict[str, object]] = []
 
-    def record(self, *, operation: str, response_format: Any) -> None:
+    def record(
+        self,
+        *,
+        operation: str,
+        response_format: Any,
+        max_tokens: int | None = None,
+    ) -> None:
         request = response_format.as_request_value()
         schema_name = getattr(response_format, "name", None) or ""
-        self.calls.append(
-            {
-                "operation": "report"
-                if schema_name.startswith("report_")
-                else operation,
-                "schema_name": schema_name,
-                "mode": str(request["type"]),
-            }
-        )
+        call = {
+            "operation": "report" if schema_name.startswith("report_") else operation,
+            "schema_name": schema_name,
+            "mode": str(request["type"]),
+        }
+        self.calls.append(call)
+        if max_tokens is not None:
+            self.budget_calls.append({**call, "max_tokens": max_tokens})
 
 
 def _sqlite_text_or_blob_cells(database_path: Path) -> list[str | bytes]:
@@ -462,7 +468,9 @@ class RecordingOfflineAdapter:
     def complete(self, **kwargs: object) -> str:
         response_format = kwargs.get("response_format")
         self._recorder.record(
-            operation=self._operation, response_format=response_format
+            operation=self._operation,
+            response_format=response_format,
+            max_tokens=int(kwargs["max_tokens"]),
         )
         body = self._delegate.complete(**kwargs)
         self._provider_content.capture(body)
@@ -485,7 +493,9 @@ class RecordingLiveAdapter:
     def complete(self, **kwargs: object) -> str:
         response_format = kwargs.get("response_format")
         self._recorder.record(
-            operation=self._operation, response_format=response_format
+            operation=self._operation,
+            response_format=response_format,
+            max_tokens=int(kwargs["max_tokens"]),
         )
         return self._delegate.complete(**kwargs)
 
@@ -550,6 +560,91 @@ def _assert_response(response: Any, status_code: int, label: str) -> Any:
     return response.json()
 
 
+_SAFE_LIVE_OPERATION_CODES = frozenset(
+    {
+        "provider_auth_required",
+        "provider_auth_failed",
+        "provider_parameter_unsupported",
+        "provider_structured_output_unsupported",
+        "provider_not_found",
+        "provider_timeout",
+        "provider_connection_failed",
+        "provider_rate_limited",
+        "provider_unavailable",
+        "provider_http_error",
+        "provider_invalid_response",
+        "provider_output_truncated",
+        "provider_output_invalid",
+        "provider_schema_invalid",
+    }
+)
+_SAFE_LIVE_OPERATIONS = frozenset({"readiness", "discovery", "analysis", "report"})
+
+
+def _assert_live_operation_response(
+    response: Any,
+    expected_status: int,
+    *,
+    endpoint: str,
+    label: str,
+    recorder: OperationCallRecorder,
+) -> Any:
+    """Assert a live operation without exposing provider/API response bodies."""
+
+    if response.status_code == expected_status:
+        try:
+            return response.json()
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise AssertionError(
+                f"endpoint={endpoint}; label={label}; HTTP status={response.status_code}; "
+                f"safe_error_contract=false; last_operation="
+                f"{recorder.calls[-1].get('operation') if recorder.calls else None}; "
+                f"schema_name={recorder.calls[-1].get('schema_name') if recorder.calls else None}; "
+                f"mode={recorder.calls[-1].get('mode') if recorder.calls else None}; "
+                f"recorder_call_count={len(recorder.calls)}"
+            ) from error
+
+    safe_error_contract = False
+    error_code: str | None = None
+    operation: str | None = None
+    retryable: bool | None = None
+    try:
+        body = response.json()
+    except (TypeError, ValueError, json.JSONDecodeError):
+        body = None
+    if isinstance(body, Mapping):
+        error = body.get("error")
+        details = error.get("details") if isinstance(error, Mapping) else None
+        candidate_code = error.get("code") if isinstance(error, Mapping) else None
+        candidate_operation = (
+            details.get("operation") if isinstance(details, Mapping) else None
+        )
+        candidate_retryable = (
+            details.get("retryable") if isinstance(details, Mapping) else None
+        )
+        if (
+            isinstance(candidate_code, str)
+            and candidate_code in _SAFE_LIVE_OPERATION_CODES
+            and isinstance(candidate_operation, str)
+            and candidate_operation in _SAFE_LIVE_OPERATIONS
+            and isinstance(candidate_retryable, bool)
+        ):
+            safe_error_contract = True
+            error_code = candidate_code
+            operation = candidate_operation
+            retryable = candidate_retryable
+
+    last_call = recorder.calls[-1] if recorder.calls else {}
+    raise AssertionError(
+        f"endpoint={endpoint}; label={label}; HTTP status={response.status_code}; "
+        f"safe_error_contract={safe_error_contract}; error.code={error_code}; "
+        f"operation={operation}; retryable={retryable}; "
+        f"last_operation={last_call.get('operation')}; "
+        f"schema_name={last_call.get('schema_name')}; mode={last_call.get('mode')}; "
+        f"recorder_call_count={len(recorder.calls)}"
+    )
+
+
 def _assert_readiness_connected(readiness: Mapping[str, Any], endpoint: str) -> None:
     """Assert readiness while exposing only the public safe failure metadata."""
 
@@ -611,6 +706,151 @@ def test_readiness_connected_assertion_accepts_safe_success_contract() -> None:
         },
         "llama_cpp",
     )
+
+
+def test_live_analysis_failure_assertion_exposes_only_safe_metadata() -> None:
+    recorder = OperationCallRecorder()
+    recorder.calls.append(
+        {
+            "operation": "analysis",
+            "schema_name": "analysis_option_detail",
+            "mode": "json_schema",
+        }
+    )
+    marker = "raw-provider-response-marker-p72a"
+    response = httpx.Response(
+        502,
+        json={
+            "error": {
+                "code": "provider_output_truncated",
+                "message": marker,
+                "details": {
+                    "operation": "analysis",
+                    "retryable": False,
+                    "user_action": "secret-action-marker-p72a",
+                },
+            }
+        },
+    )
+
+    with pytest.raises(AssertionError) as error:
+        _assert_live_operation_response(
+            response,
+            201,
+            endpoint="llama_cpp",
+            label="analysis",
+            recorder=recorder,
+        )
+
+    text = str(error.value)
+    assert "endpoint=llama_cpp" in text
+    assert "label=analysis" in text
+    assert "HTTP status=502" in text
+    assert "provider_output_truncated" in text
+    assert "operation=analysis" in text
+    assert "retryable=False" in text
+    assert "schema_name=analysis_option_detail" in text
+    assert "mode=json_schema" in text
+    assert "recorder_call_count=1" in text
+    assert marker not in text
+    assert "secret-action-marker-p72a" not in text
+
+
+def test_live_report_failure_assertion_exposes_last_report_schema() -> None:
+    recorder = OperationCallRecorder()
+    recorder.calls.append(
+        {
+            "operation": "report",
+            "schema_name": "report_part_a",
+            "mode": "json_schema",
+        }
+    )
+    response = httpx.Response(
+        502,
+        json={
+            "error": {
+                "code": "provider_invalid_response",
+                "details": {"operation": "report", "retryable": False},
+            }
+        },
+    )
+
+    with pytest.raises(AssertionError, match="schema_name=report_part_a"):
+        _assert_live_operation_response(
+            response,
+            201,
+            endpoint="llama_cpp",
+            label="report",
+            recorder=recorder,
+        )
+
+
+def test_live_operation_non_json_failure_does_not_expose_body() -> None:
+    recorder = OperationCallRecorder()
+    marker = "raw-body-marker-p72a"
+    response = httpx.Response(502, content=marker.encode("utf-8"))
+
+    with pytest.raises(AssertionError) as error:
+        _assert_live_operation_response(
+            response,
+            201,
+            endpoint="llama_cpp",
+            label="analysis",
+            recorder=recorder,
+        )
+
+    text = str(error.value)
+    assert "safe_error_contract=False" in text
+    assert marker not in text
+
+
+def test_live_operation_success_returns_json_without_extra_metadata() -> None:
+    recorder = OperationCallRecorder()
+    response = httpx.Response(201, json={"ok": True})
+
+    assert _assert_live_operation_response(
+        response,
+        201,
+        endpoint="llama_cpp",
+        label="analysis",
+        recorder=recorder,
+    ) == {"ok": True}
+
+
+def test_offline_governed_access_preserves_stage_specific_token_budgets(
+    tmp_path: Path,
+) -> None:
+    evidence = _run_offline_governed_access("llama_cpp", tmp_path / "budget")
+    budgets = evidence.recorder.budget_calls
+
+    assert [
+        item["max_tokens"] for item in budgets if item["operation"] == "readiness"
+    ] == [256]
+    assert [
+        item["max_tokens"] for item in budgets if item["operation"] == "discovery"
+    ] == [
+        4096,
+        4096,
+        4096,
+        4096,
+    ]
+    analysis_budgets = [
+        (item["schema_name"], item["max_tokens"])
+        for item in budgets
+        if item["operation"] == "analysis"
+    ]
+    assert analysis_budgets == [
+        ("analysis_options_a0", 1024),
+        ("analysis_option_detail", 2048),
+        ("analysis_option_detail", 2048),
+    ]
+    assert [
+        item["max_tokens"] for item in budgets if item["operation"] == "report"
+    ] == [
+        2048,
+        2048,
+    ]
+    assert len([item for item in budgets if item["operation"] == "analysis"]) == 3
 
 
 def _live_facts(client: TestClient, project_id: str) -> dict[str, dict[str, Any]]:
@@ -1616,30 +1856,41 @@ def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvi
             assert version["status"] == "ready_for_assessment"
             after_discovery = len(recorder.calls)
 
-            analysis = _assert_response(
+            analysis = _assert_live_operation_response(
                 client.post(f"/v1/projects/{project_id}/versions/1/analysis"),
                 201,
-                "analysis",
+                endpoint=endpoint,
+                label="analysis",
+                recorder=recorder,
             )
             analysis_call_count = len(recorder.calls)
             assert analysis_call_count > after_discovery
-            duplicate_analysis = client.post(
-                f"/v1/projects/{project_id}/versions/1/analysis"
+            duplicate_analysis = _assert_live_operation_response(
+                client.post(f"/v1/projects/{project_id}/versions/1/analysis"),
+                201,
+                endpoint=endpoint,
+                label="duplicate analysis",
+                recorder=recorder,
             )
-            assert duplicate_analysis.status_code == 201
-            assert duplicate_analysis.json() == analysis
+            assert duplicate_analysis == analysis
             assert len(recorder.calls) == analysis_call_count
 
-            report = _assert_response(
+            report = _assert_live_operation_response(
                 client.post(f"/v1/projects/{project_id}/versions/1/report"),
                 201,
-                "report",
+                endpoint=endpoint,
+                label="report",
+                recorder=recorder,
             )
             report_call_count = len(recorder.calls)
-            duplicate_report = client.post(
-                f"/v1/projects/{project_id}/versions/1/report"
+            duplicate_report = _assert_live_operation_response(
+                client.post(f"/v1/projects/{project_id}/versions/1/report"),
+                409,
+                endpoint=endpoint,
+                label="duplicate report",
+                recorder=recorder,
             )
-            assert duplicate_report.status_code == 409
+            assert isinstance(duplicate_report, Mapping)
             assert len(recorder.calls) == report_call_count
             facts = _live_facts(client, project_id)
             normalized_result = _normalized_governed_access_result(analysis, facts)

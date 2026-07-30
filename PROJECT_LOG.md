@@ -23,6 +23,15 @@
   第四次 dual UAT。
 - 本輪實作將 readiness 首輪 instruction 固定為單一 `status="ok"` JSON contract，並讓
   bounded repair hint 安全列出 Literal／enum allowed values；P7.2a checkpoint 仍 pending。
+- Exact OpenAI JSON Schema readiness 已連續 3/3 通過，Discovery 已達
+  `ready_for_assessment`；完整本機 workflow 在第二個 `analysis_option_detail` 失敗，兩次
+  都以 `finish_reason=length` 用滿 1024 completion tokens。Schema normalization 成功，
+  失敗未進入 Pydantic validation；NVIDIA 未呼叫，也沒有執行 dual UAT。
+- `analysis_option_detail` 的 application logical budget 已由 1024 提高至 2048，作為
+  provider-neutral、stage-specific 的 bounded headroom；目前只有 offline validation，
+  尚待新的本機 qualification，P7.2a checkpoint 仍 pending。
+- Live harness 的 analysis／report 失敗摘要現在只顯示安全 error code、operation、retryable
+  與最後 recorder 的 operation/schema/mode/call count，不再依賴或暴露 `response.text`。
 
 ## PR #24 closeout
 

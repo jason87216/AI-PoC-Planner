@@ -73,6 +73,7 @@ class RecordingAdapter:
     def __init__(self, outcomes: list[object]) -> None:
         self.outcomes = list(outcomes)
         self.calls: list[str] = []
+        self.budgets: list[int] = []
 
     def complete(
         self,
@@ -83,7 +84,8 @@ class RecordingAdapter:
         response_format: object,
         reasoning_effort: object = None,
     ) -> str:
-        del messages, temperature, max_tokens, reasoning_effort
+        del messages, temperature, reasoning_effort
+        self.budgets.append(max_tokens)
         mode = response_format.as_request_value()["type"]
         self.calls.append(mode)
         outcome = self.outcomes.pop(0)
@@ -104,16 +106,19 @@ def _execute(
     preferred: StructuredOutputMode = StructuredOutputMode.JSON_SCHEMA,
     contract: type[BaseModel] = Probe,
     capabilities: OpenAICompatibleCapabilities | None = None,
+    operation: ProviderOperation = ProviderOperation.READINESS,
+    schema_name: str = "connection_probe",
+    logical_max_tokens: int = 64,
 ):
     return StructuredOutputExecutor().execute(
         adapter=adapter,
         capabilities=capabilities or _caps(),
         preferred_mode=preferred,
-        operation=ProviderOperation.READINESS,
-        schema_name="connection_probe",
+        operation=operation,
+        schema_name=schema_name,
         provider_contract=contract,
         messages=[{"role": "user", "content": "probe"}],
-        logical_max_tokens=64,
+        logical_max_tokens=logical_max_tokens,
         temperature=0,
     )
 
@@ -334,6 +339,29 @@ def test_provider_invalid_response_and_truncation_repair_once() -> None:
 
     assert adapter.calls == ["json_schema", "json_schema"]
     assert result.attempt_count == 2
+
+
+def test_analysis_option_detail_truncation_repairs_with_same_2048_budget() -> None:
+    adapter = RecordingAdapter(
+        [
+            OpenAICompatibleProviderError("provider_output_truncated"),
+            '{"status":"ok"}',
+        ]
+    )
+
+    result = _execute(
+        adapter,
+        operation=ProviderOperation.ANALYSIS,
+        schema_name="analysis_option_detail",
+        logical_max_tokens=2048,
+    )
+
+    assert result.value.status == "ok"
+    assert result.attempt_count == 2
+    assert result.mode_used is StructuredOutputMode.JSON_SCHEMA
+    assert result.fallback_used is False
+    assert adapter.calls == ["json_schema", "json_schema"]
+    assert adapter.budgets == [2048, 2048]
 
 
 def test_local_schema_normalization_failure_makes_zero_provider_calls() -> None:

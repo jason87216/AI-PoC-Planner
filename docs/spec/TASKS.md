@@ -136,6 +136,15 @@ Acceptance checkpoint:
   contract。timeout 不再視為目前根因，也沒有安排第四次 dual UAT。
 - readiness prompt 已改為明確單一 `status="ok"` JSON contract，bounded repair hint 會
   安全列出 Literal／enum allowed values；P7.2a checkpoint 仍 pending。
+- Exact OpenAI JSON Schema readiness 已連續 3/3 通過，Discovery 已達
+  `ready_for_assessment`；完整本機 workflow 在第二個 `analysis_option_detail` 失敗，兩次
+  都以 `finish_reason=length` 用滿 1024 completion tokens。Schema normalization 成功，
+  失敗未進入 Pydantic validation；NVIDIA 未呼叫，也沒有執行 dual UAT。
+- `analysis_option_detail` logical token budget 已調整為 2048，並保留其他 stage budget、
+  timeout、temperature 與 reasoning policy；目前僅完成 offline validation，待重新進行
+  明確授權的本機 qualification，P7.2a checkpoint 仍 pending。
+- Live harness analysis／report failure 只保留安全 error code、operation、retryable 與
+  recorder 的最後 operation/schema/mode/call count，不輸出 response body 或 user action。
 
 ### P7.2b Full golden-scenario compatibility matrix — Pending
 

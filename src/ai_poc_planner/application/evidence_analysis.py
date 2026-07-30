@@ -180,7 +180,11 @@ class EvidenceAnalysisService:
         """Call one constrained stage; raw provider text never leaves this boundary."""
         token_budgets = {
             "analysis_options_a0": 1024,
-            "analysis_option_detail": 1024,
+            # Option details combine multiple bounded arrays and structured
+            # fields; reasoning-capable models may share this budget with the
+            # visible JSON.  This provider-neutral, stage-specific headroom
+            # does not depend on a model or runtime name.
+            "analysis_option_detail": 2048,
             "analysis_rubric": 2048,
             "analysis_gates": 1024,
         }
