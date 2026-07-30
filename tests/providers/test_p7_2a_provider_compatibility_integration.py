@@ -61,6 +61,17 @@ _REQUIRED_DISCOVERY_FACT_KEYS = frozenset(
         "audit_trail_requirements",
     }
 )
+_EXPECTED_GOVERNED_ACCESS_PHASE_NAMES = frozenset(
+    GOVERNED_ACCESS["expected"]["must_have_phase_names"]
+)
+# Derived from assessment/gates.py using governed_access confirmed facts and the
+# deterministic human-final-decision/private-endpoint selected option.
+_EXPECTED_GOVERNED_ACCESS_GATE_MATRIX = (
+    ("HG-01", "blocked"),
+    ("HG-03", "assistive_only"),
+    ("HG-05", "requires_controls"),
+    ("HG-06", "requires_controls"),
+)
 _GOVERNED_ACCESS_UAT_FACTS = (
     {
         "fact_key": "permission_template_requirements",
@@ -89,6 +100,8 @@ _GOVERNED_ACCESS_UAT_FACTS = (
 class GovernedAccessDeterministicResult:
     """Normalized product facts returned by the production API."""
 
+    matching_status: str
+    no_case_reason: str | None
     recommendation_category: str
     decision_authority: str
     processing_boundary: str
@@ -100,6 +113,9 @@ class GovernedAccessDeterministicResult:
     case_ids: tuple[str, ...]
     phase_names: tuple[str, ...]
     gate_dispositions: tuple[tuple[str, str], ...]
+    gate_impact_rule_ids: tuple[str, ...]
+    first_phase_prohibits_direct_write: bool
+    first_phase_prohibits_autonomous_approval: bool
 
 
 @dataclass(frozen=True)
@@ -119,7 +135,8 @@ class OperationCountMatrix:
 class SecurityEvidence:
     api_key_not_persisted: bool
     authorization_not_persisted: bool
-    raw_provider_bodies_not_persisted: bool
+    adapter_content_not_persisted: bool | None
+    http_response_bodies_not_persisted: bool | None
 
 
 @dataclass(frozen=True)
@@ -186,20 +203,102 @@ class OperationCallRecorder:
         )
 
 
-class RawProviderBodyEvidence:
-    """Keep exact provider bodies in process just long enough to check persistence."""
+def _sqlite_text_or_blob_cells(database_path: Path) -> list[str | bytes]:
+    """Read actual TEXT/BLOB cells from every user table without SQL dump rendering."""
+
+    def quote(identifier: str) -> str:
+        return '"' + identifier.replace('"', '""') + '"'
+
+    values: list[str | bytes] = []
+    with sqlite3.connect(database_path) as connection:
+        table_rows = connection.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+        for (table_name,) in table_rows:
+            columns = connection.execute(
+                f"PRAGMA table_info({quote(str(table_name))})"
+            ).fetchall()
+            for _, column_name, *_ in columns:
+                cells = connection.execute(
+                    f"SELECT {quote(str(column_name))} "
+                    f"FROM {quote(str(table_name))} "
+                    f"WHERE typeof({quote(str(column_name))}) IN ('text', 'blob')"
+                ).fetchall()
+                values.extend(
+                    cell for (cell,) in cells if isinstance(cell, (str, bytes))
+                )
+    return values
+
+
+def _assert_exact_bodies_absent_from_database_cells(
+    database_path: Path, bodies: Sequence[bytes]
+) -> None:
+    """Reject only a full response persisted as one TEXT/BLOB value, not substrings."""
+
+    cells = _sqlite_text_or_blob_cells(database_path)
+    assert bodies
+    for body in bodies:
+        assert all(
+            cell != body
+            and (
+                not isinstance(cell, str)
+                or cell != body.decode("utf-8", errors="surrogateescape")
+            )
+            for cell in cells
+        )
+
+
+def _assert_text_markers_absent_from_database_cells(
+    database_path: Path, markers: Sequence[str]
+) -> None:
+    """Check configured secrets and authorization markers without SQL rendering."""
+
+    cells = _sqlite_text_or_blob_cells(database_path)
+    normalized_cells = [
+        cell.casefold()
+        if isinstance(cell, str)
+        else cell.decode("utf-8", errors="surrogateescape").casefold()
+        for cell in cells
+    ]
+    for marker in markers:
+        assert all(marker.casefold() not in cell for cell in normalized_cells)
+
+
+class ProviderContentEvidence:
+    """Keep adapter-returned content in process for the offline fixture only."""
 
     def __init__(self) -> None:
-        self._bodies: list[str] = []
+        self._contents: list[str] = []
 
-    def capture(self, body: str) -> None:
-        self._bodies.append(body)
+    def capture(self, content: str) -> None:
+        self._contents.append(content)
 
-    def assert_absent_from_database(self, database_path: Path) -> None:
-        with sqlite3.connect(database_path) as connection:
-            dump = "\n".join(str(row) for row in connection.iterdump()).casefold()
-        assert self._bodies
-        assert all(body.casefold() not in dump for body in self._bodies)
+    def assert_absent_from_database_cells(self, database_path: Path) -> None:
+        _assert_exact_bodies_absent_from_database_cells(
+            database_path, [content.encode("utf-8") for content in self._contents]
+        )
+
+    def clear(self) -> None:
+        self._contents.clear()
+
+
+class HttpResponseBodyEvidence:
+    """Capture HTTP response bytes only in a test-only client response hook."""
+
+    def __init__(self) -> None:
+        self._bodies: list[bytes] = []
+
+    @property
+    def response_count(self) -> int:
+        return len(self._bodies)
+
+    def capture_response(self, response: httpx.Response) -> None:
+        response.read()
+        self._bodies.append(bytes(response.content))
+
+    def assert_absent_from_database_cells(self, database_path: Path) -> None:
+        _assert_exact_bodies_absent_from_database_cells(database_path, self._bodies)
 
     def clear(self) -> None:
         self._bodies.clear()
@@ -351,12 +450,12 @@ class RecordingOfflineAdapter:
         self,
         delegate: OfflineGovernedAccessAdapter,
         recorder: OperationCallRecorder,
-        raw_bodies: RawProviderBodyEvidence,
+        provider_content: ProviderContentEvidence,
         operation: str,
     ) -> None:
         self._delegate = delegate
         self._recorder = recorder
-        self._raw_bodies = raw_bodies
+        self._provider_content = provider_content
         self._operation = operation
 
     def complete(self, **kwargs: object) -> str:
@@ -365,23 +464,21 @@ class RecordingOfflineAdapter:
             operation=self._operation, response_format=response_format
         )
         body = self._delegate.complete(**kwargs)
-        self._raw_bodies.capture(body)
+        self._provider_content.capture(body)
         return body
 
 
 class RecordingLiveAdapter:
-    """Delegate to the real adapter without retaining prompts, keys, or responses."""
+    """Delegate to the real adapter while recording safe call metadata only."""
 
     def __init__(
         self,
         delegate: OpenAICompatibleChatAdapter,
         recorder: OperationCallRecorder,
-        raw_bodies: RawProviderBodyEvidence,
         operation: str,
     ) -> None:
         self._delegate = delegate
         self._recorder = recorder
-        self._raw_bodies = raw_bodies
         self._operation = operation
 
     def complete(self, **kwargs: object) -> str:
@@ -389,18 +486,19 @@ class RecordingLiveAdapter:
         self._recorder.record(
             operation=self._operation, response_format=response_format
         )
-        body = self._delegate.complete(**kwargs)
-        self._raw_bodies.capture(body)
-        return body
+        return self._delegate.complete(**kwargs)
 
 
 def _live_app(
     database_path: Path,
     profile_path: Path,
     recorder: OperationCallRecorder,
-    raw_bodies: RawProviderBodyEvidence,
+    http_response_bodies: HttpResponseBodyEvidence,
 ) -> tuple[Any, httpx.Client]:
-    provider_client = httpx.Client(trust_env=False)
+    provider_client = httpx.Client(
+        trust_env=False,
+        event_hooks={"response": [http_response_bodies.capture_response]},
+    )
 
     def factory_for(operation: str, timeout_seconds: float):
         def factory(profile: ModelProfile) -> RecordingLiveAdapter:
@@ -417,7 +515,7 @@ def _live_app(
                 reasoning_effort=profile.reasoning_effort,
                 capabilities=profile.effective_capabilities,
             )
-            return RecordingLiveAdapter(adapter, recorder, raw_bodies, operation)
+            return RecordingLiveAdapter(adapter, recorder, operation)
 
         return factory
 
@@ -596,6 +694,54 @@ def _live_endpoint_config(endpoint: str) -> dict[str, Any]:
     }
 
 
+def _live_profile_contract(config: Mapping[str, Any], profile_id: int) -> ModelProfile:
+    """Validate the same profile contract that the live API will persist later."""
+
+    return ModelProfile.model_validate(
+        {
+            "id": UUID(int=profile_id),
+            **config,
+            "is_selected": True,
+            "is_enabled": True,
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+    )
+
+
+def _preflight_live_dual_endpoints() -> None:
+    """Fail before NVIDIA workflow cost if llama.cpp cannot serve its configured model."""
+
+    nvidia_config = _live_endpoint_config("nvidia")
+    llama_config = _live_endpoint_config("llama_cpp")
+    _live_profile_contract(nvidia_config, 91)
+    _live_profile_contract(llama_config, 92)
+
+    response_bodies = HttpResponseBodyEvidence()
+    llama_client = httpx.Client(
+        trust_env=False,
+        event_hooks={"response": [response_bodies.capture_response]},
+    )
+    try:
+        response = llama_client.get(
+            f"{str(llama_config['base_url']).rstrip('/')}/models", timeout=10
+        )
+        if response.is_error:
+            pytest.fail(
+                "llama.cpp model discovery did not return a successful response"
+            )
+        payload = response.json()
+        models = payload.get("data") if isinstance(payload, Mapping) else None
+        if not isinstance(models, list) or not any(
+            isinstance(model, Mapping) and model.get("id") == llama_config["model_name"]
+            for model in models
+        ):
+            pytest.fail("llama.cpp model discovery did not list the configured model")
+    finally:
+        response_bodies.clear()
+        llama_client.close()
+
+
 def _profile(
     *,
     name: str,
@@ -663,6 +809,28 @@ def _normalized_governed_access_result(
     )
     gate_results = analysis.get("gate_results")
     assert isinstance(gate_results, list)
+    gate_dispositions = tuple(
+        (str(gate["rule_id"]), str(gate["disposition"]))
+        for gate in gate_results
+        if isinstance(gate, Mapping)
+    )
+    gate_impacts = case_centered.get("gate_impacts")
+    assert isinstance(gate_impacts, list)
+    gate_impact_rule_ids = tuple(
+        str(impact["rule_id"]) for impact in gate_impacts if isinstance(impact, Mapping)
+    )
+    enterprise_action_blocked = (
+        "HG-01",
+        "blocked",
+    ) in gate_dispositions and "HG-01" in gate_impact_rule_ids
+    high_impact_workflow_is_assistive_only = (
+        "HG-03",
+        "assistive_only",
+    ) in gate_dispositions and "HG-03" in gate_impact_rule_ids
+    external_data_controls_required = (
+        "HG-05",
+        "requires_controls",
+    ) in gate_dispositions and "HG-05" in gate_impact_rule_ids
     prerequisites = tuple(
         sorted(
             fact_key
@@ -672,15 +840,29 @@ def _normalized_governed_access_result(
         )
     )
     return GovernedAccessDeterministicResult(
+        matching_status=str(case_centered.get("matching_status")),
+        no_case_reason=(
+            str(case_centered["no_case_reason"])
+            if case_centered.get("no_case_reason") is not None
+            else None
+        ),
         recommendation_category=str(case_centered.get("recommendation_category")),
         decision_authority=str(selected.get("decision_authority")),
         processing_boundary=str(selected.get("processing_boundary")),
         automatic_approval_allowed=selected.get("decision_authority")
         == "autonomous_action",
-        direct_permission_write_allowed="不直接寫入真實企業系統" not in not_doing,
-        unapproved_external_pii_allowed=selected.get("processing_boundary")
-        == "external_endpoint",
-        high_risk_provisioning_allowed="不自主核准" not in not_doing,
+        direct_permission_write_allowed=(
+            selected.get("decision_authority") == "autonomous_action"
+            and not enterprise_action_blocked
+        ),
+        unapproved_external_pii_allowed=(
+            selected.get("processing_boundary") == "external_endpoint"
+            and not external_data_controls_required
+        ),
+        high_risk_provisioning_allowed=(
+            selected.get("decision_authority") == "autonomous_action"
+            and not high_impact_workflow_is_assistive_only
+        ),
         required_prerequisites=prerequisites,
         case_ids=case_ids,
         phase_names=tuple(
@@ -688,11 +870,10 @@ def _normalized_governed_access_result(
             for phase in phased_path
             if isinstance(phase, Mapping) and isinstance(phase.get("phase_name"), str)
         ),
-        gate_dispositions=tuple(
-            (str(gate["rule_id"]), str(gate["disposition"]))
-            for gate in gate_results
-            if isinstance(gate, Mapping)
-        ),
+        gate_dispositions=gate_dispositions,
+        gate_impact_rule_ids=gate_impact_rule_ids,
+        first_phase_prohibits_direct_write="不直接寫入真實企業系統" in not_doing,
+        first_phase_prohibits_autonomous_approval="不自主核准" in not_doing,
     )
 
 
@@ -701,16 +882,27 @@ def _assert_governed_access_deterministic_boundaries(
 ) -> None:
     """Assert the deterministic policy and readiness boundaries, not narrative text."""
 
+    assert result.matching_status == "matched"
+    assert result.no_case_reason is None
     assert result.recommendation_category == "rules_first"
     assert result.decision_authority == "human_final_decision"
+    assert result.processing_boundary in {"local_only", "private_endpoint"}
     assert not result.automatic_approval_allowed
     assert not result.direct_permission_write_allowed
     assert not result.unapproved_external_pii_allowed
     assert not result.high_risk_provisioning_allowed
     assert set(result.required_prerequisites) == _REQUIRED_DISCOVERY_FACT_KEYS
+    assert result.case_ids
     assert len(result.case_ids) == len(set(result.case_ids))
-    assert "第一階段 PoC" in result.phase_names
-    assert result.gate_dispositions
+    assert set(result.phase_names) >= _EXPECTED_GOVERNED_ACCESS_PHASE_NAMES
+    assert result.gate_dispositions == _EXPECTED_GOVERNED_ACCESS_GATE_MATRIX
+    assert set(result.gate_impact_rule_ids) == {
+        rule_id for rule_id, _ in _EXPECTED_GOVERNED_ACCESS_GATE_MATRIX
+    }
+    # The following two checks are structured display-contract assertions over
+    # ImplementationPhase.not_doing, supplementing the typed authority/gates.
+    assert result.first_phase_prohibits_direct_write
+    assert result.first_phase_prohibits_autonomous_approval
 
 
 def _offline_app(
@@ -718,11 +910,11 @@ def _offline_app(
     profile_path: Path,
     adapter: OfflineGovernedAccessAdapter,
     recorder: OperationCallRecorder,
-    raw_bodies: RawProviderBodyEvidence,
+    provider_content: ProviderContentEvidence,
 ) -> Any:
     def factory_for(operation: str):
         return lambda _: RecordingOfflineAdapter(
-            adapter, recorder, raw_bodies, operation
+            adapter, recorder, provider_content, operation
         )
 
     return create_app(
@@ -778,11 +970,11 @@ def _run_offline_governed_access(
     root_path.mkdir(parents=True, exist_ok=True)
     adapter = OfflineGovernedAccessAdapter()
     recorder = OperationCallRecorder()
-    raw_bodies = RawProviderBodyEvidence()
+    provider_content = ProviderContentEvidence()
     database_path = root_path / f"{endpoint}-offline-governed-access.sqlite3"
     profile_path = root_path / f"{endpoint}-offline-governed-access-profiles.json"
     with TestClient(
-        _offline_app(database_path, profile_path, adapter, recorder, raw_bodies)
+        _offline_app(database_path, profile_path, adapter, recorder, provider_content)
     ) as client:
         profile = _assert_response(
             client.post("/v1/model-profiles", json=_offline_endpoint_config(endpoint)),
@@ -911,14 +1103,14 @@ def _run_offline_governed_access(
 
     restart_adapter = OfflineGovernedAccessAdapter()
     restart_recorder = OperationCallRecorder()
-    restart_raw_bodies = RawProviderBodyEvidence()
+    restart_provider_content = ProviderContentEvidence()
     with TestClient(
         _offline_app(
             database_path,
             profile_path,
             restart_adapter,
             restart_recorder,
-            restart_raw_bodies,
+            restart_provider_content,
         )
     ) as restarted:
         assert (
@@ -938,13 +1130,16 @@ def _run_offline_governed_access(
         assert restart_recorder.calls == []
 
     try:
-        raw_bodies.assert_absent_from_database(database_path)
-        with sqlite3.connect(database_path) as connection:
-            dump = "\n".join(str(row) for row in connection.iterdump()).casefold()
+        provider_content.assert_absent_from_database_cells(database_path)
         configured_key = _offline_endpoint_config(endpoint).get("api_key")
-        assert not configured_key or str(configured_key).casefold() not in dump
-        assert '"authorization":' not in dump
-        assert "authorization: bearer" not in dump
+        _assert_text_markers_absent_from_database_cells(
+            database_path,
+            [
+                '"authorization":',
+                "authorization: bearer",
+                *([str(configured_key)] if configured_key else []),
+            ],
+        )
         assert {call["operation"] for call in recorder.calls} >= {
             "readiness",
             "discovery",
@@ -972,15 +1167,16 @@ def _run_offline_governed_access(
             security=SecurityEvidence(
                 api_key_not_persisted=True,
                 authorization_not_persisted=True,
-                raw_provider_bodies_not_persisted=True,
+                adapter_content_not_persisted=True,
+                http_response_bodies_not_persisted=None,
             ),
             database_path=database_path,
             profile_path=profile_path,
             project_id=project_id,
         )
     finally:
-        raw_bodies.clear()
-        restart_raw_bodies.clear()
+        provider_content.clear()
+        restart_provider_content.clear()
 
 
 def test_offline_governed_access_public_api_matches_across_capability_profiles(
@@ -990,11 +1186,30 @@ def test_offline_governed_access_public_api_matches_across_capability_profiles(
     llama = _run_offline_governed_access("llama_cpp", tmp_path / "llama_cpp")
     assert nvidia.normalized_result == llama.normalized_result
     for evidence in (nvidia, llama):
+        assert evidence.normalized_result.matching_status == "matched"
+        assert evidence.normalized_result.no_case_reason is None
+        assert evidence.normalized_result.case_ids
+        assert set(evidence.normalized_result.phase_names) >= {
+            "目前階段",
+            "第一階段 PoC",
+            "第二階段與後續擴展",
+        }
+        assert evidence.normalized_result.gate_dispositions == (
+            ("HG-01", "blocked"),
+            ("HG-03", "assistive_only"),
+            ("HG-05", "requires_controls"),
+            ("HG-06", "requires_controls"),
+        )
         assert all(
             set(call) == {"operation", "schema_name", "mode"}
             for call in evidence.recorder.calls
         )
-        assert evidence.security == SecurityEvidence(True, True, True)
+        assert evidence.security == SecurityEvidence(
+            api_key_not_persisted=True,
+            authorization_not_persisted=True,
+            adapter_content_not_persisted=True,
+            http_response_bodies_not_persisted=None,
+        )
         assert {
             operation: sum(
                 call["operation"] == operation for call in evidence.recorder.calls
@@ -1073,6 +1288,86 @@ def test_governed_access_normalizer_rejects_each_policy_boundary(
     incomplete_prerequisites = copy.deepcopy(evidence.facts)
     incomplete_prerequisites.pop("audit_trail_requirements")
     assert_rejected(copy.deepcopy(evidence.analysis), incomplete_prerequisites)
+
+    missing_gate_analysis = copy.deepcopy(evidence.analysis)
+    missing_gate_analysis["gate_results"].pop()
+    assert_rejected(missing_gate_analysis, copy.deepcopy(evidence.facts))
+
+    incorrect_gate_analysis = copy.deepcopy(evidence.analysis)
+    incorrect_gate_analysis["gate_results"][0]["disposition"] = "pass"
+    assert_rejected(incorrect_gate_analysis, copy.deepcopy(evidence.facts))
+
+    missing_phase_analysis = copy.deepcopy(evidence.analysis)
+    missing_phase_analysis["case_centered"]["phased_path"] = [
+        phase
+        for phase in missing_phase_analysis["case_centered"]["phased_path"]
+        if phase["phase_name"] != "第二階段與後續擴展"
+    ]
+    assert_rejected(missing_phase_analysis, copy.deepcopy(evidence.facts))
+
+    invalid_boundary_analysis = copy.deepcopy(evidence.analysis)
+    invalid_boundary_selected = next(
+        option
+        for option in invalid_boundary_analysis["options"]
+        if option["option_key"] == invalid_boundary_analysis["recommended_option_key"]
+    )
+    invalid_boundary_selected["processing_boundary"] = "unsupported_boundary"
+    assert_rejected(invalid_boundary_analysis, copy.deepcopy(evidence.facts))
+
+    no_match_analysis = copy.deepcopy(evidence.analysis)
+    no_match_analysis["case_centered"]["matching_status"] = "no_suitable_reviewed_case"
+    no_match_analysis["case_centered"]["no_case_reason"] = "incorrectly removed"
+    assert_rejected(no_match_analysis, copy.deepcopy(evidence.facts))
+
+
+def test_http_response_body_evidence_captures_success_and_error_responses(
+    tmp_path: Path,
+) -> None:
+    """The hook reads response bytes once without storing headers or requests."""
+
+    evidence = HttpResponseBodyEvidence()
+    success_body = b'{"id":"success","choices":[]}'
+    error_body = b'{"error":{"code":"unsupported_parameter"}}'
+
+    def provider_response(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("error"):
+            return httpx.Response(400, content=error_body, request=request)
+        return httpx.Response(200, content=success_body, request=request)
+
+    with httpx.Client(
+        transport=httpx.MockTransport(provider_response),
+        event_hooks={"response": [evidence.capture_response]},
+    ) as client:
+        assert client.get("https://provider.example.test/success").json() == {
+            "id": "success",
+            "choices": [],
+        }
+        assert client.get("https://provider.example.test/error").status_code == 400
+
+    database_path = tmp_path / "response-body-evidence.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE evidence (body_text TEXT, body_blob BLOB)")
+        connection.commit()
+    assert evidence.response_count == 2
+    evidence.assert_absent_from_database_cells(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("INSERT INTO evidence (body_blob) VALUES (?)", (error_body,))
+        connection.commit()
+    with pytest.raises(AssertionError):
+        evidence.assert_absent_from_database_cells(database_path)
+
+    text_database_path = tmp_path / "response-text-evidence.sqlite3"
+    with sqlite3.connect(text_database_path) as connection:
+        connection.execute("CREATE TABLE evidence (body_text TEXT, body_blob BLOB)")
+        connection.execute(
+            "INSERT INTO evidence (body_text) VALUES (?)", (success_body.decode(),)
+        )
+        connection.commit()
+    with pytest.raises(AssertionError):
+        evidence.assert_absent_from_database_cells(text_database_path)
+    evidence.clear()
+    assert evidence.response_count == 0
 
 
 @pytest.mark.parametrize(
@@ -1160,8 +1455,10 @@ def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvi
     database_path = root_path / f"{endpoint}-governed-access.sqlite3"
     profile_path = root_path / f"{endpoint}-governed-access-profiles.json"
     recorder = OperationCallRecorder()
-    raw_bodies = RawProviderBodyEvidence()
-    app, provider_client = _live_app(database_path, profile_path, recorder, raw_bodies)
+    http_response_bodies = HttpResponseBodyEvidence()
+    app, provider_client = _live_app(
+        database_path, profile_path, recorder, http_response_bodies
+    )
 
     try:
         with TestClient(app) as client:
@@ -1302,9 +1599,12 @@ def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvi
             }
 
         restart_recorder = OperationCallRecorder()
-        restart_raw_bodies = RawProviderBodyEvidence()
+        restart_http_response_bodies = HttpResponseBodyEvidence()
         restarted_app, restarted_provider_client = _live_app(
-            database_path, profile_path, restart_recorder, restart_raw_bodies
+            database_path,
+            profile_path,
+            restart_recorder,
+            restart_http_response_bodies,
         )
         try:
             with TestClient(restarted_app) as restarted:
@@ -1332,19 +1632,22 @@ def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvi
                 assert restart_recorder.calls == []
         finally:
             restarted_provider_client.close()
-            restart_raw_bodies.clear()
+            restart_http_response_bodies.clear()
 
-        raw_bodies.assert_absent_from_database(database_path)
-        with sqlite3.connect(database_path) as connection:
-            dump = "\n".join(str(row) for row in connection.iterdump()).casefold()
+        http_response_bodies.assert_absent_from_database_cells(database_path)
         configured_key = config.get("api_key")
-        if isinstance(configured_key, str) and configured_key:
-            assert configured_key.casefold() not in dump
-        for marker in (
-            '"authorization":',
-            "authorization: bearer",
-        ):
-            assert marker not in dump
+        _assert_text_markers_absent_from_database_cells(
+            database_path,
+            [
+                '"authorization":',
+                "authorization: bearer",
+                *(
+                    [configured_key]
+                    if isinstance(configured_key, str) and configured_key
+                    else []
+                ),
+            ],
+        )
         assert all(
             set(call) == {"operation", "schema_name", "mode"} for call in recorder.calls
         )
@@ -1369,14 +1672,15 @@ def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvi
             security=SecurityEvidence(
                 api_key_not_persisted=True,
                 authorization_not_persisted=True,
-                raw_provider_bodies_not_persisted=True,
+                adapter_content_not_persisted=None,
+                http_response_bodies_not_persisted=True,
             ),
             database_path=database_path,
             profile_path=profile_path,
             project_id=project_id,
         )
     finally:
-        raw_bodies.clear()
+        http_response_bodies.clear()
         provider_client.close()
 
 
@@ -1384,12 +1688,18 @@ def test_live_p7_2a_governed_access_public_api_flow(tmp_path: Path) -> None:
     """One all-or-nothing, two-endpoint real-provider compatibility gate."""
 
     _require_live_dual_endpoint_environment()
+    _preflight_live_dual_endpoints()
     nvidia = _run_live_governed_access("nvidia", tmp_path / "nvidia")
     llama = _run_live_governed_access("llama_cpp", tmp_path / "llama_cpp")
 
     assert nvidia.normalized_result == llama.normalized_result
     for evidence in (nvidia, llama):
-        assert evidence.security == SecurityEvidence(True, True, True)
+        assert evidence.security == SecurityEvidence(
+            api_key_not_persisted=True,
+            authorization_not_persisted=True,
+            adapter_content_not_persisted=None,
+            http_response_bodies_not_persisted=True,
+        )
         assert evidence.count_matrix.after_restart == 0
         assert all(
             set(call) == {"operation", "schema_name", "mode"}
