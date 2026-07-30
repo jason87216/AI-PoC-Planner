@@ -294,13 +294,14 @@ class OpenAICompatibleChatAdapter:
 
         collect(payload)
         combined = " ".join(strings)
-        rejection = (
-            "unsupported" in combined
-            or "unknown" in combined
-            or "not supported" in combined
-            or "invalid parameter" in combined
-            or "invalid" in combined
-            or "unrecognized" in combined
+        rejection = any(
+            semantic in combined
+            for semantic in (
+                "unsupported",
+                "not supported",
+                "unknown parameter",
+                "unrecognized parameter",
+            )
         )
         if not rejection:
             return "provider_http_error"

@@ -298,7 +298,7 @@ def test_reasoning_parameter_is_capability_driven() -> None:
         ),
         (
             {"error": {"message": "response_format value is invalid"}},
-            "provider_structured_output_unsupported",
+            "provider_http_error",
         ),
         (
             {"error": {"message": "max_completion_tokens is unsupported"}},
@@ -306,6 +306,19 @@ def test_reasoning_parameter_is_capability_driven() -> None:
         ),
         (
             {"error": {"message": "request is invalid"}},
+            "provider_http_error",
+        ),
+        (
+            {
+                "error": {
+                    "message": "invalid request",
+                    "request": {"response_format": {"type": "json_schema"}},
+                }
+            },
+            "provider_http_error",
+        ),
+        (
+            {"error": {"message": "unprocessable entity"}},
             "provider_http_error",
         ),
     ],
@@ -327,6 +340,26 @@ def test_client_rejection_classifier_is_narrow_and_safe(
         )
     assert error.value.code == expected_code
     assert raw_marker not in str(error.value)
+
+
+@pytest.mark.parametrize("status_code", [400, 422])
+def test_generic_client_validation_error_does_not_trigger_capability_classification(
+    status_code: int,
+) -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            status_code,
+            json={"error": {"message": "request validation failed"}},
+        )
+
+    with pytest.raises(OpenAICompatibleProviderError) as error:
+        _adapter(handler).complete(
+            messages=[{"role": "user", "content": "hello"}],
+            temperature=0,
+            max_tokens=12,
+        )
+
+    assert error.value.code == "provider_http_error"
 
 
 def test_finish_reason_length_is_stable_truncation_error() -> None:
