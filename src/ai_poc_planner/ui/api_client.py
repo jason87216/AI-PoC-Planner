@@ -1,7 +1,7 @@
 """Safe, thin client for the local FastAPI product boundary."""
 
-# The legacy message table intentionally retains one compatibility key.
-# ruff: noqa: E501, F601
+# The message table is intentionally kept as a public-code compatibility map.
+# ruff: noqa: E501
 
 from __future__ import annotations
 
@@ -39,6 +39,7 @@ _USER_MESSAGES = {
     "provider_connection_failed": "無法連線到端點。",
     "provider_rate_limited": "端點暫時限制請求頻率。",
     "provider_unavailable": "端點目前無法使用。",
+    "provider_http_error": "端點請求失敗，請檢查設定後再試。",
     "provider_invalid_response": "端點回傳格式無效。",
     "provider_output_truncated": "端點輸出被截斷。",
     "provider_output_invalid": "結構化結果無法通過驗證。",
@@ -49,7 +50,6 @@ _USER_MESSAGES = {
     "model_profile_structured_output_invalid": "請至少啟用一種結構化輸出模式，並選擇支援的 preferred mode。",
     "provider_not_ready": "尚未有可用的已測試模型設定。",
     "provider_profile_mismatch": "目前模型設定不適用於這份規劃，請重新選擇並測試模型。",
-    "provider_output_invalid": "模型暫時無法產生可用結果，請稍後再試。",
     "analysis_not_ready": "訪談尚未完成，暫時無法開始評估。",
     "analysis_not_found": "尚未找到這份規劃的評估結果。",
     "analysis_already_exists": "這份規劃已有評估結果，已保留原有內容。",
@@ -83,8 +83,6 @@ _USER_MESSAGES = {
     "local_service_timeout": "AI PoC Planner 本機服務回應逾時，請重新執行啟動器。",
 }
 
-_USER_MESSAGES["provider_output_invalid"] = "結構化結果無法通過驗證。"
-
 _SAFE_USER_ACTIONS = {
     "provider_auth_required": "請補充 API key 後再測試。",
     "provider_auth_failed": "請確認 API key 與端點權限後再試。",
@@ -95,6 +93,7 @@ _SAFE_USER_ACTIONS = {
     "provider_connection_failed": "請確認端點正在執行且網路連線可用。",
     "provider_rate_limited": "請稍後重試，或降低請求頻率。",
     "provider_unavailable": "請稍後重試，並確認服務目前可用。",
+    "provider_http_error": "請檢查端點設定與請求能力後再試。",
     "provider_invalid_response": "請確認端點回傳 OpenAI-compatible chat completion。",
     "provider_output_truncated": "請提高輸出預算後再試。",
     "provider_output_invalid": "請重試；若持續失敗，請檢查結構化輸出能力。",
