@@ -9,10 +9,12 @@ capability declarations through the same structured-output executor.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import sqlite3
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -38,6 +40,7 @@ from ai_poc_planner.providers.errors import ProviderOperation
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleChatAdapter
 from ai_poc_planner.providers.profiles import ModelProfile
 from ai_poc_planner.providers.structured_output import StructuredOutputExecutor
+from ai_poc_planner.ui.results import markdown_download
 
 SCENARIOS_PATH = (
     Path(__file__).parents[1] / "fixtures" / "product_acceptance" / "scenarios.json"
@@ -50,6 +53,90 @@ GOVERNED_ACCESS = next(
 NOW = datetime(2026, 7, 30, tzinfo=UTC)
 _NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 _NVIDIA_MODEL = "openai/gpt-oss-20b"
+_REQUIRED_DISCOVERY_FACT_KEYS = frozenset(
+    {
+        "permission_template_requirements",
+        "required_field_validation",
+        "application_workflow_state",
+        "audit_trail_requirements",
+    }
+)
+_GOVERNED_ACCESS_UAT_FACTS = (
+    {
+        "fact_key": "permission_template_requirements",
+        "status": "confirmed",
+        "value": "第一階段以已核准的職務與權限範本作為申請依據。",
+    },
+    {
+        "fact_key": "required_field_validation",
+        "status": "confirmed",
+        "value": "送出申請時檢查必填欄位與已知的規則衝突。",
+    },
+    {
+        "fact_key": "application_workflow_state",
+        "status": "confirmed",
+        "value": "申請必須保留待主管核准與待 IT 開通的工作流程狀態。",
+    },
+    {
+        "fact_key": "audit_trail_requirements",
+        "status": "confirmed",
+        "value": "保留申請、規則結果、核准人與時間的稽核紀錄。",
+    },
+)
+
+
+@dataclass(frozen=True)
+class GovernedAccessDeterministicResult:
+    """Normalized product facts returned by the production API."""
+
+    recommendation_category: str
+    decision_authority: str
+    processing_boundary: str
+    automatic_approval_allowed: bool
+    direct_permission_write_allowed: bool
+    unapproved_external_pii_allowed: bool
+    high_risk_provisioning_allowed: bool
+    required_prerequisites: tuple[str, ...]
+    case_ids: tuple[str, ...]
+    phase_names: tuple[str, ...]
+    gate_dispositions: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class OperationCountMatrix:
+    after_readiness: int
+    after_discovery: int
+    after_analysis: int
+    after_duplicate_analysis: int
+    after_report: int
+    after_duplicate_report: int
+    after_history: int
+    after_markdown_download: int
+    after_restart: int
+
+
+@dataclass(frozen=True)
+class SecurityEvidence:
+    api_key_not_persisted: bool
+    authorization_not_persisted: bool
+    raw_provider_bodies_not_persisted: bool
+
+
+@dataclass(frozen=True)
+class LiveEndpointEvidence:
+    """Safe evidence produced by one isolated governed-access endpoint run."""
+
+    endpoint: str
+    analysis: dict[str, Any]
+    report: dict[str, Any]
+    facts: dict[str, dict[str, Any]]
+    normalized_result: GovernedAccessDeterministicResult
+    recorder: OperationCallRecorder
+    count_matrix: OperationCountMatrix
+    security: SecurityEvidence
+    database_path: Path
+    profile_path: Path
+    project_id: str
 
 
 class CallRecorder:
@@ -79,11 +166,49 @@ class CallRecorder:
         return '{"status":"ok"}'
 
 
+class OperationCallRecorder:
+    """Record safe operation/schema/mode metadata only."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def record(self, *, operation: str, response_format: Any) -> None:
+        request = response_format.as_request_value()
+        schema_name = getattr(response_format, "name", None) or ""
+        self.calls.append(
+            {
+                "operation": "report"
+                if schema_name.startswith("report_")
+                else operation,
+                "schema_name": schema_name,
+                "mode": str(request["type"]),
+            }
+        )
+
+
+class RawProviderBodyEvidence:
+    """Keep exact provider bodies in process just long enough to check persistence."""
+
+    def __init__(self) -> None:
+        self._bodies: list[str] = []
+
+    def capture(self, body: str) -> None:
+        self._bodies.append(body)
+
+    def assert_absent_from_database(self, database_path: Path) -> None:
+        with sqlite3.connect(database_path) as connection:
+            dump = "\n".join(str(row) for row in connection.iterdump()).casefold()
+        assert self._bodies
+        assert all(body.casefold() not in dump for body in self._bodies)
+
+    def clear(self) -> None:
+        self._bodies.clear()
+
+
 class OfflineGovernedAccessAdapter:
     """Return bounded valid DTOs while the real public API owns the result."""
 
     def __init__(self) -> None:
-        self.calls: list[dict[str, str]] = []
         self._interview_rounds = 0
         self._json_object_discovery_calls = 0
 
@@ -99,14 +224,6 @@ class OfflineGovernedAccessAdapter:
         del temperature, max_tokens, reasoning_effort
         request = response_format.as_request_value()
         schema_name = response_format.name or ""
-        operation = "report" if schema_name.startswith("report_") else schema_name
-        self.calls.append(
-            {
-                "operation": operation,
-                "schema_name": schema_name,
-                "mode": str(request["type"]),
-            }
-        )
         if schema_name == "connection_probe":
             return '{"status":"ok"}'
         json_object_understanding = (
@@ -227,24 +344,29 @@ class OfflineGovernedAccessAdapter:
         raise AssertionError(f"unexpected offline schema: {schema_name}")
 
 
-class LiveCallRecorder:
-    """Record safe operation/schema/mode metadata only for a real UAT run."""
+class RecordingOfflineAdapter:
+    """Attach a safe operation label to a deterministic offline script response."""
 
-    def __init__(self) -> None:
-        self.calls: list[dict[str, str]] = []
+    def __init__(
+        self,
+        delegate: OfflineGovernedAccessAdapter,
+        recorder: OperationCallRecorder,
+        raw_bodies: RawProviderBodyEvidence,
+        operation: str,
+    ) -> None:
+        self._delegate = delegate
+        self._recorder = recorder
+        self._raw_bodies = raw_bodies
+        self._operation = operation
 
-    def record(self, *, operation: str, response_format: Any) -> None:
-        request = response_format.as_request_value()
-        schema_name = getattr(response_format, "name", None) or ""
-        self.calls.append(
-            {
-                "operation": (
-                    "report" if schema_name.startswith("report_") else operation
-                ),
-                "schema_name": schema_name,
-                "mode": str(request["type"]),
-            }
+    def complete(self, **kwargs: object) -> str:
+        response_format = kwargs.get("response_format")
+        self._recorder.record(
+            operation=self._operation, response_format=response_format
         )
+        body = self._delegate.complete(**kwargs)
+        self._raw_bodies.capture(body)
+        return body
 
 
 class RecordingLiveAdapter:
@@ -253,11 +375,13 @@ class RecordingLiveAdapter:
     def __init__(
         self,
         delegate: OpenAICompatibleChatAdapter,
-        recorder: LiveCallRecorder,
+        recorder: OperationCallRecorder,
+        raw_bodies: RawProviderBodyEvidence,
         operation: str,
     ) -> None:
         self._delegate = delegate
         self._recorder = recorder
+        self._raw_bodies = raw_bodies
         self._operation = operation
 
     def complete(self, **kwargs: object) -> str:
@@ -265,13 +389,16 @@ class RecordingLiveAdapter:
         self._recorder.record(
             operation=self._operation, response_format=response_format
         )
-        return self._delegate.complete(**kwargs)
+        body = self._delegate.complete(**kwargs)
+        self._raw_bodies.capture(body)
+        return body
 
 
 def _live_app(
     database_path: Path,
     profile_path: Path,
-    recorder: LiveCallRecorder,
+    recorder: OperationCallRecorder,
+    raw_bodies: RawProviderBodyEvidence,
 ) -> tuple[Any, httpx.Client]:
     provider_client = httpx.Client(trust_env=False)
 
@@ -290,7 +417,7 @@ def _live_app(
                 reasoning_effort=profile.reasoning_effort,
                 capabilities=profile.effective_capabilities,
             )
-            return RecordingLiveAdapter(adapter, recorder, operation)
+            return RecordingLiveAdapter(adapter, recorder, raw_bodies, operation)
 
         return factory
 
@@ -349,7 +476,7 @@ def _live_answers(
         )
 
     additional_facts = []
-    for item in GOVERNED_ACCESS["facts"]:
+    for item in (*GOVERNED_ACCESS["facts"], *_GOVERNED_ACCESS_UAT_FACTS):
         key = item["fact_key"].strip().casefold()
         if key in facts or key in question_keys:
             continue
@@ -372,6 +499,38 @@ def _live_answers(
         200,
         "interview answers",
     )
+
+
+def _require_live_dual_endpoint_environment() -> None:
+    """Skip both endpoints before creating either client when live UAT is unavailable."""
+
+    missing: list[str] = []
+    if os.environ.get("AI_POC_PLANNER_P7_2A_NVIDIA_TEST") != "1":
+        missing.append("AI_POC_PLANNER_P7_2A_NVIDIA_TEST=1")
+    if not os.environ.get("NVIDIA_API_KEY"):
+        missing.append("NVIDIA_API_KEY")
+    if os.environ.get("AI_POC_PLANNER_P7_2A_LLAMA_CPP_TEST") != "1":
+        missing.append("AI_POC_PLANNER_P7_2A_LLAMA_CPP_TEST=1")
+    if not os.environ.get("AI_POC_PLANNER_LLAMA_CPP_BASE_URL"):
+        missing.append("AI_POC_PLANNER_LLAMA_CPP_BASE_URL")
+    if not os.environ.get("AI_POC_PLANNER_LLAMA_CPP_MODEL"):
+        missing.append("AI_POC_PLANNER_LLAMA_CPP_MODEL")
+    json_schema = os.environ.get("AI_POC_PLANNER_LLAMA_CPP_JSON_SCHEMA") == "1"
+    json_object = os.environ.get("AI_POC_PLANNER_LLAMA_CPP_JSON_OBJECT", "1") == "1"
+    if not json_schema and not json_object:
+        missing.append("llama.cpp structured-output capability")
+    preferred = os.environ.get("AI_POC_PLANNER_LLAMA_CPP_PREFERRED_MODE")
+    preferred = preferred or ("json_schema" if json_schema else "json_object")
+    if (
+        preferred not in {"json_schema", "json_object"}
+        or (preferred == "json_schema" and not json_schema)
+        or (preferred == "json_object" and not json_object)
+    ):
+        missing.append("valid llama.cpp preferred structured-output mode")
+    if missing:
+        pytest.skip(
+            "live governed_access dual-endpoint gate unavailable: " + ", ".join(missing)
+        )
 
 
 def _live_endpoint_config(endpoint: str) -> dict[str, Any]:
@@ -462,66 +621,117 @@ def _profile(
     )
 
 
-def _assert_governed_access_result(
-    analysis: dict[str, Any], report: dict[str, Any]
-) -> dict[str, Any]:
-    """Validate product invariants from returned API data, not from the fixture."""
+def _normalized_governed_access_result(
+    analysis: Mapping[str, Any], facts: Mapping[str, Mapping[str, Any]]
+) -> GovernedAccessDeterministicResult:
+    """Read governed-access boundaries from structured production API fields."""
 
     case_centered = analysis.get("case_centered")
-    assert isinstance(case_centered, dict)
-    assert case_centered["recommendation_category"] == "rules_first"
-    assert case_centered["recommendation_title"]
+    assert isinstance(case_centered, Mapping)
+    options = analysis.get("options")
+    assert isinstance(options, list)
+    recommended_option_key = analysis.get("recommended_option_key")
+    selected = next(
+        (
+            option
+            for option in options
+            if isinstance(option, Mapping)
+            and option.get("option_key") == recommended_option_key
+        ),
+        None,
+    )
+    assert isinstance(selected, Mapping)
+    phased_path = case_centered.get("phased_path")
+    assert isinstance(phased_path, list)
+    first_phase = next(
+        (
+            phase
+            for phase in phased_path
+            if isinstance(phase, Mapping) and phase.get("phase_name") == "第一階段 PoC"
+        ),
+        None,
+    )
+    assert isinstance(first_phase, Mapping)
+    not_doing = first_phase.get("not_doing")
+    assert isinstance(not_doing, list)
     matched_cases = case_centered.get("matched_cases")
     assert isinstance(matched_cases, list)
-    case_ids = [item["case"]["case_id"] for item in matched_cases]
-    assert len(case_ids) == len(set(case_ids))
+    case_ids = tuple(
+        str(item["case"]["case_id"])
+        for item in matched_cases
+        if isinstance(item, Mapping) and isinstance(item.get("case"), Mapping)
+    )
+    gate_results = analysis.get("gate_results")
+    assert isinstance(gate_results, list)
+    prerequisites = tuple(
+        sorted(
+            fact_key
+            for fact_key, fact in facts.items()
+            if fact_key in _REQUIRED_DISCOVERY_FACT_KEYS
+            and fact.get("status") == "confirmed"
+        )
+    )
+    return GovernedAccessDeterministicResult(
+        recommendation_category=str(case_centered.get("recommendation_category")),
+        decision_authority=str(selected.get("decision_authority")),
+        processing_boundary=str(selected.get("processing_boundary")),
+        automatic_approval_allowed=selected.get("decision_authority")
+        == "autonomous_action",
+        direct_permission_write_allowed="不直接寫入真實企業系統" not in not_doing,
+        unapproved_external_pii_allowed=selected.get("processing_boundary")
+        == "external_endpoint",
+        high_risk_provisioning_allowed="不自主核准" not in not_doing,
+        required_prerequisites=prerequisites,
+        case_ids=case_ids,
+        phase_names=tuple(
+            str(phase["phase_name"])
+            for phase in phased_path
+            if isinstance(phase, Mapping) and isinstance(phase.get("phase_name"), str)
+        ),
+        gate_dispositions=tuple(
+            (str(gate["rule_id"]), str(gate["disposition"]))
+            for gate in gate_results
+            if isinstance(gate, Mapping)
+        ),
+    )
 
-    combined = json.dumps({"analysis": analysis, "report": report}, ensure_ascii=False)
-    assert "主管保留最終核准" in combined
-    assert "不得自動開通" in combined
-    for required_terms in (
-        ("權限範本", "職位—權限"),
-        ("欄位", "申請欄位"),
-        ("狀態", "流程"),
-        ("稽核", "紀錄"),
-    ):
-        assert any(term in combined for term in required_terms), required_terms
-    for forbidden in GOVERNED_ACCESS["expected"]["must_not_have_conclusions"]:
-        assert forbidden.casefold() not in combined.casefold()
 
-    markdown = str(report.get("markdown", ""))
-    assert markdown
-    assert markdown.startswith("# 專案評估報告")
-    assert "## 4. 方案、成熟案例與專案差距比較" in markdown
-    return {
-        "recommendation_category": case_centered["recommendation_category"],
-        "recommendation_title": case_centered["recommendation_title"],
-        "case_ids": case_ids,
-        "phase_names": [
-            item["phase_name"] for item in case_centered.get("phased_path", [])
-        ],
-        "gate_dispositions": [
-            (item["rule_id"], item["disposition"])
-            for item in analysis.get("gate_results", [])
-        ],
-        "markdown_headings": [
-            line for line in markdown.splitlines() if line.startswith("#")
-        ],
-    }
+def _assert_governed_access_deterministic_boundaries(
+    result: GovernedAccessDeterministicResult,
+) -> None:
+    """Assert the deterministic policy and readiness boundaries, not narrative text."""
+
+    assert result.recommendation_category == "rules_first"
+    assert result.decision_authority == "human_final_decision"
+    assert not result.automatic_approval_allowed
+    assert not result.direct_permission_write_allowed
+    assert not result.unapproved_external_pii_allowed
+    assert not result.high_risk_provisioning_allowed
+    assert set(result.required_prerequisites) == _REQUIRED_DISCOVERY_FACT_KEYS
+    assert len(result.case_ids) == len(set(result.case_ids))
+    assert "第一階段 PoC" in result.phase_names
+    assert result.gate_dispositions
 
 
 def _offline_app(
     database_path: Path,
     profile_path: Path,
     adapter: OfflineGovernedAccessAdapter,
+    recorder: OperationCallRecorder,
+    raw_bodies: RawProviderBodyEvidence,
 ) -> Any:
+    def factory_for(operation: str):
+        return lambda _: RecordingOfflineAdapter(
+            adapter, recorder, raw_bodies, operation
+        )
+
     return create_app(
         chat_model=GenericFakeChatModel(messages=iter(())),
         database_path=database_path,
         model_profile_repository=LocalModelProfileRepository(path=profile_path),
-        connection_adapter_factory=lambda _: adapter,
-        interview_adapter_factory=lambda _: adapter,
-        analysis_adapter_factory=lambda _: adapter,
+        connection_adapter_factory=factory_for("readiness"),
+        interview_adapter_factory=factory_for("discovery"),
+        analysis_adapter_factory=factory_for("analysis"),
         runtime_mode="uat",
     )
 
@@ -561,13 +771,19 @@ def _offline_endpoint_config(endpoint: str) -> dict[str, Any]:
 
 
 def _run_offline_governed_access(
-    endpoint: str, tmp_path: Path
-) -> tuple[dict[str, Any], dict[str, Any], OfflineGovernedAccessAdapter, str, Path]:
-    tmp_path.mkdir(parents=True, exist_ok=True)
+    endpoint: str, root_path: Path
+) -> LiveEndpointEvidence:
+    """Run one isolated offline endpoint through the real FastAPI workflow."""
+
+    root_path.mkdir(parents=True, exist_ok=True)
     adapter = OfflineGovernedAccessAdapter()
-    database_path = tmp_path / f"{endpoint}-offline-governed-access.sqlite3"
-    profile_path = tmp_path / f"{endpoint}-offline-governed-access-profiles.json"
-    with TestClient(_offline_app(database_path, profile_path, adapter)) as client:
+    recorder = OperationCallRecorder()
+    raw_bodies = RawProviderBodyEvidence()
+    database_path = root_path / f"{endpoint}-offline-governed-access.sqlite3"
+    profile_path = root_path / f"{endpoint}-offline-governed-access-profiles.json"
+    with TestClient(
+        _offline_app(database_path, profile_path, adapter, recorder, raw_bodies)
+    ) as client:
         profile = _assert_response(
             client.post("/v1/model-profiles", json=_offline_endpoint_config(endpoint)),
             201,
@@ -585,6 +801,7 @@ def _run_offline_governed_access(
             "offline readiness",
         )
         assert readiness["connection_state"] == "connected"
+        after_readiness = len(recorder.calls)
 
         project = _assert_response(
             client.post(
@@ -636,31 +853,33 @@ def _run_offline_governed_access(
             "offline ready version",
         )
         assert version["status"] == "ready_for_assessment"
-        before_analysis = len(adapter.calls)
+        after_discovery = len(recorder.calls)
         analysis = _assert_response(
             client.post(f"/v1/projects/{project_id}/versions/1/analysis"),
             201,
             "offline analysis",
         )
-        analysis_call_count = len(adapter.calls)
-        assert analysis_call_count > before_analysis
+        analysis_call_count = len(recorder.calls)
+        assert analysis_call_count > after_discovery
         duplicate_analysis = client.post(
             f"/v1/projects/{project_id}/versions/1/analysis"
         )
         assert duplicate_analysis.status_code == 201
         assert duplicate_analysis.json() == analysis
-        assert len(adapter.calls) == analysis_call_count
+        assert len(recorder.calls) == analysis_call_count
 
         report = _assert_response(
             client.post(f"/v1/projects/{project_id}/versions/1/report"),
             201,
             "offline report",
         )
-        report_call_count = len(adapter.calls)
+        report_call_count = len(recorder.calls)
         duplicate_report = client.post(f"/v1/projects/{project_id}/versions/1/report")
         assert duplicate_report.status_code == 409
-        assert len(adapter.calls) == report_call_count
-        _assert_governed_access_result(analysis, report)
+        assert len(recorder.calls) == report_call_count
+        facts = _live_facts(client, project_id)
+        normalized_result = _normalized_governed_access_result(analysis, facts)
+        _assert_governed_access_deterministic_boundaries(normalized_result)
 
         # These are the same persisted API payloads consumed by Results and by
         # app_pages/results.py's st.download_button boundary.
@@ -671,9 +890,10 @@ def _run_offline_governed_access(
         assert (
             client.get(f"/v1/projects/{project_id}/versions/1/report").json() == report
         )
-        first_download = str(report["markdown"]).encode("utf-8")
-        assert first_download.decode("utf-8") == report["markdown"]
-        assert len(adapter.calls) == report_call_count
+        project_name = str(project["project"]["project_name"])
+        first_download = markdown_download(report, project_name, 1)
+        assert first_download.data.decode("utf-8") == report["markdown"]
+        assert len(recorder.calls) == report_call_count
 
         # Refresh/history-style reads must remain read-only and must not invoke
         # the provider again.
@@ -682,17 +902,24 @@ def _run_offline_governed_access(
         assert (
             client.get(f"/v1/projects/{project_id}/versions/1/report").json() == report
         )
-        second_download = str(
-            client.get(f"/v1/projects/{project_id}/versions/1/report").json()[
-                "markdown"
-            ]
-        ).encode("utf-8")
+        refreshed_report = client.get(
+            f"/v1/projects/{project_id}/versions/1/report"
+        ).json()
+        second_download = markdown_download(refreshed_report, project_name, 1)
         assert second_download == first_download
-        assert len(adapter.calls) == report_call_count
+        after_history = len(recorder.calls)
 
     restart_adapter = OfflineGovernedAccessAdapter()
+    restart_recorder = OperationCallRecorder()
+    restart_raw_bodies = RawProviderBodyEvidence()
     with TestClient(
-        _offline_app(database_path, profile_path, restart_adapter)
+        _offline_app(
+            database_path,
+            profile_path,
+            restart_adapter,
+            restart_recorder,
+            restart_raw_bodies,
+        )
     ) as restarted:
         assert (
             restarted.get(f"/v1/projects/{project_id}/versions/1/analysis").json()
@@ -704,11 +931,56 @@ def _run_offline_governed_access(
             "offline restarted report",
         )
         assert reloaded_report == report
+        reloaded_download = markdown_download(reloaded_report, project_name, 1)
+        assert reloaded_download == first_download
         assert restarted.get("/v1/projects").status_code == 200
         assert restarted.get(f"/v1/projects/{project_id}/versions").status_code == 200
-        assert restart_adapter.calls == []
+        assert restart_recorder.calls == []
 
-    return analysis, report, adapter, project_id, database_path
+    try:
+        raw_bodies.assert_absent_from_database(database_path)
+        with sqlite3.connect(database_path) as connection:
+            dump = "\n".join(str(row) for row in connection.iterdump()).casefold()
+        configured_key = _offline_endpoint_config(endpoint).get("api_key")
+        assert not configured_key or str(configured_key).casefold() not in dump
+        assert '"authorization":' not in dump
+        assert "authorization: bearer" not in dump
+        assert {call["operation"] for call in recorder.calls} >= {
+            "readiness",
+            "discovery",
+            "analysis",
+            "report",
+        }
+        return LiveEndpointEvidence(
+            endpoint=endpoint,
+            analysis=analysis,
+            report=report,
+            facts=facts,
+            normalized_result=normalized_result,
+            recorder=recorder,
+            count_matrix=OperationCountMatrix(
+                after_readiness=after_readiness,
+                after_discovery=after_discovery,
+                after_analysis=analysis_call_count,
+                after_duplicate_analysis=analysis_call_count,
+                after_report=report_call_count,
+                after_duplicate_report=report_call_count,
+                after_history=after_history,
+                after_markdown_download=after_history,
+                after_restart=len(restart_recorder.calls),
+            ),
+            security=SecurityEvidence(
+                api_key_not_persisted=True,
+                authorization_not_persisted=True,
+                raw_provider_bodies_not_persisted=True,
+            ),
+            database_path=database_path,
+            profile_path=profile_path,
+            project_id=project_id,
+        )
+    finally:
+        raw_bodies.clear()
+        restart_raw_bodies.clear()
 
 
 def test_offline_governed_access_public_api_matches_across_capability_profiles(
@@ -716,45 +988,91 @@ def test_offline_governed_access_public_api_matches_across_capability_profiles(
 ) -> None:
     nvidia = _run_offline_governed_access("nvidia", tmp_path / "nvidia")
     llama = _run_offline_governed_access("llama_cpp", tmp_path / "llama_cpp")
-    assert _assert_governed_access_result(
-        nvidia[0], nvidia[1]
-    ) == _assert_governed_access_result(llama[0], llama[1])
-    for _, _, adapter, _, database_path in (nvidia, llama):
+    assert nvidia.normalized_result == llama.normalized_result
+    for evidence in (nvidia, llama):
         assert all(
-            set(call) == {"operation", "schema_name", "mode"} for call in adapter.calls
+            set(call) == {"operation", "schema_name", "mode"}
+            for call in evidence.recorder.calls
         )
-        with sqlite3.connect(database_path) as connection:
-            dump = "\n".join(str(row) for row in connection.iterdump()).casefold()
-        for marker in (
-            '"authorization":',
-            "authorization: bearer",
-            "offline-nvidia-key",
-            "raw provider body",
-        ):
-            assert marker not in dump
+        assert evidence.security == SecurityEvidence(True, True, True)
+        assert {
+            operation: sum(
+                call["operation"] == operation for call in evidence.recorder.calls
+            )
+            for operation in {"readiness", "discovery", "analysis", "report"}
+        } == {
+            "readiness": 1,
+            "discovery": 4,
+            "analysis": 3,
+            "report": 2,
+        }
+        assert evidence.count_matrix == OperationCountMatrix(
+            after_readiness=1,
+            after_discovery=5,
+            after_analysis=8,
+            after_duplicate_analysis=8,
+            after_report=10,
+            after_duplicate_report=10,
+            after_history=10,
+            after_markdown_download=10,
+            after_restart=0,
+        )
 
 
-def test_governed_access_result_helper_rejects_missing_product_invariant() -> None:
-    valid_analysis = {
-        "case_centered": {
-            "recommendation_category": "rules_first",
-            "recommendation_title": "權限申請標準化、規則檢查與人工核准",
-            "matched_cases": [],
-            "phased_path": [],
-        },
-        "gate_results": [],
-    }
-    valid_report = {
-        "markdown": (
-            "# 專案評估報告\n## 4. 方案、成熟案例與專案差距比較\n"
-            "主管保留最終核准；不得自動開通；權限範本；欄位；狀態；稽核紀錄"
-        )
-    }
-    _assert_governed_access_result(valid_analysis, valid_report)
-    invalid = json.loads(json.dumps(valid_report, ensure_ascii=False))
-    invalid["markdown"] = invalid["markdown"].replace("稽核紀錄", "")
-    with pytest.raises(AssertionError):
-        _assert_governed_access_result(valid_analysis, invalid)
+def test_governed_access_normalizer_rejects_each_policy_boundary(
+    tmp_path: Path,
+) -> None:
+    """A structured API regression must fail without relying on report prose."""
+
+    evidence = _run_offline_governed_access("nvidia", tmp_path / "negative")
+
+    def assert_rejected(
+        altered_analysis: dict[str, Any], altered_facts: dict[str, dict[str, Any]]
+    ) -> None:
+        with pytest.raises(AssertionError):
+            _assert_governed_access_deterministic_boundaries(
+                _normalized_governed_access_result(altered_analysis, altered_facts)
+            )
+
+    autonomous_analysis = copy.deepcopy(evidence.analysis)
+    autonomous_selected = next(
+        option
+        for option in autonomous_analysis["options"]
+        if option["option_key"] == autonomous_analysis["recommended_option_key"]
+    )
+    autonomous_selected["decision_authority"] = "autonomous_action"
+    assert_rejected(autonomous_analysis, copy.deepcopy(evidence.facts))
+
+    direct_write_analysis = copy.deepcopy(evidence.analysis)
+    direct_write_phase = next(
+        phase
+        for phase in direct_write_analysis["case_centered"]["phased_path"]
+        if phase["phase_name"] == "第一階段 PoC"
+    )
+    direct_write_phase["not_doing"].remove("不直接寫入真實企業系統")
+    assert_rejected(direct_write_analysis, copy.deepcopy(evidence.facts))
+
+    external_pii_analysis = copy.deepcopy(evidence.analysis)
+    external_pii_selected = next(
+        option
+        for option in external_pii_analysis["options"]
+        if option["option_key"] == external_pii_analysis["recommended_option_key"]
+    )
+    external_pii_selected["processing_boundary"] = "external_endpoint"
+    assert_rejected(external_pii_analysis, copy.deepcopy(evidence.facts))
+
+    high_risk_analysis = copy.deepcopy(evidence.analysis)
+    high_risk_phase = next(
+        phase
+        for phase in high_risk_analysis["case_centered"]["phased_path"]
+        if phase["phase_name"] == "第一階段 PoC"
+    )
+    high_risk_phase["not_doing"].remove("不自主核准")
+    assert_rejected(high_risk_analysis, copy.deepcopy(evidence.facts))
+
+    incomplete_prerequisites = copy.deepcopy(evidence.facts)
+    incomplete_prerequisites.pop("audit_trail_requirements")
+    assert_rejected(copy.deepcopy(evidence.analysis), incomplete_prerequisites)
 
 
 @pytest.mark.parametrize(
@@ -821,6 +1139,8 @@ def test_governed_access_representative_profiles_share_executor_policy(
 
 
 def test_governed_access_fixture_keeps_deterministic_product_expectations() -> None:
+    """Fixture-only contract check; it is not evidence from a UAT runtime."""
+
     expected = GOVERNED_ACCESS["expected"]
     assert expected["recommendation_category"] == "rules_first"
     assert "主管保留最終核准" in expected["human_decision_boundary"]
@@ -832,15 +1152,16 @@ def test_governed_access_fixture_keeps_deterministic_product_expectations() -> N
     ]
 
 
-@pytest.mark.parametrize("endpoint", ["nvidia", "llama_cpp"])
-def test_live_p7_2a_governed_access_public_api_flow(
-    endpoint: str, tmp_path: Path
-) -> None:
+def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvidence:
+    """Run one real endpoint in its own state, profile, client, and recorder."""
+
     config = _live_endpoint_config(endpoint)
-    database_path = tmp_path / f"{endpoint}-governed-access.sqlite3"
-    profile_path = tmp_path / f"{endpoint}-governed-access-profiles.json"
-    recorder = LiveCallRecorder()
-    app, provider_client = _live_app(database_path, profile_path, recorder)
+    root_path.mkdir(parents=True, exist_ok=True)
+    database_path = root_path / f"{endpoint}-governed-access.sqlite3"
+    profile_path = root_path / f"{endpoint}-governed-access-profiles.json"
+    recorder = OperationCallRecorder()
+    raw_bodies = RawProviderBodyEvidence()
+    app, provider_client = _live_app(database_path, profile_path, recorder, raw_bodies)
 
     try:
         with TestClient(app) as client:
@@ -866,6 +1187,7 @@ def test_live_p7_2a_governed_access_public_api_flow(
             assert readiness["connection_state"] == "connected"
             assert readiness["mode_used"] in {"json_schema", "json_object"}
             assert readiness["fallback_used"] is False
+            after_readiness = len(recorder.calls)
 
             project = _assert_response(
                 client.post(
@@ -920,15 +1242,15 @@ def test_live_p7_2a_governed_access_public_api_flow(
                 "ready version",
             )
             assert version["status"] == "ready_for_assessment"
+            after_discovery = len(recorder.calls)
 
-            before_analysis_duplicate = len(recorder.calls)
             analysis = _assert_response(
                 client.post(f"/v1/projects/{project_id}/versions/1/analysis"),
                 201,
                 "analysis",
             )
             analysis_call_count = len(recorder.calls)
-            assert analysis_call_count > before_analysis_duplicate
+            assert analysis_call_count > after_discovery
             duplicate_analysis = client.post(
                 f"/v1/projects/{project_id}/versions/1/analysis"
             )
@@ -941,15 +1263,15 @@ def test_live_p7_2a_governed_access_public_api_flow(
                 201,
                 "report",
             )
-            markdown = report["markdown"]
-            assert markdown
             report_call_count = len(recorder.calls)
             duplicate_report = client.post(
                 f"/v1/projects/{project_id}/versions/1/report"
             )
             assert duplicate_report.status_code == 409
             assert len(recorder.calls) == report_call_count
-            _assert_governed_access_result(analysis, report)
+            facts = _live_facts(client, project_id)
+            normalized_result = _normalized_governed_access_result(analysis, facts)
+            _assert_governed_access_deterministic_boundaries(normalized_result)
 
             assert (
                 client.get(f"/v1/projects/{project_id}/versions/1/analysis").json()
@@ -959,9 +1281,19 @@ def test_live_p7_2a_governed_access_public_api_flow(
                 client.get(f"/v1/projects/{project_id}/versions/1/report").json()
                 == report
             )
+            project_name = str(project["project"]["project_name"])
+            first_download = markdown_download(report, project_name, 1)
+            assert first_download.data.decode("utf-8") == report["markdown"]
             assert client.get("/v1/projects").status_code == 200
             assert client.get(f"/v1/projects/{project_id}/versions").status_code == 200
+            refreshed_report = client.get(
+                f"/v1/projects/{project_id}/versions/1/report"
+            ).json()
+            assert (
+                markdown_download(refreshed_report, project_name, 1) == first_download
+            )
             assert len(recorder.calls) == report_call_count
+            after_history = len(recorder.calls)
             assert {call["operation"] for call in recorder.calls} >= {
                 "readiness",
                 "discovery",
@@ -969,9 +1301,10 @@ def test_live_p7_2a_governed_access_public_api_flow(
                 "report",
             }
 
-        restart_recorder = LiveCallRecorder()
+        restart_recorder = OperationCallRecorder()
+        restart_raw_bodies = RawProviderBodyEvidence()
         restarted_app, restarted_provider_client = _live_app(
-            database_path, profile_path, restart_recorder
+            database_path, profile_path, restart_recorder, restart_raw_bodies
         )
         try:
             with TestClient(restarted_app) as restarted:
@@ -986,7 +1319,11 @@ def test_live_p7_2a_governed_access_public_api_flow(
                     200,
                     "reloaded report",
                 )
-                assert persisted_report["markdown"] == markdown
+                assert persisted_report == report
+                assert (
+                    markdown_download(persisted_report, project_name, 1)
+                    == first_download
+                )
                 assert restarted.get("/v1/projects").status_code == 200
                 assert (
                     restarted.get(f"/v1/projects/{project_id}/versions").status_code
@@ -995,8 +1332,9 @@ def test_live_p7_2a_governed_access_public_api_flow(
                 assert restart_recorder.calls == []
         finally:
             restarted_provider_client.close()
+            restart_raw_bodies.clear()
 
-        dump = ""
+        raw_bodies.assert_absent_from_database(database_path)
         with sqlite3.connect(database_path) as connection:
             dump = "\n".join(str(row) for row in connection.iterdump()).casefold()
         configured_key = config.get("api_key")
@@ -1010,5 +1348,50 @@ def test_live_p7_2a_governed_access_public_api_flow(
         assert all(
             set(call) == {"operation", "schema_name", "mode"} for call in recorder.calls
         )
+        return LiveEndpointEvidence(
+            endpoint=endpoint,
+            analysis=analysis,
+            report=report,
+            facts=facts,
+            normalized_result=normalized_result,
+            recorder=recorder,
+            count_matrix=OperationCountMatrix(
+                after_readiness=after_readiness,
+                after_discovery=after_discovery,
+                after_analysis=analysis_call_count,
+                after_duplicate_analysis=analysis_call_count,
+                after_report=report_call_count,
+                after_duplicate_report=report_call_count,
+                after_history=after_history,
+                after_markdown_download=after_history,
+                after_restart=len(restart_recorder.calls),
+            ),
+            security=SecurityEvidence(
+                api_key_not_persisted=True,
+                authorization_not_persisted=True,
+                raw_provider_bodies_not_persisted=True,
+            ),
+            database_path=database_path,
+            profile_path=profile_path,
+            project_id=project_id,
+        )
     finally:
+        raw_bodies.clear()
         provider_client.close()
+
+
+def test_live_p7_2a_governed_access_public_api_flow(tmp_path: Path) -> None:
+    """One all-or-nothing, two-endpoint real-provider compatibility gate."""
+
+    _require_live_dual_endpoint_environment()
+    nvidia = _run_live_governed_access("nvidia", tmp_path / "nvidia")
+    llama = _run_live_governed_access("llama_cpp", tmp_path / "llama_cpp")
+
+    assert nvidia.normalized_result == llama.normalized_result
+    for evidence in (nvidia, llama):
+        assert evidence.security == SecurityEvidence(True, True, True)
+        assert evidence.count_matrix.after_restart == 0
+        assert all(
+            set(call) == {"operation", "schema_name", "mode"}
+            for call in evidence.recorder.calls
+        )
