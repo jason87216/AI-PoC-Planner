@@ -77,9 +77,7 @@ def _text(value: object) -> str:
 
 def _confirmed_text(facts: Iterable[FactRevision]) -> str:
     return " ".join(
-        _text(fact.value)
-        for fact in facts
-        if fact.status is FactStatus.CONFIRMED
+        _text(fact.value) for fact in facts if fact.status is FactStatus.CONFIRMED
     ).casefold()
 
 

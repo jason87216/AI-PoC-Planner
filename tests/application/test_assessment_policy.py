@@ -75,14 +75,15 @@ def test_processing_boundary_uses_confirmed_facts_with_conservative_precedence(
 
 
 def test_processing_boundary_ignores_nonconfirmed_external_permission() -> None:
-    assert derive_processing_boundary(
-        (_fact("已核准外部處理。", status=FactStatus.ASSUMPTION),)
-    ) is ProcessingBoundary.LOCAL_ONLY
+    assert (
+        derive_processing_boundary(
+            (_fact("已核准外部處理。", status=FactStatus.ASSUMPTION),)
+        )
+        is ProcessingBoundary.LOCAL_ONLY
+    )
 
 
 def test_decision_authority_never_grants_autonomy_from_provider_content() -> None:
-    facts = (
-        _fact("主管保留最終核准，系統僅提供輔助。"),
-    )
+    facts = (_fact("主管保留最終核准，系統僅提供輔助。"),)
 
     assert derive_decision_authority(facts) is DecisionAuthority.HUMAN_FINAL_DECISION
