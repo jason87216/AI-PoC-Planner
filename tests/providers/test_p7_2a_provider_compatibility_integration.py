@@ -690,6 +690,24 @@ def _run_offline_governed_access(
         assert second_download == first_download
         assert len(adapter.calls) == report_call_count
 
+    restart_adapter = OfflineGovernedAccessAdapter()
+    with TestClient(
+        _offline_app(database_path, profile_path, restart_adapter)
+    ) as restarted:
+        assert (
+            restarted.get(f"/v1/projects/{project_id}/versions/1/analysis").json()
+            == analysis
+        )
+        reloaded_report = _assert_response(
+            restarted.get(f"/v1/projects/{project_id}/versions/1/report"),
+            200,
+            "offline restarted report",
+        )
+        assert reloaded_report == report
+        assert restarted.get("/v1/projects").status_code == 200
+        assert restarted.get(f"/v1/projects/{project_id}/versions").status_code == 200
+        assert restart_adapter.calls == []
+
     return analysis, report, adapter, project_id, database_path
 
 
