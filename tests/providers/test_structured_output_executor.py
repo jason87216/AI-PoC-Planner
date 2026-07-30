@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from enum import StrEnum
 from typing import Literal
 
 import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from ai_poc_planner.application.provider_readiness import ConnectionProbe
 from ai_poc_planner.providers.base import StructuredOutputMode
 from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.errors import (
@@ -19,6 +21,7 @@ from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderE
 from ai_poc_planner.providers.structured_output import (
     StructuredOutputContentError,
     StructuredOutputExecutor,
+    _repair_contract_hint,
 )
 
 
@@ -38,6 +41,32 @@ class UnionContract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     value: int | str
+
+
+class LiteralContract(BaseModel):
+    mode: Literal["draft", "review", "final"]
+
+
+class Colour(StrEnum):
+    RED = "red"
+    BLUE = "blue"
+
+
+class EnumContract(BaseModel):
+    colour: Colour
+
+
+class PlainStringContract(BaseModel):
+    label: str
+
+
+class BrokenSchemaContract(BaseModel):
+    label: str
+
+    @classmethod
+    def model_json_schema(cls, *args: object, **kwargs: object) -> dict[str, object]:
+        del args, kwargs
+        raise ValueError("synthetic schema failure")
 
 
 class RecordingAdapter:
@@ -108,6 +137,59 @@ def test_object_first_success_uses_object_mode() -> None:
 
     assert adapter.calls == ["json_object"]
     assert result.mode_used is StructuredOutputMode.JSON_OBJECT
+
+
+def test_connection_probe_accepts_only_literal_ok_contract() -> None:
+    assert ConnectionProbe.model_validate({"status": "ok"}).status == "ok"
+    for invalid in (
+        {"status": "ready"},
+        {"readiness": "ok"},
+        {"status": "ok", "message": "extra"},
+    ):
+        with pytest.raises(ValidationError):
+            ConnectionProbe.model_validate(invalid)
+
+
+def test_connection_probe_repair_hint_exposes_literal_constraint() -> None:
+    hint = _repair_contract_hint(ConnectionProbe)
+
+    assert "status" in hint
+    assert "string" in hint
+    assert '"ok"' in hint
+
+
+def test_repair_hint_lists_bounded_literal_and_enum_values() -> None:
+    literal_hint = _repair_contract_hint(LiteralContract)
+    enum_hint = _repair_contract_hint(EnumContract)
+
+    assert all(value in literal_hint for value in ('"draft"', '"review"', '"final"'))
+    assert all(value in enum_hint for value in ('"red"', '"blue"'))
+
+
+def test_repair_hint_does_not_invent_values_for_plain_strings() -> None:
+    hint = _repair_contract_hint(PlainStringContract)
+
+    assert hint == "label: string"
+    assert "allowed values" not in hint
+
+
+def test_repair_hint_falls_back_to_field_names_on_schema_failure() -> None:
+    assert _repair_contract_hint(BrokenSchemaContract) == "label"
+
+
+def test_repair_message_requires_complete_json_without_extra_text() -> None:
+    repair = StructuredOutputExecutor._repair_messages(
+        [{"role": "user", "content": "probe"}], ConnectionProbe
+    )[-1]["content"]
+
+    assert "complete JSON object" in repair
+    assert "status" in repair
+    assert "string" in repair
+    assert '"ok"' in repair
+    assert "Markdown" in repair
+    assert "explanation" in repair
+    assert "additional fields" in repair
+    assert "reasoning" in repair
 
 
 @pytest.mark.parametrize(
@@ -193,6 +275,51 @@ def test_pydantic_failure_repairs_in_same_mode() -> None:
 
     assert adapter.calls == ["json_schema", "json_schema"]
     assert result.value.value == 3
+
+
+def test_connection_probe_wrong_status_repairs_in_same_object_mode() -> None:
+    adapter = RecordingAdapter(['{"status":"ready"}', '{"status":"ok"}'])
+
+    result = _execute(
+        adapter,
+        preferred=StructuredOutputMode.JSON_OBJECT,
+        capabilities=_caps(schema=False, object_mode=True),
+    )
+
+    assert adapter.calls == ["json_object", "json_object"]
+    assert result.value.status == "ok"
+    assert result.attempt_count == 2
+    assert result.mode_used is StructuredOutputMode.JSON_OBJECT
+    assert result.fallback_used is False
+
+
+def test_connection_probe_wrong_status_after_repair_is_safe_failure() -> None:
+    adapter = RecordingAdapter(['{"status":"ready"}', '{"status":"still_wrong"}'])
+
+    with pytest.raises(ProviderOperationError) as error:
+        _execute(
+            adapter,
+            preferred=StructuredOutputMode.JSON_OBJECT,
+            capabilities=_caps(schema=False, object_mode=True),
+        )
+
+    assert adapter.calls == ["json_object", "json_object"]
+    assert error.value.code == "provider_output_invalid"
+    assert error.value.failure.operation is ProviderOperation.READINESS
+    assert error.value.failure.retryable is False
+
+
+def test_connection_probe_valid_status_uses_one_call() -> None:
+    adapter = RecordingAdapter(['{"status":"ok"}'])
+
+    result = _execute(
+        adapter,
+        preferred=StructuredOutputMode.JSON_OBJECT,
+        capabilities=_caps(schema=False, object_mode=True),
+    )
+
+    assert adapter.calls == ["json_object"]
+    assert result.attempt_count == 1
 
 
 def test_provider_invalid_response_and_truncation_repair_once() -> None:

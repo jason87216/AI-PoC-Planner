@@ -129,6 +129,13 @@ Acceptance checkpoint:
 - readiness timeout 修正為預設 60 秒、process-level 可設定至 300 秒，且 local
   llama.cpp full compatibility gate 現在先於付費 NVIDIA workflow；仍沒有通過的
   dual-endpoint live artifact，P7.2a checkpoint 仍 pending。
+- 第三次 dual-endpoint live UAT 已執行一次：llama.cpp readiness 失敗，local-first gate
+  阻止 NVIDIA 呼叫（call count=0）；沒有通過的 dual-endpoint artifact。
+- sanitized 本機 response-structure diagnosis 確認模型有回傳 JSON object，但 `status`
+  不符合 `Literal["ok"]`；1024 tokens 只移除 truncation，`--reasoning off` 仍是錯誤
+  contract。timeout 不再視為目前根因，也沒有安排第四次 dual UAT。
+- readiness prompt 已改為明確單一 `status="ok"` JSON contract，bounded repair hint 會
+  安全列出 Literal／enum allowed values；P7.2a checkpoint 仍 pending。
 
 ### P7.2b Full golden-scenario compatibility matrix — Pending
 

@@ -63,6 +63,73 @@ class StructuredOutputExecution:
 _JSON_FENCE = re.compile(r"\A```json\s*(.*?)\s*```\Z", re.DOTALL | re.IGNORECASE)
 
 
+def _repair_contract_hint(provider_contract: type[BaseModel]) -> str:
+    """Build a compact, safe contract hint for one bounded repair attempt."""
+
+    fallback = ", ".join(str(name) for name in provider_contract.model_fields)
+    try:
+        schema = provider_contract.model_json_schema()
+        properties = schema.get("properties")
+        if not isinstance(properties, Mapping) or not properties:
+            return fallback
+        hints: list[str] = []
+        for name, raw_schema in properties.items():
+            if not isinstance(name, str) or not isinstance(raw_schema, Mapping):
+                return fallback
+            field_schema = raw_schema
+            reference = field_schema.get("$ref")
+            if isinstance(reference, str) and reference.startswith("#/$defs/"):
+                definitions = schema.get("$defs")
+                definition_name = reference.removeprefix("#/$defs/")
+                if isinstance(definitions, Mapping):
+                    resolved = definitions.get(definition_name)
+                    if isinstance(resolved, Mapping):
+                        field_schema = resolved
+
+            field_type = field_schema.get("type")
+            if isinstance(field_type, list):
+                type_hint = (
+                    " or ".join(item for item in field_type if isinstance(item, str))
+                    or "value"
+                )
+            elif isinstance(field_type, str):
+                type_hint = field_type
+            else:
+                type_hint = "value"
+
+            if "const" in field_schema:
+                allowed_values = [field_schema["const"]]
+            else:
+                allowed_values = field_schema.get("enum")
+            if isinstance(allowed_values, list) and 0 < len(allowed_values) <= 8:
+                rendered: list[str] = []
+                for value in allowed_values:
+                    if isinstance(value, bool):
+                        rendered_value = "true" if value else "false"
+                    elif isinstance(value, (str, int, float)):
+                        rendered_value = json.dumps(
+                            value, ensure_ascii=True, separators=(",", ":")
+                        )
+                    else:
+                        rendered = []
+                        break
+                    if len(rendered_value) > 64:
+                        rendered = []
+                        break
+                    rendered.append(rendered_value)
+                if rendered:
+                    allowed_text = ", ".join(rendered)
+                    if len(allowed_text) <= 160:
+                        hints.append(
+                            f"{name}: {type_hint}, allowed values {allowed_text}"
+                        )
+                        continue
+            hints.append(f"{name}: {type_hint}")
+        return "; ".join(hints) or fallback
+    except Exception:
+        return fallback
+
+
 class StructuredOutputExecutor:
     """Execute one provider contract with one repair and one directed fallback."""
 
@@ -143,7 +210,7 @@ class StructuredOutputExecutor:
                 if mode_attempts == 1:
                     messages = self._repair_messages(messages, provider_contract)
                     continue
-                raise error
+                raise self._provider_error(error.code, operation) from error
             except ProviderOperationError:
                 raise
             except ProviderError as error:
@@ -220,10 +287,11 @@ class StructuredOutputExecutor:
         messages: Sequence[Mapping[str, str]],
         provider_contract: type[BaseModel],
     ) -> list[dict[str, str]]:
-        fields = ", ".join(provider_contract.model_fields)
+        hint = _repair_contract_hint(provider_contract)
         prompt = (
-            "上一個回應未符合結構化輸出契約。請只回傳一個完整 JSON object，"
-            f"不得加入 markdown 或解釋。必要欄位：{fields}。"
+            "Return one complete JSON object matching the contract. "
+            f"Field constraints: {hint}. "
+            "Do not include Markdown, explanation, additional fields, or reasoning."
         )
         return [
             {"role": str(message["role"]), "content": str(message["content"])}

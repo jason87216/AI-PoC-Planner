@@ -100,10 +100,19 @@ class ProviderReadinessService:
                 schema_name="connection_probe",
                 provider_contract=ConnectionProbe,
                 messages=[
-                    {"role": "system", "content": "You are a connection test."},
+                    {
+                        "role": "system",
+                        "content": (
+                            "Return only one JSON object matching the connection-test "
+                            "contract. The object must contain exactly one field named "
+                            '"status". The value of "status" must be the literal '
+                            'string "ok". Do not add any other fields, Markdown, '
+                            "explanation, or reasoning."
+                        ),
+                    },
                     {
                         "role": "user",
-                        "content": "Reply with the readiness JSON object.",
+                        "content": 'Return exactly: {"status":"ok"}',
                     },
                 ],
                 temperature=0,

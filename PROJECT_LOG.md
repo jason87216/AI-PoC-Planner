@@ -15,6 +15,14 @@
   timeout 過短。P7.2a checkpoint 仍 pending，沒有通過的 dual-endpoint live artifact。
 - 本輪修正將 readiness timeout 預設為 60 秒、允許 process-level 設定至 300 秒，並讓
   llama.cpp 完整 compatibility gate 先於付費 NVIDIA workflow；尚未安排新的 live UAT。
+- 第三次 dual-endpoint live UAT 已執行一次：llama.cpp readiness 失敗，local-first gate
+  正常阻止 NVIDIA 呼叫，因此 NVIDIA call count 為 0；沒有通過的 dual-endpoint artifact。
+- 後續 sanitized 本機 response-structure diagnosis 顯示：模型確實回傳 JSON object，但
+  `status` 不符合 `Literal["ok"]`；1024 tokens 消除了其中一次 truncation，仍未修正
+  contract；`--reasoning off` 也回傳錯誤 contract。timeout 不再是目前根因，沒有安排
+  第四次 dual UAT。
+- 本輪實作將 readiness 首輪 instruction 固定為單一 `status="ok"` JSON contract，並讓
+  bounded repair hint 安全列出 Literal／enum allowed values；P7.2a checkpoint 仍 pending。
 
 ## PR #24 closeout
 

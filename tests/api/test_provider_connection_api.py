@@ -48,6 +48,15 @@ class InjectedClientAdapter:
         return '{"status":"ok"}'
 
 
+class PromptCapturingAdapter:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, str]] = []
+
+    def complete(self, **kwargs: object) -> str:
+        self.messages = [dict(message) for message in kwargs["messages"]]  # type: ignore[index]
+        return '{"status":"ok"}'
+
+
 def _client(tmp_path: Path, adapter: object = SuccessfulAdapter()) -> TestClient:
     repository = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
     return TestClient(
@@ -164,6 +173,33 @@ def test_selected_status_connection_test_and_readiness_guard(tmp_path: Path) -> 
     assert tested.json()["connection_state"] == "connected"
     assert tested.json()["formal_analysis_allowed"] is True
     assert ready.status_code == 200
+
+
+def test_readiness_prompt_states_exact_json_contract_without_runtime_data(
+    tmp_path: Path,
+) -> None:
+    adapter = PromptCapturingAdapter()
+    client = _client(tmp_path, adapter)
+    profile = _create_profile(client, name="profile-user-marker")
+
+    assert client.post(f"/v1/model-profiles/{profile['id']}/select").status_code == 200
+    response = client.post(f"/v1/model-profiles/{profile['id']}/test")
+
+    assert response.status_code == 200
+    assert len(adapter.messages) == 2
+    system_message = adapter.messages[0]["content"]
+    user_message = adapter.messages[1]["content"]
+    assert "JSON" in system_message
+    assert 'field named "status"' in system_message
+    assert 'literal string "ok"' in system_message
+    assert "Do not add any other fields" in system_message
+    assert "Markdown" in system_message
+    assert "explanation" in system_message
+    assert "reasoning" in system_message
+    assert user_message == 'Return exactly: {"status":"ok"}'
+    assert SECRET_MARKER not in system_message + user_message
+    assert "Authorization" not in system_message + user_message
+    assert "profile-user-marker" not in system_message + user_message
 
 
 def test_edit_disable_and_delete_invalidate_process_status(tmp_path: Path) -> None:

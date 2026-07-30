@@ -550,6 +550,69 @@ def _assert_response(response: Any, status_code: int, label: str) -> Any:
     return response.json()
 
 
+def _assert_readiness_connected(readiness: Mapping[str, Any], endpoint: str) -> None:
+    """Assert readiness while exposing only the public safe failure metadata."""
+
+    if readiness.get("connection_state") != "connected":
+        failure = readiness.get("failure")
+        failure_mapping = failure if isinstance(failure, Mapping) else {}
+        raise AssertionError(
+            f"endpoint={endpoint}; "
+            f"connection_state={readiness.get('connection_state')}; "
+            f"failure.code={failure_mapping.get('code')}; "
+            f"failure.operation={failure_mapping.get('operation')}; "
+            f"failure.retryable={failure_mapping.get('retryable')}; "
+            f"mode_used={readiness.get('mode_used')}; "
+            f"fallback_used={readiness.get('fallback_used')}"
+        )
+    assert readiness.get("mode_used") in {"json_schema", "json_object"}
+    assert readiness.get("fallback_used") is False
+
+
+def test_readiness_failure_assertion_exposes_only_safe_metadata() -> None:
+    raw_marker = "raw-response-marker-p72a"
+    message = "authorization-marker-p72a"
+    readiness = {
+        "connection_state": "failed",
+        "failure": {
+            "code": "provider_timeout",
+            "operation": "readiness",
+            "retryable": True,
+            "user_action": message,
+            "raw": raw_marker,
+        },
+        "mode_used": None,
+        "fallback_used": False,
+        "content": raw_marker,
+        "reasoning_content": raw_marker,
+    }
+
+    with pytest.raises(AssertionError) as error:
+        _assert_readiness_connected(readiness, "llama_cpp")
+
+    text = str(error.value)
+    assert "endpoint=llama_cpp" in text
+    assert "connection_state=failed" in text
+    assert "failure.code=provider_timeout" in text
+    assert "failure.operation=readiness" in text
+    assert "failure.retryable=True" in text
+    assert "mode_used=None" in text
+    assert "fallback_used=False" in text
+    assert raw_marker not in text
+    assert message not in text
+
+
+def test_readiness_connected_assertion_accepts_safe_success_contract() -> None:
+    _assert_readiness_connected(
+        {
+            "connection_state": "connected",
+            "mode_used": "json_object",
+            "fallback_used": False,
+        },
+        "llama_cpp",
+    )
+
+
 def _live_facts(client: TestClient, project_id: str) -> dict[str, dict[str, Any]]:
     body = _assert_response(
         client.get(f"/v1/projects/{project_id}/versions/1/facts"), 200, "facts"
@@ -1006,7 +1069,7 @@ def _run_offline_governed_access(
             200,
             "offline readiness",
         )
-        assert readiness["connection_state"] == "connected"
+        _assert_readiness_connected(readiness, endpoint)
         after_readiness = len(recorder.calls)
 
         project = _assert_response(
@@ -1495,9 +1558,7 @@ def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvi
                 200,
                 "readiness",
             )
-            assert readiness["connection_state"] == "connected"
-            assert readiness["mode_used"] in {"json_schema", "json_object"}
-            assert readiness["fallback_used"] is False
+            _assert_readiness_connected(readiness, endpoint)
             after_readiness = len(recorder.calls)
 
             project = _assert_response(
