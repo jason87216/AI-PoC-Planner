@@ -75,6 +75,42 @@ class InvalidReportContentAdapter(ReportAdapter):
         return "not-json"
 
 
+class TruncatedThenValidReportAdapter(ReportAdapter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.report_part_a_attempts = 0
+
+    def complete(self, **kwargs: object) -> str:
+        response_format = kwargs["response_format"]
+        if response_format.name == "report_part_a" and self.report_part_a_attempts == 0:
+            self.report_part_a_attempts += 1
+            self.calls.append(response_format.name)
+            raise OpenAICompatibleProviderError("provider_output_truncated")
+        return super().complete(**kwargs)
+
+
+class RepeatedTruncatedReportAdapter(ReportAdapter):
+    def complete(self, **kwargs: object) -> str:
+        response_format = kwargs["response_format"]
+        if response_format.name != "connection_probe":
+            self.calls.append(response_format.name)
+            raise OpenAICompatibleProviderError("provider_output_truncated")
+        return super().complete(**kwargs)
+
+
+class ProviderFailureReportAdapter(ReportAdapter):
+    def __init__(self, code: str) -> None:
+        super().__init__()
+        self.code = code
+
+    def complete(self, **kwargs: object) -> str:
+        response_format = kwargs["response_format"]
+        if response_format.name != "connection_probe":
+            self.calls.append(response_format.name)
+            raise OpenAICompatibleProviderError(self.code)
+        return super().complete(**kwargs)
+
+
 def test_report_only_flow_commits_assessed_snapshot_and_completes_version(
     tmp_path: Path,
 ) -> None:
@@ -215,3 +251,152 @@ def test_report_provider_failure_boundaries_do_not_silently_persist_or_fallback(
                 "report_part_a",
                 "report_part_a",
             ]
+
+
+def test_first_truncation_then_repair_success_persists_provider_report(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "report-truncation-repair.sqlite3"
+    profile_path = tmp_path / "profiles.json"
+    adapter = TruncatedThenValidReportAdapter()
+
+    with TestClient(_app(database_path, profile_path, adapter)) as client:
+        profile = client.post(
+            "/v1/model-profiles",
+            json={
+                "profile_name": "Truncation repair test",
+                "base_url": "http://127.0.0.1:8080/v1",
+                "model_name": "offline-model",
+                "api_key": "safe-test-marker",
+            },
+        ).json()
+        client.post(f"/v1/model-profiles/{profile['id']}/select")
+        client.post(f"/v1/model-profiles/{profile['id']}/test")
+        connection = database_connection(database_path)
+        try:
+            initialize_database(connection)
+            fixture = build_assessed_snapshot(
+                connection,
+                SelectedModelSnapshot(
+                    profile_id=profile["id"],
+                    profile_name=profile["profile_name"],
+                    model_name=profile["model_name"],
+                ),
+            )
+        finally:
+            connection.close()
+
+        response = client.post(f"/v1/projects/{fixture.project_id}/versions/1/report")
+
+    persisted_report = response.json()
+    assert response.status_code == 201, persisted_report
+    assert (
+        persisted_report["report"]["executive_summary"]["content"]
+        == "Evidence-backed PoC guidance."
+    )
+    assert adapter.calls == [
+        "connection_probe",
+        "report_part_a",
+        "report_part_a",
+        "report_part_b",
+    ]
+
+
+def test_repeated_truncation_uses_deterministic_content_degradation_fallback(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "report-repeated-truncation.sqlite3"
+    profile_path = tmp_path / "profiles.json"
+    adapter = RepeatedTruncatedReportAdapter()
+
+    with TestClient(_app(database_path, profile_path, adapter)) as client:
+        profile = client.post(
+            "/v1/model-profiles",
+            json={
+                "profile_name": "Repeated truncation test",
+                "base_url": "http://127.0.0.1:8080/v1",
+                "model_name": "offline-model",
+                "api_key": "safe-test-marker",
+            },
+        ).json()
+        client.post(f"/v1/model-profiles/{profile['id']}/select")
+        client.post(f"/v1/model-profiles/{profile['id']}/test")
+        connection = database_connection(database_path)
+        try:
+            initialize_database(connection)
+            fixture = build_assessed_snapshot(
+                connection,
+                SelectedModelSnapshot(
+                    profile_id=profile["id"],
+                    profile_name=profile["profile_name"],
+                    model_name=profile["model_name"],
+                ),
+            )
+        finally:
+            connection.close()
+
+        endpoint = f"/v1/projects/{fixture.project_id}/versions/1/report"
+        response = client.post(endpoint)
+        version = client.get(f"/v1/projects/{fixture.project_id}/versions/1").json()
+        persisted_status = client.get(endpoint).status_code
+
+    persisted_report = response.json()
+    assert response.status_code == 201, persisted_report
+    assert (
+        "模型文字說明暫時不可用"
+        in persisted_report["report"]["executive_summary"]["content"]
+    )
+    assert version["status"] == "complete"
+    assert persisted_status == 200
+    assert adapter.calls == [
+        "connection_probe",
+        "report_part_a",
+        "report_part_a",
+    ]
+
+
+@pytest.mark.parametrize(
+    "code", ["provider_auth_failed", "provider_http_error", "provider_timeout"]
+)
+def test_transport_and_auth_failures_do_not_fallback_or_persist(
+    tmp_path: Path, code: str
+) -> None:
+    database_path = tmp_path / f"report-{code}.sqlite3"
+    profile_path = tmp_path / "profiles.json"
+    adapter = ProviderFailureReportAdapter(code)
+
+    with TestClient(_app(database_path, profile_path, adapter)) as client:
+        profile = client.post(
+            "/v1/model-profiles",
+            json={
+                "profile_name": f"{code} test",
+                "base_url": "http://127.0.0.1:8080/v1",
+                "model_name": "offline-model",
+                "api_key": "safe-test-marker",
+            },
+        ).json()
+        client.post(f"/v1/model-profiles/{profile['id']}/select")
+        client.post(f"/v1/model-profiles/{profile['id']}/test")
+        connection = database_connection(database_path)
+        try:
+            initialize_database(connection)
+            fixture = build_assessed_snapshot(
+                connection,
+                SelectedModelSnapshot(
+                    profile_id=profile["id"],
+                    profile_name=profile["profile_name"],
+                    model_name=profile["model_name"],
+                ),
+            )
+        finally:
+            connection.close()
+
+        endpoint = f"/v1/projects/{fixture.project_id}/versions/1/report"
+        response = client.post(endpoint)
+        version = client.get(f"/v1/projects/{fixture.project_id}/versions/1").json()
+        persisted_status = client.get(endpoint).status_code
+
+    assert response.status_code in {502, 504}
+    assert response.json()["error"]["code"] == code
+    assert persisted_status == 404
+    assert version["status"] == "assessed"

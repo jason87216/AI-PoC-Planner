@@ -528,6 +528,7 @@ class PlanningReportService:
         except PlanningReportError as error:
             if error.code not in {
                 "provider_output_invalid",
+                "provider_output_truncated",
                 "confirmed_evidence_required",
             }:
                 raise
