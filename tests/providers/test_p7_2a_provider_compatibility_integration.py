@@ -13,7 +13,7 @@ import copy
 import json
 import os
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +27,7 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from ai_poc_planner.app.api import create_app
 from ai_poc_planner.application.provider_readiness import ConnectionProbe
+from ai_poc_planner.config import provider_readiness_timeout_seconds
 from ai_poc_planner.domain.planning_report import REPORT_SECTION_KEYS
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
 from ai_poc_planner.providers.base import ReasoningEffort, StructuredOutputMode
@@ -519,16 +520,29 @@ def _live_app(
 
         return factory
 
+    readiness_timeout = provider_readiness_timeout_seconds()
+
     app = create_app(
         chat_model=GenericFakeChatModel(messages=iter(())),
         database_path=database_path,
         model_profile_repository=LocalModelProfileRepository(path=profile_path),
-        connection_adapter_factory=factory_for("readiness", 10),
+        connection_adapter_factory=factory_for("readiness", readiness_timeout),
         interview_adapter_factory=factory_for("discovery", 300),
         analysis_adapter_factory=factory_for("analysis", 240),
         runtime_mode="uat",
     )
     return app, provider_client
+
+
+def _run_live_endpoint_pair(
+    root_path: Path,
+    runner: Callable[[str, Path], LiveEndpointEvidence],
+) -> tuple[LiveEndpointEvidence, LiveEndpointEvidence]:
+    """Run the local compatibility gate before the paid NVIDIA workflow."""
+
+    llama = runner("llama_cpp", root_path / "llama_cpp")
+    nvidia = runner("nvidia", root_path / "nvidia")
+    return llama, nvidia
 
 
 def _assert_response(response: Any, status_code: int, label: str) -> Any:
@@ -710,7 +724,7 @@ def _live_profile_contract(config: Mapping[str, Any], profile_id: int) -> ModelP
 
 
 def _preflight_live_dual_endpoints() -> None:
-    """Fail before NVIDIA workflow cost if llama.cpp cannot serve its configured model."""
+    """Run only cheap discovery before the local full compatibility gate."""
 
     nvidia_config = _live_endpoint_config("nvidia")
     llama_config = _live_endpoint_config("llama_cpp")
@@ -1685,12 +1699,11 @@ def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvi
 
 
 def test_live_p7_2a_governed_access_public_api_flow(tmp_path: Path) -> None:
-    """One all-or-nothing, two-endpoint real-provider compatibility gate."""
+    """Run local full compatibility before the paid NVIDIA gate."""
 
     _require_live_dual_endpoint_environment()
     _preflight_live_dual_endpoints()
-    nvidia = _run_live_governed_access("nvidia", tmp_path / "nvidia")
-    llama = _run_live_governed_access("llama_cpp", tmp_path / "llama_cpp")
+    llama, nvidia = _run_live_endpoint_pair(tmp_path, _run_live_governed_access)
 
     assert nvidia.normalized_result == llama.normalized_result
     for evidence in (nvidia, llama):
@@ -1705,3 +1718,35 @@ def test_live_p7_2a_governed_access_public_api_flow(tmp_path: Path) -> None:
             set(call) == {"operation", "schema_name", "mode"}
             for call in evidence.recorder.calls
         )
+
+
+def test_live_endpoint_pair_does_not_call_nvidia_after_local_failure(
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def runner(endpoint: str, _: Path) -> LiveEndpointEvidence:
+        calls.append(endpoint)
+        if endpoint == "llama_cpp":
+            raise AssertionError("local endpoint failed")
+        raise AssertionError("NVIDIA must not run")
+
+    with pytest.raises(AssertionError, match="local endpoint failed"):
+        _run_live_endpoint_pair(tmp_path, runner)
+
+    assert calls == ["llama_cpp"]
+
+
+def test_live_endpoint_pair_runs_nvidia_once_after_local_success(
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def runner(endpoint: str, _: Path) -> LiveEndpointEvidence:
+        calls.append(endpoint)
+        return object()  # type: ignore[return-value]
+
+    llama, nvidia = _run_live_endpoint_pair(tmp_path, runner)
+
+    assert calls == ["llama_cpp", "nvidia"]
+    assert llama is not nvidia

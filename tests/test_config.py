@@ -1,4 +1,10 @@
-from ai_poc_planner.config import Settings
+import pytest
+
+from ai_poc_planner.config import (
+    PROVIDER_READINESS_TIMEOUT_ENV,
+    Settings,
+    provider_readiness_timeout_seconds,
+)
 
 
 def test_settings_load_without_dotenv_or_api_key() -> None:
@@ -35,3 +41,34 @@ def test_settings_names_match_environment_contract() -> None:
     assert settings.fake_model is False
     assert settings.model_name == "test-model"
     assert settings.langsmith_tracing is False
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        (None, 60.0),
+        ("1", 1.0),
+        ("60", 60.0),
+        ("300", 300.0),
+        ("1.5", 1.5),
+    ],
+)
+def test_provider_readiness_timeout_accepts_safe_values(
+    raw_value: str | None, expected: float
+) -> None:
+    environ = {} if raw_value is None else {PROVIDER_READINESS_TIMEOUT_ENV: raw_value}
+
+    assert provider_readiness_timeout_seconds(environ) == expected
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    ["", "0", "-1", "301", "not-a-number", "NaN", "Infinity", "-Infinity"],
+)
+def test_provider_readiness_timeout_rejects_invalid_values(raw_value: str) -> None:
+    with pytest.raises(ValueError, match="provider_readiness_timeout_invalid") as error:
+        provider_readiness_timeout_seconds({PROVIDER_READINESS_TIMEOUT_ENV: raw_value})
+
+    assert getattr(error.value, "code", None) == "provider_readiness_timeout_invalid"
+    if raw_value:
+        assert raw_value not in str(error.value)

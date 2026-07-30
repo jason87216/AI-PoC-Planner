@@ -50,6 +50,7 @@ from ai_poc_planner.application.provider_readiness import (
     ProviderReadinessError,
     ProviderReadinessService,
 )
+from ai_poc_planner.config import provider_readiness_timeout_seconds
 from ai_poc_planner.domain.analysis import ValidatedAnalysisResult
 from ai_poc_planner.domain.catalog import (
     DeploymentPostureAssessment,
@@ -368,6 +369,7 @@ def create_app(
     }
     planning_agent = PlanningAgent(chat_model)
     profile_repository = model_profile_repository or LocalModelProfileRepository()
+    readiness_timeout_seconds = provider_readiness_timeout_seconds()
 
     def app_owned_provider_client() -> httpx.Client:
         client = getattr(app.state, "provider_http_client", None)
@@ -385,6 +387,7 @@ def create_app(
             model_name=profile.model_name,
             api_key=(profile.api_key.get_secret_value() if profile.api_key else None),
             client=app_owned_provider_client(),
+            timeout_seconds=readiness_timeout_seconds,
             reasoning_effort=profile.reasoning_effort,
             capabilities=profile.effective_capabilities,
         )

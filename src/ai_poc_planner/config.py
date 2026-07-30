@@ -5,6 +5,42 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from math import isfinite
+
+PROVIDER_READINESS_TIMEOUT_ENV = "AI_POC_PLANNER_PROVIDER_READINESS_TIMEOUT_SECONDS"
+DEFAULT_PROVIDER_READINESS_TIMEOUT_SECONDS = 60.0
+MIN_PROVIDER_READINESS_TIMEOUT_SECONDS = 1.0
+MAX_PROVIDER_READINESS_TIMEOUT_SECONDS = 300.0
+
+
+class ProviderReadinessTimeoutConfigurationError(ValueError):
+    """Safe, stable error for an invalid process-level readiness timeout."""
+
+    code = "provider_readiness_timeout_invalid"
+
+    def __init__(self) -> None:
+        super().__init__(self.code)
+
+
+def provider_readiness_timeout_seconds(
+    environ: Mapping[str, str] = os.environ,
+) -> float:
+    """Return the validated process-level timeout for provider readiness."""
+
+    raw_value = environ.get(PROVIDER_READINESS_TIMEOUT_ENV)
+    if raw_value is None:
+        return DEFAULT_PROVIDER_READINESS_TIMEOUT_SECONDS
+    try:
+        value = float(raw_value.strip())
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ProviderReadinessTimeoutConfigurationError from error
+    if not isfinite(value) or not (
+        MIN_PROVIDER_READINESS_TIMEOUT_SECONDS
+        <= value
+        <= MAX_PROVIDER_READINESS_TIMEOUT_SECONDS
+    ):
+        raise ProviderReadinessTimeoutConfigurationError
+    return value
 
 
 def _optional_value(environ: Mapping[str, str], name: str) -> str | None:

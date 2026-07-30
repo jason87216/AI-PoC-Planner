@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from ai_poc_planner.app.api import create_app
+from ai_poc_planner.config import PROVIDER_READINESS_TIMEOUT_ENV
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderError
 
@@ -26,8 +28,10 @@ class FailingAdapter:
 
 class CapturingDefaultAdapter:
     clients: list[httpx.Client] = []
+    arguments: list[dict[str, object]] = []
 
     def __init__(self, **kwargs: object) -> None:
+        self.arguments.append(dict(kwargs))
         client = kwargs["client"]
         assert isinstance(client, httpx.Client)
         self.clients.append(client)
@@ -224,6 +228,7 @@ def test_default_connection_tests_reuse_and_close_the_app_owned_http_client(
     monkeypatch: object, tmp_path: Path
 ) -> None:
     CapturingDefaultAdapter.clients = []
+    CapturingDefaultAdapter.arguments = []
     monkeypatch.setattr(
         "ai_poc_planner.app.api.OpenAICompatibleChatAdapter",
         CapturingDefaultAdapter,
@@ -249,8 +254,44 @@ def test_default_connection_tests_reuse_and_close_the_app_owned_http_client(
         assert CapturingDefaultAdapter.clients == [app_owned_client, app_owned_client]
         assert app_owned_client._trust_env is False
         assert not app_owned_client.is_closed
+        assert CapturingDefaultAdapter.arguments[0]["timeout_seconds"] == 60
 
     assert app_owned_client.is_closed
+
+
+def test_default_readiness_timeout_uses_process_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv(PROVIDER_READINESS_TIMEOUT_ENV, "300")
+    CapturingDefaultAdapter.clients = []
+    CapturingDefaultAdapter.arguments = []
+    monkeypatch.setattr(
+        "ai_poc_planner.app.api.OpenAICompatibleChatAdapter",
+        CapturingDefaultAdapter,
+    )
+    repository = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
+    app = create_app(
+        chat_model=GenericFakeChatModel(messages=iter([])),
+        model_profile_repository=repository,
+    )
+
+    with TestClient(app) as client:
+        profile = _create_profile(client)
+        client.post(f"/v1/model-profiles/{profile['id']}/select")
+        assert (
+            client.post(f"/v1/model-profiles/{profile['id']}/test").status_code == 200
+        )
+
+    assert CapturingDefaultAdapter.arguments[0]["timeout_seconds"] == 300
+
+
+def test_invalid_readiness_timeout_rejects_app_composition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(PROVIDER_READINESS_TIMEOUT_ENV, "0")
+
+    with pytest.raises(ValueError, match="provider_readiness_timeout_invalid"):
+        create_app(chat_model=GenericFakeChatModel(messages=iter([])))
 
 
 def test_injected_connection_adapter_client_is_not_owned_by_app_lifecycle(
@@ -283,6 +324,7 @@ def test_app_owned_client_shutdown_is_idempotent(
     monkeypatch: object, tmp_path: Path
 ) -> None:
     CapturingDefaultAdapter.clients = []
+    CapturingDefaultAdapter.arguments = []
     monkeypatch.setattr(
         "ai_poc_planner.app.api.OpenAICompatibleChatAdapter",
         CapturingDefaultAdapter,

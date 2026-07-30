@@ -122,10 +122,13 @@ Acceptance checkpoint:
 - NVIDIA 與一個使用者自行啟動的本機 llama.cpp endpoint，使用同一 adapter 通過一個代表情境。
 - deterministic matching、recommendation category、scoring 與 hard gates 不修改。
 - P7.2a 通過不得標記完整 P7.2 Complete。
-- 首次 NVIDIA／llama.cpp live UAT 已在 NVIDIA governed_access 的 deterministic
-  boundary validation 失敗；provider 產生的 `external_endpoint` 與確認的部署
-  限制衝突。修正 program-owned boundary policy 後，仍待獨立 diff review 與一次
-  全新的 live UAT；目前沒有通過的 live artifact。
+- 第二次 NVIDIA／llama.cpp live UAT 已執行一次：NVIDIA governed_access 完整流程
+  先執行且未出現 assertion failure，但 llama.cpp readiness 以 `provider_timeout`
+  失敗；相同 adapter contract 在 60 秒 timeout 下於本機 22.178 秒成功，health 與
+  model discovery 亦通過。診斷指向原本 10 秒 readiness timeout 過短。
+- readiness timeout 修正為預設 60 秒、process-level 可設定至 300 秒，且 local
+  llama.cpp full compatibility gate 現在先於付費 NVIDIA workflow；仍沒有通過的
+  dual-endpoint live artifact，P7.2a checkpoint 仍 pending。
 
 ### P7.2b Full golden-scenario compatibility matrix — Pending
 

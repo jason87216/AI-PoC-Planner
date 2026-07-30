@@ -8,9 +8,13 @@
 - Results narrative、reviewed-case catalog consistency 與 report persistence 已通過產品驗收。
 - P7.1 本機 UAT runtime 已完成並維持目前啟動／停止基線。
 - Current goal：P7.2a provider compatibility and structured-output policy（PR #26，Draft）。
-- 首次 NVIDIA／llama.cpp live UAT 已執行一次，於 NVIDIA governed_access 的
-  deterministic boundary validation 失敗；provider 產生的 `external_endpoint`
-  與已確認的外部處理限制衝突。P7.2a checkpoint 仍 pending，沒有通過的 live artifact。
+- 第二次 NVIDIA／llama.cpp live UAT 已執行一次：NVIDIA governed_access 完整流程
+  先執行且未出現 assertion failure，但 llama.cpp readiness 以安全錯誤
+  `provider_timeout` 失敗。相同 adapter contract 在 60 秒 timeout 下於本機
+  22.178 秒成功；health 與 model discovery 亦通過，診斷指向原本 10 秒 readiness
+  timeout 過短。P7.2a checkpoint 仍 pending，沒有通過的 dual-endpoint live artifact。
+- 本輪修正將 readiness timeout 預設為 60 秒、允許 process-level 設定至 300 秒，並讓
+  llama.cpp 完整 compatibility gate 先於付費 NVIDIA workflow；尚未安排新的 live UAT。
 
 ## PR #24 closeout
 
@@ -88,7 +92,8 @@ P7.2b 在 P7.2a 通過後：
 
 ## Next action
 
-等待獨立 diff review；通過後再安排一次全新、隔離的 P7.2a live UAT。不得重跑已失敗的 runtime，也不得將 P7.2a 標記為完成。
+等待獨立 diff review 與後續明確授權的全新、隔離 P7.2a live UAT。不得重跑已失敗的
+runtime，也不得將 P7.2a 標記為完成。
 
 ## Deferred
 
