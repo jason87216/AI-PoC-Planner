@@ -20,7 +20,15 @@
 - 文件已明確說明 profile 由模型設定頁建立、編輯、測試與選擇，目前沒有 profile import／export UI。
 - 文件已明確揭露 MVP API key 會以明文保存於本機 private `model_profiles.json`；它不進 public API、SQLite 正式資料、logs 或 Markdown，production-grade secret store 仍 deferred。
 - 文件已明確界定 capability contract 只支援 OpenAI-compatible `/v1/chat/completions` 與 `none`／Bearer authentication，不宣稱支援所有相容端點。
-- P8.1b product-owner and release acceptance 仍 Pending；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
+
+### P8.1b-1 Traditional Chinese UI wording and product guidance — Complete
+
+- 模型設定、能力選擇、模型可用性測試、需求訪談、評估、報告與歷史頁面已補上繁體中文產品引導；
+- 明確說明 AI 只協助理解與整理，正式推薦、分數與硬性限制仍由 deterministic 程式規則負責；
+- 無可用模型、連線失敗與可重試錯誤維持 fail-closed，並提供安全、可行動的下一步；
+- capability label 保留穩定 wire value，UI 不依品牌或模型名稱猜測端點能力；
+- 只完成 UI 文案、presentation helper、相關測試與 offline validation，未修改 API、provider、SQLite schema、deterministic logic 或 dependencies。
+- P8.1b-2 product-owner and release acceptance 仍 Pending；P8.1b overall 仍 Pending；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
 
 ### Historical diagnosis
 
@@ -150,7 +158,7 @@ P7.2b 在 P7.2a 通過後：
 
 ## Next action
 
-Start P8.1b product-owner and release acceptance after the P8.1a documentation closeout. P7.2a has passed; P7.2b remains pending and the overall P7.2 initiative remains incomplete.
+Start P8.1b-2 product-owner and release acceptance after the P8.1b-1 UI wording closeout. P7.2a has passed; P7.2b remains pending and the overall P7.2 initiative remains incomplete.
 
 ## Deferred
 

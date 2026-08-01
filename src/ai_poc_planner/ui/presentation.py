@@ -50,8 +50,15 @@ def profile_options(profiles: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
 
 
 def show_api_error(error: ApiClientError) -> None:
-    st.error(error.user_message)
-    if error.user_action:
-        st.info(error.user_action)
+    user_message = error.user_message
+    user_action = error.user_action
+    if error.code == "provider_not_ready":
+        user_message = "模型尚未通過可用性測試。"
+        user_action = (
+            "請前往模型設定確認端點、模型名稱、驗證方式與結構化輸出能力後重新測試。"
+        )
+    st.error(f"目前無法完成這項操作：{user_message}")
+    if user_action:
+        st.info(f"建議：{user_action}")
     if error.retryable:
-        st.caption("修正設定後或稍後可重試。")
+        st.caption("修正設定後或稍後再試即可；系統不會改用未選定的模型服務。")

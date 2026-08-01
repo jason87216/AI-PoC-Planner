@@ -16,7 +16,9 @@ def _profile_choice(profile: dict[str, object]) -> str:
 
 
 st.title("新建專案")
-st.caption("選擇並測試本專案使用的模型，再建立可持續追蹤的規劃。")
+st.caption(
+    "先選擇並測試本專案使用的模型，再輸入最小需求簡介；模型服務未通過測試時不會建立正式評估。"
+)
 prefill = st.session_state.pop("new_project_prefill", None)
 if isinstance(prefill, dict):
     for key, value in prefill.items():
@@ -28,7 +30,7 @@ except ApiClientError as error:
     profiles = []
 
 if not profiles:
-    st.warning("尚未建立可用模型設定。請先建立並測試模型。")
+    st.warning("尚未建立可用的模型設定。請先到「模型設定」建立並完成模型可用性測試。")
     if st.button("前往模型設定", icon=":material/tune:"):
         st.switch_page("app_pages/model_settings.py")
     st.stop()
@@ -52,10 +54,10 @@ except ApiClientError as error:
     readiness = {"formal_analysis_allowed": False}
 
 if readiness.get("formal_analysis_allowed"):
-    st.success("此模型已啟用，且本次 runtime 已完成連線測試。")
+    st.success("此模型已啟用，且目前執行環境已完成模型可用性測試。")
 else:
-    st.warning("此模型尚未完成可用性測試；完成測試後才能建立並整理需求。")
-    if st.button("測試連線", icon=":material/network_check:"):
+    st.warning("尚未完成模型可用性測試；測試成功後才能建立並整理需求。")
+    if st.button("測試模型可用性", icon=":material/network_check:"):
         try:
             tested = get_api_client().test_profile(profile_id)
         except ApiClientError as error:
@@ -65,15 +67,40 @@ else:
                 refresh_api_data()
                 st.rerun()
             else:
-                st.error("模型連線未成功，請檢查設定後再試。")
+                st.error("模型服務尚未連線成功，請檢查端點、模型名稱與能力設定。")
 
 with st.form("new_project_form"):
-    project_name = st.text_input("專案名稱", key="new_project_name")
-    current = st.text_area("目前流程與問題", key="new_project_current", height=140)
-    outcome = st.text_area("希望改善的成果", key="new_project_outcome", height=120)
-    data = st.text_area("現有資料與文件", key="new_project_data", height=120)
-    owners = st.text_area("使用者與負責人", key="new_project_owners")
-    constraints = st.text_area("已知限制", key="new_project_constraints")
+    project_name = st.text_input(
+        "專案名稱", help="用一句話辨識這次要規劃的流程或問題。", key="new_project_name"
+    )
+    current = st.text_area(
+        "目前流程與問題",
+        help="描述目前怎麼做、哪裡耗時或容易遺漏。",
+        key="new_project_current",
+        height=140,
+    )
+    outcome = st.text_area(
+        "希望改善的成果",
+        help="描述希望改善的結果，不必先決定技術方案。",
+        key="new_project_outcome",
+        height=120,
+    )
+    data = st.text_area(
+        "現有資料與文件",
+        help="列出可用的表單、規範、紀錄或其他參考資料。",
+        key="new_project_data",
+        height=120,
+    )
+    owners = st.text_area(
+        "使用者與負責人",
+        help="可填寫實際使用者、審核者與維運角色。",
+        key="new_project_owners",
+    )
+    constraints = st.text_area(
+        "已知限制",
+        help="例如權限、資料、合規、部署或人工核准要求。",
+        key="new_project_constraints",
+    )
     submitted = st.form_submit_button(
         "建立專案並整理需求",
         type="primary",

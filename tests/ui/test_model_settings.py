@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from ai_poc_planner.ui.model_profile_form import (
+    capability_help,
+    capability_label,
     create_profile_authentication_error,
     profile_payload,
 )
@@ -51,3 +53,23 @@ def test_update_none_with_clear_sends_explicit_null_api_key() -> None:
     payload = _payload(clear_api_key=True)
 
     assert payload["api_key"] is None
+
+
+def test_capability_labels_are_product_facing_and_keep_stable_values() -> None:
+    assert capability_label("authentication", "bearer_required") == (
+        "必須使用 Bearer 認證（bearer_required）"
+    )
+    assert capability_label("token_parameter", "max_completion_tokens") == (
+        "max_completion_tokens（部分端點使用）"
+    )
+    assert capability_label("reasoning_parameter", "unsupported") == (
+        "不傳送推理參數（unsupported）"
+    )
+    assert capability_label("structured_output", "json_schema") == (
+        "JSON Schema（較嚴格的欄位結構）"
+    )
+
+
+def test_capability_help_explains_explicit_vendor_neutral_selection() -> None:
+    assert "端點文件" in capability_help("authentication")
+    assert "不要依品牌或模型名稱猜測" in capability_help("structured_output")

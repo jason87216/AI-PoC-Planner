@@ -16,7 +16,9 @@ from ai_poc_planner.ui.runtime import (
 )
 
 st.title("AI PoC Planner")
-st.write("將需求訪談、可驗證評估與規劃報告整理為可持續追蹤的 PoC。")
+st.write("把模糊需求整理成可確認的事實、可比較的方案與可追蹤的 PoC 規劃報告。")
+st.caption("AI 協助理解與整理；正式推薦、分數與硬性限制由程式規則決定。")
+st.caption("開始流程：建立模型設定 → 測試可用性 → 建立專案 → 完成訪談與評估。")
 
 if st.button("建立新專案", icon=":material/add:", type="primary"):
     open_new_project()
@@ -55,7 +57,7 @@ with summary_slot.skeleton():
 
 st.subheader("最近專案")
 if not projects:
-    st.info("尚未建立專案。請先在模型設定完成可用模型的建立與測試。")
+    st.info("尚未建立專案。請先到「模型設定」建立並測試模型服務，再開始新的需求規劃。")
 else:
     recent_rows = [
         {

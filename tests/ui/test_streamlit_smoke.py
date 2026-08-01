@@ -43,17 +43,32 @@ def test_model_settings_exposes_safe_provider_capability_controls() -> None:
     source = open("app_pages/model_settings.py", encoding="utf-8").read()
 
     for label in (
-        "Authentication mode",
-        "Token parameter",
-        "Reasoning parameter",
-        "Supports JSON Schema",
-        "Supports JSON Object",
-        "清除已保存 API key",
+        "認證方式",
+        "輸出預算欄位",
+        "推理參數能力",
+        "支援 JSON Schema",
+        "支援 JSON Object",
+        "清除已保存的 API key",
+        "進階相容性設定",
+        "private model_profiles.json",
     ):
         assert label in source
     assert "ai_poc_planner.providers" not in source
     assert "ai_poc_planner.persistence" not in source
     assert "ai_poc_planner.application" not in source
+
+
+def test_product_guidance_covers_startup_and_blocked_provider_states() -> None:
+    home = open("app_pages/home.py", encoding="utf-8").read()
+    history = open("app_pages/history.py", encoding="utf-8").read()
+    presentation = open(
+        "src/ai_poc_planner/ui/presentation.py", encoding="utf-8"
+    ).read()
+
+    assert "建立模型設定 → 測試可用性 → 建立專案 → 完成訪談與評估" in home
+    assert "查看結果不會重新呼叫模型服務" in history
+    assert "模型尚未通過可用性測試" in presentation
+    assert "端點、模型名稱、驗證方式與結構化輸出能力" in presentation
 
 
 def test_global_navigation_contains_only_project_entry_points() -> None:

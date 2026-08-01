@@ -8,7 +8,9 @@ from ai_poc_planner.ui.presentation import show_api_error, status_label
 from ai_poc_planner.ui.runtime import load_projects, refresh_api_data
 
 st.title("專案歷史")
-st.caption("只顯示可閱讀的專案進度與已選模型，不顯示內部識別資料。")
+st.caption(
+    "只顯示可閱讀的專案進度與已選模型，不顯示內部識別資料；重新進入只會讀取已保存進度。"
+)
 
 
 def _selection_label(project: dict[str, object]) -> str:
@@ -44,7 +46,7 @@ with history_slot.skeleton():
 if projects is None:
     st.stop()
 if not projects:
-    st.info("目前沒有可顯示的專案歷史。")
+    st.info("目前沒有可顯示的專案歷史。建立第一個專案後，這裡會保留版本與進度。")
 else:
     for project in projects:
         with st.container(border=True):
@@ -52,7 +54,7 @@ else:
             st.caption(
                 f"{status_label(project.get('status'))}｜最近更新：{project.get('updated_at')}"
             )
-            st.write("可回看既有需求與目前工作階段。")
+            st.write("可回看需求、訪談與評估進度；查看結果不會重新呼叫模型服務。")
             if st.button(
                 _action_label(project.get("status")),
                 key=f"open_project_{project.get('project_id')}",
