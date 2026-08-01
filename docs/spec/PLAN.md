@@ -28,7 +28,7 @@ AI PoC Planner 已完成從 real-provider foundation、durable project history�
 | Phase 6 | Complete | FastAPI／Streamlit 產品流程、history re-entry、Results 與 download |
 | P7.1 | Complete | 本機啟動／狀態／停止與 UAT runtime |
 | P7.2 | In progress | P7.2a Complete；P7.2b Pending；overall incomplete |
-| Phase 8 | Next | P8.1a portfolio baseline；P8.1b release acceptance Pending |
+| Phase 8 | In progress | P8.1a Complete；P8.1b release acceptance Pending |
 
 ## Phase 7 — Local runtime and provider compatibility
 
@@ -128,12 +128,12 @@ P7.2b 在 P7.2a 通過後：
 
 P8.1a portfolio baseline 可基於已完成的 P7.2a 代表情境證據先行整理；這不會改變 P7.2b Pending 或 P7.2 overall incomplete 狀態。
 
-### P8.1a — Portfolio baseline — Next
+### P8.1a — Portfolio baseline — Complete
 
 - 同步 README、PROJECT_LOG 與本計畫中的產品狀態；
 - 提供五分鐘啟動、model profile readiness 與 synthetic `governed_access` Demo runbook；
 - 建立架構／workflow 圖、截圖清單、P7.2a 脫敏 evidence 摘要與 limitations；
-- 不修改 application behavior、provider implementation、deterministic logic、database schema 或 dependencies。
+- 不修改 application behavior、provider implementation、deterministic logic、database schema 或 dependencies；以上文件基線已完成。
 
 ### P8.1b — Product-owner and release acceptance — Pending
 

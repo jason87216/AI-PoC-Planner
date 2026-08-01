@@ -21,7 +21,8 @@ AI PoC Planner 是一個本機優先、連接真實 OpenAI-compatible provider �
 - **P7.2a Representative dual-endpoint compatibility：Complete**
 - **P7.2b Full golden-scenario compatibility matrix：Pending**
 - **P7.2 overall：Incomplete**；四個 golden scenarios 的完整雙端點矩陣尚未宣告完成。
-- **P8.1a Portfolio baseline：本分支整理中**；P8.1b product-owner and release acceptance 尚未開始。
+- **P8.1a Portfolio baseline：Complete**
+- **P8.1b Product-owner and release acceptance：Pending**
 
 P7.2a 的完成只代表 `governed_access` 代表情境通過雙端點驗證，不代表所有情境或所有模型／runtime 都已認證。
 
@@ -72,11 +73,30 @@ Provider 輸出不能覆寫 deterministic decision logic，也不能自行宣告
 
 目前只有一個 OpenAI-compatible adapter。它是 NVIDIA 雲端基線與本機 llama.cpp 代表端點的共同邊界，不代表產品具有多 provider business logic 或多套專用 adapter。
 
+Profile 目前由「模型設定」頁面建立、編輯、測試與選擇；產品沒有 profile import／export UI。private local `model_profiles.json` 是 runtime state，不是應提交或放入作品集的範例檔。
+
+### Provider capability contract
+
+每個 profile 必須明確宣告 transport capability，不以 provider 或 model 名稱猜測：
+
+| Capability | Supported values |
+| --- | --- |
+| Transport | OpenAI-compatible `/v1/chat/completions` |
+| Authentication | `none`、`bearer_optional`、`bearer_required` |
+| Token parameter | `max_tokens`、`max_completion_tokens` |
+| Reasoning parameter | `unsupported`、`reasoning_effort` |
+| Structured output | `json_schema`、`json_object` |
+
+只會依 profile capability 使用 `Authorization: Bearer <token>`；不支援 `x-api-key`、query-string key、Basic、OAuth exchange、AWS-style signing 或其他非本產品 contract 的 authentication。這是明確的 compatibility scope，不是「支援所有 OpenAI-compatible endpoint」的宣稱。
+
+作品集可用兩種非敏感代表設定說明範圍：remote Bearer endpoint 使用文件用 `example.invalid` base URL 與 `bearer_required`；local no-auth endpoint 使用 `http://127.0.0.1:8080/v1` 與 `none`。兩者都必須由使用者明確選擇 model name 與其他 capability，文件不放 real key。
+
 ## 持久化與安全
 
 - SQLite 保存專案、版本、可見對話、confirmed facts、PlanningRun、assessment 與 report。
 - 完成版本維持不可變；後續修改建立新的版本。
-- 不保存 system prompt、chain of thought、LangChain tool trajectory、raw provider response、Authorization header 或 API key。
+- 不保存 system prompt、chain of thought、LangChain tool trajectory、raw provider response、Authorization header 或 API key 到 project SQLite、public API、logs、UI 或 Markdown report。
+- MVP 仍會將 API key 以明文保存於本機 private `model_profiles.json`，以支援已選 profile 的 provider 呼叫；這不是 production-grade credential storage，也不等同於加密保存。若要部署到真實企業環境，後續應改用 Windows Credential Manager、OS keychain 或其他受控 secret store。
 - 錯誤回應不得洩漏 secrets、raw response、內部路徑或技術診斷。
 - 高影響人事、醫療、法律、信用或財務情境保持 assistive-only，人工保留最終決定。
 
@@ -113,7 +133,7 @@ py -3.12 -m venv .venv
 
 啟動後依序操作：
 
-1. 在「模型設定」建立或匯入一個 OpenAI-compatible model profile。
+1. 在「模型設定」建立一個 OpenAI-compatible model profile；目前 UI 不提供 profile import。
 2. 填入 endpoint、模型名稱與 capability；API key 只保存在本機 profile，不會顯示在公開回應或報告。
 3. 執行 readiness test；未測試通過的 profile 不可進入正式分析。
 4. 建立專案，使用下方的 synthetic `governed_access` Demo 完成需求理解、訪談、Assessment 與 Results。

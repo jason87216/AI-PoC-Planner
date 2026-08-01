@@ -2,6 +2,12 @@
 
 本文件是 AI PoC Planner 的作品集與技術面試入口。它描述目前已完成的產品基線、可重現的 Demo 路徑、治理邊界與尚未完成的工作；不宣稱完整 P7.2 或 production-ready。
 
+## 狀態
+
+- P8.1a Portfolio baseline：Complete（本文件與 README 基線已整理）。
+- P8.1b Product-owner and release acceptance：Pending。
+- P7.2a：Complete；P7.2b：Pending；P7.2 overall：Incomplete。
+
 ## 一分鐘定位
 
 AI PoC Planner 協助企業把模糊的 AI 導入構想整理成可確認的需求、可比較的 PoC 方案與受治理約束的規劃報告。
@@ -71,7 +77,7 @@ Streamlit 使用 `18501-18599`，FastAPI 使用 `18610-18699`。停止時執行�
 
 ### 3. 建立 model profile
 
-在「模型設定」輸入 OpenAI-compatible endpoint、模型名稱與明確 capability，保存後執行 readiness test。API key 可為空（依 profile authentication capability），但不應出現在截圖、報告或錯誤訊息中。
+在「模型設定」建立 profile，輸入 OpenAI-compatible endpoint、模型名稱與明確 capability，保存後執行 readiness test。目前 UI 提供建立、編輯、測試與選擇，不提供 profile import／export。API key 可為空（依 profile authentication capability），但不應出現在截圖、報告或錯誤訊息中。
 
 ### 4. 執行 synthetic governed_access Demo
 
@@ -99,13 +105,34 @@ P7.2a 已完成一次代表性雙端點 checkpoint：
 
 這是代表情境證據，不是所有模型、runtime 或 golden scenarios 的相容性保證。完整四情境矩陣仍屬 P7.2b。
 
+## Provider capability scope
+
+產品使用 vendor-neutral 的 profile capability contract，不以 provider 或 model name 猜測支援能力：
+
+| Capability | Supported values |
+| --- | --- |
+| Transport | OpenAI-compatible `/v1/chat/completions` |
+| Authentication | `none`、`bearer_optional`、`bearer_required` |
+| Token parameter | `max_tokens`、`max_completion_tokens` |
+| Reasoning parameter | `unsupported`、`reasoning_effort` |
+| Structured output | `json_schema`、`json_object` |
+
+只支援依 profile capability 發送的 `Authorization: Bearer <token>`。`x-api-key`、query-string key、Basic、OAuth exchange、AWS-style signing、自訂 header 或其他非 Bearer authentication 不在本產品 contract 內；因此本文件不宣稱支援所有 OpenAI-compatible endpoint。
+
+作品集可用兩種非敏感代表設定說明範圍：
+
+- Remote Bearer endpoint：使用文件用 `example.invalid` base URL、`bearer_required`、明確 model name 與 token／reasoning／structured-output capability；不放入任何 real key。
+- Local no-auth endpoint：使用 `http://127.0.0.1:8080/v1`、`none`、無 API key，並由使用者明確選擇 model name 與其他 capability。
+
 ## 安全與持久化邊界
 
 - model profile 以 project-bound snapshot 綁定；未啟用或未測試 profile 會 fail closed。
-- API key 不出現在 public profile response、UI error、SQLite 正式資料或 Markdown。
+- API key 不出現在 public profile response、UI error、project SQLite 正式資料、logs 或 Markdown；但 MVP 會以明文保存在本機 private `model_profiles.json`，以支援已選 profile 的 provider 呼叫。
 - Authorization header、raw provider body、prompt、reasoning trace 與內部路徑不落庫。
 - reload、history、refresh、download、duplicate POST 與 restart 讀取已保存結果，不重新呼叫 provider。
 - `governed_access` 僅允許 assistive workflow；主管保留最終核准，AI 不直接執行權限寫入。
+
+明文 local profile storage 是已知 MVP limitation，不是 production-grade credential storage。企業部署應改用 Windows Credential Manager、OS keychain 或其他受控 secret store；這項工作不屬於 P8.1a，也不會在本 PR 假稱已完成。
 
 ## 截圖清單
 
@@ -136,6 +163,6 @@ P7.2a 已完成一次代表性雙端點 checkpoint：
 - production-grade credential encryption 仍是 deferred scope。
 - 下一步是 P8.1b product-owner and release acceptance，以及獨立評估是否啟動 P7.2b。
 
-## P8.1a acceptance boundary
+## P8.1a closeout boundary
 
 本文件與 README 完成 portfolio baseline；P8.1b 才負責 product-owner wording、blocked-no-provider、完整 release acceptance 與 UI polish。P8.1a 不修改 application behavior、不新增 provider、不改 deterministic logic、不新增 migration，也不宣告 P7.2 overall 完成。

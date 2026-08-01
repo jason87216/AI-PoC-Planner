@@ -11,12 +11,15 @@
 - Duplicate/read-only operations, reload, history re-entry, Markdown download, restart, persistence checks, and secret-safety checks passed for both endpoints. Sanitized evidence is retained outside this repository without provider content or secrets.
 - P7.2a compatibility checkpoint passed. P7.2b remains pending; the overall P7.2 initiative is not complete.
 
-### P8.1a portfolio baseline — in progress
+### P8.1a portfolio baseline — Complete
 
 - P8.1a 以文件與作品集素材為範圍，不修改 application behavior、provider implementation、deterministic logic、database schema 或 dependencies。
 - README 已補充產品定位、使用者、五分鐘啟動、model-profile readiness、synthetic `governed_access` Demo 與 AI／deterministic boundary。
 - `docs/portfolio/P8_1_PORTFOLIO_BASELINE.md` 提供架構圖、workflow、P7.2a 脫敏 evidence 摘要、截圖清單、技術亮點與 limitations。
 - `governed_access` 明確標示為作品集 synthetic fixture，不是真實公司員工或權限資料。
+- 文件已明確說明 profile 由模型設定頁建立、編輯、測試與選擇，目前沒有 profile import／export UI。
+- 文件已明確揭露 MVP API key 會以明文保存於本機 private `model_profiles.json`；它不進 public API、SQLite 正式資料、logs 或 Markdown，production-grade secret store 仍 deferred。
+- 文件已明確界定 capability contract 只支援 OpenAI-compatible `/v1/chat/completions` 與 `none`／Bearer authentication，不宣稱支援所有相容端點。
 - P8.1b product-owner and release acceptance 仍 Pending；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
 
 ### Historical diagnosis
@@ -147,7 +150,7 @@ P7.2b 在 P7.2a 通過後：
 
 ## Next action
 
-Review and merge the bounded P8.1a portfolio baseline before starting P8.1b product-owner and release acceptance. P7.2a has passed; P7.2b remains pending and the overall P7.2 initiative remains incomplete.
+Start P8.1b product-owner and release acceptance after the P8.1a documentation closeout. P7.2a has passed; P7.2b remains pending and the overall P7.2 initiative remains incomplete.
 
 ## Deferred
 

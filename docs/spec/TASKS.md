@@ -155,13 +155,13 @@ Acceptance checkpoint:
 
 ## Phase 8 — Portfolio and release UAT
 
-### P8.1a Portfolio baseline — Next
+### P8.1a Portfolio baseline — Complete
 
 - README 說明產品定位、使用者、AI／deterministic boundary、啟動方式與目前狀態；
 - 提供五分鐘 UAT runtime、model-profile readiness 與 synthetic `governed_access` Demo runbook；
 - 新增作品集 brief，包含架構圖、workflow 圖、P7.2a 脫敏 evidence、截圖清單、技術亮點與 limitations；
 - 明確保留 P7.2b Pending、P7.2 overall incomplete 與 P8.1b Pending；
-- 不修改 application behavior、provider implementation、deterministic logic、database schema 或 dependencies。
+- 不修改 application behavior、provider implementation、deterministic logic、database schema 或 dependencies；本 checkpoint 的文件與 portfolio brief 已完成。
 
 Acceptance checkpoint：
 
@@ -169,6 +169,7 @@ Acceptance checkpoint：
 - portfolio brief 不包含 API key、Authorization、prompt、provider raw response、reasoning 或真實員工資料；
 - P7.2a、P7.2b、P7.2 overall 與 P8.1b 狀態互相一致；
 - 文件 diff 通過 `git diff --check`，且不引入 production code、migration、dependency 或 CI workflow 變更。
+- 明確記錄目前 UI 不提供 profile import／export，API key 的明文 local profile storage limitation，以及只支援 Bearer authentication 的 capability scope。
 
 ### P8.1b Product-owner and release acceptance — Pending
 
