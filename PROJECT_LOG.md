@@ -2,19 +2,32 @@
 
 ## Current status
 
+### P7.2a closeout — passed
+
+- Final dual-endpoint `governed_access` UAT was executed exactly once, without retry, in the cost-safe order `llama_cpp → remote NVIDIA endpoint`.
+- Both endpoints completed readiness, discovery, analysis, and report with the same OpenAI-compatible adapter and exact JSON Schema mode; `fallback_used=false` throughout.
+- Both endpoints produced three analysis options. Analysis used `analysis_options_a0` at 1024 tokens and three `analysis_option_detail` calls at 2048 tokens; report Part A and Part B each used 2048 tokens. All successful attempts were first-pass and report semantic pass was `[1]`; deterministic degradation fallback was not invoked.
+- Normalized deterministic results were equal: `matching_status=matched`, `no_case_reason=null`, `recommendation_category=rules_first`, `decision_authority=human_final_decision`, `processing_boundary=private_endpoint`; reviewed cases were non-empty and unique (`case-08`, `case-09`, `case-10`). Required phases and gates remained unchanged, and all autonomous-approval, direct-write, unapproved-PII, and high-risk-provisioning safeguards remained false.
+- Duplicate/read-only operations, reload, history re-entry, Markdown download, restart, persistence checks, and secret-safety checks passed for both endpoints. Sanitized evidence is retained outside this repository without provider content or secrets.
+- P7.2a compatibility checkpoint passed. P7.2b remains pending; the overall P7.2 initiative is not complete.
+
+### Historical diagnosis
+
+The earlier readiness, analysis-budget, report-contract, and persistence-compatibility investigations are retained below as historical context; the closeout above is the current status.
+
 - PR #24 已合併至 `main`。
 - Merge commit：`91bb6b45f9be2249d9cd9edfd11a309bd806f321`。
 - P6.7 已完成。
 - Results narrative、reviewed-case catalog consistency 與 report persistence 已通過產品驗收。
 - P7.1 本機 UAT runtime 已完成並維持目前啟動／停止基線。
-- Current goal：P7.2a provider compatibility and structured-output policy（PR #26，Draft）。
+- Historical goal：P7.2a provider compatibility and structured-output policy（PR #26，Draft）。
 - 第二次 NVIDIA／llama.cpp live UAT 已執行一次：NVIDIA governed_access 完整流程
   先執行且未出現 assertion failure，但 llama.cpp readiness 以安全錯誤
   `provider_timeout` 失敗。相同 adapter contract 在 60 秒 timeout 下於本機
   22.178 秒成功；health 與 model discovery 亦通過，診斷指向原本 10 秒 readiness
-  timeout 過短。P7.2a checkpoint 仍 pending，沒有通過的 dual-endpoint live artifact。
+  timeout 過短；當時尚待 dual-endpoint closeout。
 - 本輪修正將 readiness timeout 預設為 60 秒、允許 process-level 設定至 300 秒，並讓
-  llama.cpp 完整 compatibility gate 先於付費 NVIDIA workflow；尚未安排新的 live UAT。
+  llama.cpp 完整 compatibility gate 先於 remote NVIDIA endpoint workflow；尚未安排新的 live UAT。
 - 第三次 dual-endpoint live UAT 已執行一次：llama.cpp readiness 失敗，local-first gate
   正常阻止 NVIDIA 呼叫，因此 NVIDIA call count 為 0；沒有通過的 dual-endpoint artifact。
 - 後續 sanitized 本機 response-structure diagnosis 顯示：模型確實回傳 JSON object，但
@@ -22,14 +35,14 @@
   contract；`--reasoning off` 也回傳錯誤 contract。timeout 不再是目前根因，沒有安排
   第四次 dual UAT。
 - 本輪實作將 readiness 首輪 instruction 固定為單一 `status="ok"` JSON contract，並讓
-  bounded repair hint 安全列出 Literal／enum allowed values；P7.2a checkpoint 仍 pending。
+  bounded repair hint 安全列出 Literal／enum allowed values；當時尚待 dual-endpoint closeout。
 - Exact OpenAI JSON Schema readiness 已連續 3/3 通過，Discovery 已達
   `ready_for_assessment`；完整本機 workflow 在第二個 `analysis_option_detail` 失敗，兩次
   都以 `finish_reason=length` 用滿 1024 completion tokens。Schema normalization 成功，
   失敗未進入 Pydantic validation；NVIDIA 未呼叫，也沒有執行 dual UAT。
 - `analysis_option_detail` 的 application logical budget 已由 1024 提高至 2048，作為
   provider-neutral、stage-specific 的 bounded headroom；目前只有 offline validation，
-  尚待新的本機 qualification，P7.2a checkpoint 仍 pending。
+  尚待新的本機 qualification，當時尚待 dual-endpoint closeout。
 - Live harness 的 analysis／report 失敗摘要現在只顯示安全 error code、operation、retryable
   與最後 recorder 的 operation/schema/mode/call count，不再依賴或暴露 `response.text`。
 - Report-only diagnosis 確認四個 report provider calls 均為 HTTP 200、JSON Schema
@@ -41,14 +54,14 @@
   `fact_refs` 仍要求合法 `Fxxx` tokens，且 `_validate_refs`
   的 fact、confirmed evidence、KPI 與 numeric safeguards 保持不變。僅完成 offline
   validation，沒有新的 live provider、complete-local 或 dual-endpoint artifact；
-  P7.2a checkpoint 仍 pending。
+  當時尚待 dual-endpoint closeout。
 - 獨立 diff review 發現上述收緊若直接套用於 persisted `ReportSectionDraft`，會造成
   既有合法報告 reload 的 backward-compatibility regression。本輪已分離
   `ProviderReportSectionDraft`（strict digit-free provider DTO）與 persisted
   `ReportSectionDraft`（`NonEmptyStr`，保留歷史讀取相容性）；`PlanningReportPartA/B`
   使用前者，`PlanningReportDraft`／`PersistedPlanningReport` 使用後者。此修正保留
   `_validate_refs` defense-in-depth，並以 offline persistence／restart regression tests
-  驗證；沒有新的 live artifact，P7.2a checkpoint 仍 pending。
+  驗證；當時尚待 dual-endpoint closeout。
 
 ## PR #24 closeout
 
@@ -126,8 +139,7 @@ P7.2b 在 P7.2a 通過後：
 
 ## Next action
 
-等待獨立 diff review 與後續明確授權的全新、隔離 P7.2a live UAT。不得重跑已失敗的
-runtime，也不得將 P7.2a 標記為完成。
+Wait for independent review of the closeout diff, then begin the P7.2b four-scenario compatibility matrix. P7.2a has passed; the overall P7.2 initiative remains incomplete.
 
 ## Deferred
 
