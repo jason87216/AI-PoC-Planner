@@ -127,7 +127,7 @@ Acceptance checkpoint:
   失敗；相同 adapter contract 在 60 秒 timeout 下於本機 22.178 秒成功，health 與
   model discovery 亦通過。診斷指向原本 10 秒 readiness timeout 過短。
 - readiness timeout 修正為預設 60 秒、process-level 可設定至 300 秒，且 local
-  llama.cpp full compatibility gate 現在先於付費 NVIDIA workflow；仍沒有通過的
+  llama.cpp full compatibility gate 現在先於 remote NVIDIA endpoint workflow；仍沒有通過的
   dual-endpoint live artifact，P7.2a checkpoint 仍 pending。
 - 第三次 dual-endpoint live UAT 已執行一次：llama.cpp readiness 失敗，local-first gate
   阻止 NVIDIA 呼叫（call count=0）；沒有通過的 dual-endpoint artifact。
@@ -145,6 +145,14 @@ Acceptance checkpoint:
   明確授權的本機 qualification，P7.2a checkpoint 仍 pending。
 - Live harness analysis／report failure 只保留安全 error code、operation、retryable 與
   recorder 的最後 operation/schema/mode/call count，不輸出 response body 或 user action。
+- Report-only diagnosis 顯示四個 report provider calls 都是 HTTP 200、JSON Schema
+  success、`finish_reason=stop`；兩輪 application semantic validation 都以
+  `provider_output_invalid` 失敗並觸發 deterministic degradation fallback。根因是
+  report narration schema 允許數字，但 application safeguard 會拒絕部分數字。
+- `ReportSectionDraft.content` 現改為禁止 ASCII digits `0-9` 的 provider narration
+  contract；`fact_refs` 仍要求合法 `Fxxx` tokens，deterministic validation 保留。
+  本輪只完成 offline validation，尚無通過的 dual-endpoint artifact，P7.2a checkpoint
+  仍 pending。
 
 ### P7.2b Full golden-scenario compatibility matrix — Pending
 

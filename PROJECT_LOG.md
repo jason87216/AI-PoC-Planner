@@ -32,6 +32,15 @@
   尚待新的本機 qualification，P7.2a checkpoint 仍 pending。
 - Live harness 的 analysis／report 失敗摘要現在只顯示安全 error code、operation、retryable
   與最後 recorder 的 operation/schema/mode/call count，不再依賴或暴露 `response.text`。
+- Report-only diagnosis 確認四個 report provider calls 均為 HTTP 200、JSON Schema
+  success、`finish_reason=stop`，但兩輪 application semantic validation 均以
+  `provider_output_invalid` 失敗並觸發 deterministic degradation fallback；根因是
+  provider narration schema 允許數字而 application safeguard 會拒絕部分數字。
+- 本輪將 `ReportSectionDraft.content` 收緊為不含 ASCII digits `0-9` 的
+  provider-owned narration；`fact_refs` 仍要求合法 `Fxxx` tokens，且 `_validate_refs`
+  的 fact、confirmed evidence、KPI 與 numeric safeguards 保持不變。僅完成 offline
+  validation，沒有新的 live provider、complete-local 或 dual-endpoint artifact；
+  P7.2a checkpoint 仍 pending。
 
 ## PR #24 closeout
 

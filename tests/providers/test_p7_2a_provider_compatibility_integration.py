@@ -26,6 +26,7 @@ from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from ai_poc_planner.app.api import create_app
+from ai_poc_planner.application import planning_report as planning_report_module
 from ai_poc_planner.application.provider_readiness import ConnectionProbe
 from ai_poc_planner.config import provider_readiness_timeout_seconds
 from ai_poc_planner.domain.planning_report import REPORT_SECTION_KEYS
@@ -155,6 +156,18 @@ class LiveEndpointEvidence:
     database_path: Path
     profile_path: Path
     project_id: str
+    report_executor_records: tuple[dict[str, object], ...] = ()
+    report_semantic_passes: tuple[int, ...] = ()
+    deterministic_fallback_invoked: bool = False
+
+
+@dataclass
+class ReportExecutionObservation:
+    """Safe report-only observability; never stores prompts or model output."""
+
+    executor_records: list[dict[str, object]]
+    semantic_passes: set[int]
+    deterministic_fallback_invoked: bool = False
 
 
 class CallRecorder:
@@ -548,7 +561,7 @@ def _run_live_endpoint_pair(
     root_path: Path,
     runner: Callable[[str, Path], LiveEndpointEvidence],
 ) -> tuple[LiveEndpointEvidence, LiveEndpointEvidence]:
-    """Run the local compatibility gate before the paid NVIDIA workflow."""
+    """Run the local compatibility gate before the remote NVIDIA endpoint."""
 
     llama = runner("llama_cpp", root_path / "llama_cpp")
     nvidia = runner("nvidia", root_path / "nvidia")
@@ -579,6 +592,96 @@ _SAFE_LIVE_OPERATION_CODES = frozenset(
     }
 )
 _SAFE_LIVE_OPERATIONS = frozenset({"readiness", "discovery", "analysis", "report"})
+
+
+def _begin_report_observability() -> tuple[
+    ReportExecutionObservation,
+    tuple[Callable[..., Any], Callable[..., Any], Callable[..., Any]],
+]:
+    """Install temporary report metadata hooks without capturing sensitive data."""
+
+    observation = ReportExecutionObservation(executor_records=[], semantic_passes=set())
+    original_execute = StructuredOutputExecutor.execute
+    original_call = planning_report_module.PlanningReportService._call
+    original_fallback = planning_report_module._fallback_report_draft
+
+    def wrapped_execute(executor: StructuredOutputExecutor, *args: Any, **kwargs: Any):
+        if kwargs.get("operation") is not ProviderOperation.REPORT:
+            return original_execute(executor, *args, **kwargs)
+        schema_name = str(kwargs.get("schema_name", ""))
+        logical_max_tokens = kwargs.get("logical_max_tokens")
+        try:
+            result = original_execute(executor, *args, **kwargs)
+        except Exception as error:
+            safe_code = getattr(error, "code", None)
+            if safe_code not in _SAFE_LIVE_OPERATION_CODES:
+                safe_code = "unknown_safe_code"
+            observation.executor_records.append(
+                {
+                    "operation": "report",
+                    "schema_name": schema_name,
+                    "logical_max_tokens": logical_max_tokens,
+                    "success": False,
+                    "attempt_count": None,
+                    "mode_used": None,
+                    "fallback_used": False,
+                    "safe_failure_code": safe_code,
+                    "retryable": getattr(error, "retryable", None),
+                }
+            )
+            raise
+        observation.executor_records.append(
+            {
+                "operation": "report",
+                "schema_name": schema_name,
+                "logical_max_tokens": logical_max_tokens,
+                "success": True,
+                "attempt_count": result.attempt_count,
+                "mode_used": getattr(result.mode_used, "value", str(result.mode_used)),
+                "fallback_used": result.fallback_used,
+                "safe_failure_code": None,
+                "retryable": None,
+            }
+        )
+        return result
+
+    def wrapped_call(
+        service: Any,
+        profile: Any,
+        payload: dict[str, object],
+        contract: Any,
+        name: str,
+        *,
+        semantic_repair: bool = False,
+    ):
+        if name in {"report_part_a", "report_part_b"}:
+            observation.semantic_passes.add(2 if semantic_repair else 1)
+        return original_call(
+            service,
+            profile,
+            payload,
+            contract,
+            name,
+            semantic_repair=semantic_repair,
+        )
+
+    def wrapped_fallback(*args: Any, **kwargs: Any):
+        observation.deterministic_fallback_invoked = True
+        return original_fallback(*args, **kwargs)
+
+    StructuredOutputExecutor.execute = wrapped_execute
+    planning_report_module.PlanningReportService._call = wrapped_call
+    planning_report_module._fallback_report_draft = wrapped_fallback
+    return observation, (original_execute, original_call, original_fallback)
+
+
+def _end_report_observability(
+    originals: tuple[Callable[..., Any], Callable[..., Any], Callable[..., Any]],
+) -> None:
+    original_execute, original_call, original_fallback = originals
+    StructuredOutputExecutor.execute = original_execute
+    planning_report_module.PlanningReportService._call = original_call
+    planning_report_module._fallback_report_draft = original_fallback
 
 
 def _assert_live_operation_response(
@@ -1776,6 +1879,7 @@ def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvi
     app, provider_client = _live_app(
         database_path, profile_path, recorder, http_response_bodies
     )
+    report_observation, report_observability_originals = _begin_report_observability()
 
     try:
         with TestClient(app) as client:
@@ -2004,14 +2108,18 @@ def _run_live_governed_access(endpoint: str, root_path: Path) -> LiveEndpointEvi
             database_path=database_path,
             profile_path=profile_path,
             project_id=project_id,
+            report_executor_records=tuple(report_observation.executor_records),
+            report_semantic_passes=tuple(sorted(report_observation.semantic_passes)),
+            deterministic_fallback_invoked=report_observation.deterministic_fallback_invoked,
         )
     finally:
+        _end_report_observability(report_observability_originals)
         http_response_bodies.clear()
         provider_client.close()
 
 
 def test_live_p7_2a_governed_access_public_api_flow(tmp_path: Path) -> None:
-    """Run local full compatibility before the paid NVIDIA gate."""
+    """Run local full compatibility before the remote NVIDIA endpoint gate."""
 
     _require_live_dual_endpoint_environment()
     _preflight_live_dual_endpoints()
@@ -2030,6 +2138,19 @@ def test_live_p7_2a_governed_access_public_api_flow(tmp_path: Path) -> None:
             set(call) == {"operation", "schema_name", "mode"}
             for call in evidence.recorder.calls
         )
+        assert evidence.report_executor_records
+        assert {
+            record["schema_name"] for record in evidence.report_executor_records
+        } == {"report_part_a", "report_part_b"}
+        assert all(
+            record["success"] is True
+            and record["mode_used"] == "json_schema"
+            and record["logical_max_tokens"] == 2048
+            and record["fallback_used"] is False
+            for record in evidence.report_executor_records
+        )
+        assert evidence.report_semantic_passes
+        assert evidence.deterministic_fallback_invoked is False
 
 
 def test_live_endpoint_pair_does_not_call_nvidia_after_local_failure(

@@ -10,6 +10,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ai_poc_planner.application.provider_readiness import ConnectionProbe
+from ai_poc_planner.domain.planning_report import ReportSectionDraft
 from ai_poc_planner.providers.base import StructuredOutputMode
 from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.errors import (
@@ -360,6 +361,54 @@ def test_analysis_option_detail_truncation_repairs_with_same_2048_budget() -> No
     assert result.attempt_count == 2
     assert result.mode_used is StructuredOutputMode.JSON_SCHEMA
     assert result.fallback_used is False
+    assert adapter.calls == ["json_schema", "json_schema"]
+    assert adapter.budgets == [2048, 2048]
+
+
+def test_report_narration_digits_trigger_bounded_contract_repair() -> None:
+    adapter = RecordingAdapter(
+        [
+            '{"content":"KPI 95%","fact_refs":["F001"]}',
+            '{"content":"定性敘述","fact_refs":["F001"]}',
+        ]
+    )
+
+    result = _execute(
+        adapter,
+        contract=ReportSectionDraft,
+        operation=ProviderOperation.REPORT,
+        schema_name="report_part_a",
+        logical_max_tokens=2048,
+    )
+
+    assert result.value.content == "定性敘述"
+    assert result.attempt_count == 2
+    assert result.mode_used is StructuredOutputMode.JSON_SCHEMA
+    assert result.fallback_used is False
+    assert adapter.calls == ["json_schema", "json_schema"]
+    assert adapter.budgets == [2048, 2048]
+
+
+def test_repeated_report_narration_digits_remain_provider_output_invalid() -> None:
+    adapter = RecordingAdapter(
+        [
+            '{"content":"KPI 95%","fact_refs":["F001"]}',
+            '{"content":"第2階段","fact_refs":["F001"]}',
+        ]
+    )
+
+    with pytest.raises(ProviderOperationError) as error:
+        _execute(
+            adapter,
+            contract=ReportSectionDraft,
+            operation=ProviderOperation.REPORT,
+            schema_name="report_part_a",
+            logical_max_tokens=2048,
+        )
+
+    assert error.value.code == "provider_output_invalid"
+    assert error.value.failure.operation is ProviderOperation.REPORT
+    assert error.value.failure.retryable is False
     assert adapter.calls == ["json_schema", "json_schema"]
     assert adapter.budgets == [2048, 2048]
 

@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, model_validator
 
 from ai_poc_planner.domain.analysis import FactToken
 from ai_poc_planner.domain.case_centered import CaseCenteredNarrative
@@ -34,9 +34,19 @@ REPORT_SECTION_KEYS = (
     "open_issues_and_next_actions",
 )
 
+ProviderNarrationText = Annotated[
+    str,
+    StringConstraints(
+        strict=True,
+        strip_whitespace=True,
+        min_length=1,
+        pattern=r"^[^0-9]+$",
+    ),
+]
+
 
 class ReportSectionDraft(ContractModel):
-    content: NonEmptyStr
+    content: ProviderNarrationText
     fact_refs: list[FactToken] = Field(min_length=1)
 
 
