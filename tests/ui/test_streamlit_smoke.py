@@ -15,6 +15,7 @@ def test_home_page_loads_without_a_running_api(monkeypatch: pytest.MonkeyPatch) 
             "建立新專案",
             "查看歷史專案",
             "重新整理",
+            "前往模型設定",
         ]
     else:
         assert any("啟動器" in error.value for error in app.error)
@@ -68,7 +69,14 @@ def test_product_guidance_covers_startup_and_blocked_provider_states() -> None:
     assert "建立模型設定 → 測試可用性 → 建立專案 → 完成訪談與評估" in home
     assert "查看結果不會重新呼叫模型服務" in history
     assert "模型尚未通過可用性測試" in presentation
-    assert "端點、模型名稱、驗證方式與結構化輸出能力" in presentation
+    assert "端點、模型名稱、認證方式與結構化輸出能力" in presentation
+
+
+def test_home_offers_model_settings_action() -> None:
+    source = open("app_pages/home.py", encoding="utf-8").read()
+
+    assert 'st.button("前往模型設定"' in source
+    assert 'st.switch_page("app_pages/model_settings.py")' in source
 
 
 def test_global_navigation_contains_only_project_entry_points() -> None:

@@ -55,7 +55,7 @@ def show_api_error(error: ApiClientError) -> None:
     if error.code == "provider_not_ready":
         user_message = "模型尚未通過可用性測試。"
         user_action = (
-            "請前往模型設定確認端點、模型名稱、驗證方式與結構化輸出能力後重新測試。"
+            "請前往模型設定確認端點、模型名稱、認證方式與結構化輸出能力後重新測試。"
         )
     st.error(f"目前無法完成這項操作：{user_message}")
     if user_action:

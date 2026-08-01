@@ -67,7 +67,9 @@ with st.form("create_model_profile", clear_on_submit=True):
     profile_name = st.text_input("設定名稱", help="用容易辨識的名稱區分不同模型服務。")
     base_url = st.text_input(
         "服務端點",
-        help="填入 OpenAI-compatible /v1 base URL；請確認端點由你自行管理。",
+        help=(
+            "請使用你有權存取的 OpenAI-compatible 端點，並依服務文件填寫 /v1 base URL。"
+        ),
     )
     model_name = st.text_input("模型名稱", help="填入端點實際提供的模型名稱或 alias。")
     api_key = st.text_input(
@@ -75,11 +77,10 @@ with st.form("create_model_profile", clear_on_submit=True):
         type="password",
         help="僅在端點需要 Bearer 認證時填寫；保存後不會在 UI 顯示。",
     )
-    structured_output_mode = st.selectbox(
+    preferred_mode = st.selectbox(
         "偏好的結構化輸出模式（選填）",
-        options=["", "json_schema", "json_object"],
+        options=["json_schema", "json_object"],
         format_func=lambda value: {
-            "": "不指定",
             "json_schema": capability_label("structured_output", "json_schema"),
             "json_object": capability_label("structured_output", "json_object"),
         }[value],
@@ -131,12 +132,6 @@ with st.form("create_model_profile", clear_on_submit=True):
             "支援 JSON Object",
             value=True,
             help="端點能否要求回傳 JSON object；這是較寬鬆的結構化模式。",
-        )
-        preferred_mode = st.selectbox(
-            "首選結構化輸出模式",
-            ["json_schema", "json_object"],
-            format_func=lambda value: capability_label("structured_output", value),
-            help=capability_help("preferred_mode"),
         )
 
 if create_submitted and not (supports_json_schema or supports_json_object):

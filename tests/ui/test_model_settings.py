@@ -73,3 +73,21 @@ def test_capability_labels_are_product_facing_and_keep_stable_values() -> None:
 def test_capability_help_explains_explicit_vendor_neutral_selection() -> None:
     assert "端點文件" in capability_help("authentication")
     assert "不要依品牌或模型名稱猜測" in capability_help("structured_output")
+
+
+def test_create_form_has_one_preferred_mode_and_keeps_wire_values() -> None:
+    source = open("app_pages/model_settings.py", encoding="utf-8").read()
+    create_form = source.split("if profiles:", 1)[0]
+
+    assert "structured_output_mode = st.selectbox" not in source
+    assert create_form.count('"偏好的結構化輸出模式（選填）"') == 1
+    assert '"首選結構化輸出模式"' not in create_form
+    assert "structured_output_mode=preferred_mode" in source
+
+    for mode in ("json_schema", "json_object"):
+        payload = _payload(structured_output_mode=mode)
+        assert payload["structured_output_mode"] == mode
+
+    assert "api_key" not in _payload(api_key="")
+    assert _payload(api_key="new-key")["api_key"] == "new-key"
+    assert _payload(clear_api_key=True)["api_key"] is None

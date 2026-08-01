@@ -55,6 +55,13 @@ with summary_slot.skeleton():
             border=True,
         )
 
+model_unavailable = (
+    provider_status is None or provider_status.get("connection_state") != "connected"
+)
+if model_unavailable:
+    if st.button("前往模型設定", icon=":material/tune:"):
+        st.switch_page("app_pages/model_settings.py")
+
 st.subheader("最近專案")
 if not projects:
     st.info("尚未建立專案。請先到「模型設定」建立並測試模型服務，再開始新的需求規劃。")

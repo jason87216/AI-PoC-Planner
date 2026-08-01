@@ -25,7 +25,7 @@ _CAPABILITY_LABELS = {
 }
 
 _CAPABILITY_HELP = {
-    "authentication": "請依端點文件與實際要求選擇；產品只會依此設定使用 Bearer 認證。",
+    "authentication": "請依端點文件選擇；端點需要認證時，目前只支援 Bearer 認證。",
     "token_parameter": "選擇端點接受的輸出預算欄位；不會同時送出兩個欄位。",
     "reasoning_parameter": "若端點不支援推理參數，請選擇不傳送並留白推理強度。",
     "structured_output": (

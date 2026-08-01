@@ -98,7 +98,7 @@ with st.form("new_project_form"):
     )
     constraints = st.text_area(
         "已知限制",
-        help="例如權限、資料、合規、部署或人工核准要求。",
+        help="可包含預算、時程、個資／資料、法規／合規、部署與人工核准等限制。",
         key="new_project_constraints",
     )
     submitted = st.form_submit_button(
