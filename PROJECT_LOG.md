@@ -36,8 +36,9 @@
   success、`finish_reason=stop`，但兩輪 application semantic validation 均以
   `provider_output_invalid` 失敗並觸發 deterministic degradation fallback；根因是
   provider narration schema 允許數字而 application safeguard 會拒絕部分數字。
-- 本輪將 `ReportSectionDraft.content` 收緊為不含 ASCII digits `0-9` 的
-  provider-owned narration；`fact_refs` 仍要求合法 `Fxxx` tokens，且 `_validate_refs`
+- 本輪將 `ProviderReportSectionDraft.content` 收緊為不含 ASCII digits `0-9` 的
+  provider-owned narration；persisted `ReportSectionDraft` 保留歷史讀取相容性，
+  `fact_refs` 仍要求合法 `Fxxx` tokens，且 `_validate_refs`
   的 fact、confirmed evidence、KPI 與 numeric safeguards 保持不變。僅完成 offline
   validation，沒有新的 live provider、complete-local 或 dual-endpoint artifact；
   P7.2a checkpoint 仍 pending。

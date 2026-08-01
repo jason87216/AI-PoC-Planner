@@ -149,8 +149,9 @@ Acceptance checkpoint:
   success、`finish_reason=stop`；兩輪 application semantic validation 都以
   `provider_output_invalid` 失敗並觸發 deterministic degradation fallback。根因是
   report narration schema 允許數字，但 application safeguard 會拒絕部分數字。
-- `ReportSectionDraft.content` 現改為禁止 ASCII digits `0-9` 的 provider narration
-  contract；`fact_refs` 仍要求合法 `Fxxx` tokens，deterministic validation 保留。
+- `ProviderReportSectionDraft.content` 現改為禁止 ASCII digits `0-9` 的 provider
+  narration contract；persisted `ReportSectionDraft` 保留歷史讀取相容性，`fact_refs`
+  仍要求合法 `Fxxx` tokens，deterministic validation 保留。
   本輪只完成 offline validation，尚無通過的 dual-endpoint artifact，P7.2a checkpoint
   仍 pending。
 - 獨立 diff review 發現將 digit-free 規則直接套用於 persisted section 會造成既有合法
