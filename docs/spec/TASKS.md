@@ -102,26 +102,33 @@ Merge commit: `91bb6b45f9be2249d9cd9edfd11a309bd806f321`.
 - No product default on port `8000`.
 - Runtime does not install providers or models.
 
-### P7.2a Representative dual-endpoint compatibility — Next
+### P7.2a Representative dual-endpoint compatibility — Complete
 
-1. 定義 model-profile capability contract。
-2. 統一 readiness、discovery、analysis、report 四條 structured-output 呼叫策略。
-3. 支援本機 endpoint 的可空 token。
-4. 統一 token／reasoning parameter strategy。
-5. 實作有限次 JSON Schema → JSON Object fallback。
-6. fallback 後維持嚴格 Pydantic validation。
-7. 統一安全且可行動的 errors，不暴露 secrets、Authorization header 或 raw provider response。
-8. 完成 NVIDIA readiness／discovery／analysis／report 驗證。
-9. 完成 llama.cpp readiness／discovery／analysis／report 驗證。
-10. 受控權限申請代表情境端到端 UAT。
-11. 確認 reload／history／download 不重新呼叫 provider。
-12. 完成 CI 與秘密資料檢查。
+#### Confirmed implementation boundaries
 
-Acceptance checkpoint:
+- Explicit provider capability profiles drive authentication, token parameters, reasoning parameters, and structured-output mode selection through the shared OpenAI-compatible adapter.
+- Readiness, discovery, analysis, and report use the shared structured-output executor with bounded same-mode repair and no silent provider/model/fake fallback.
+- Deterministic matching, recommendation category, scoring, hard gates, formal authority/boundary, reviewed-case facts, and persisted report consistency remain program-owned.
+- Reload, history, refresh, Markdown download, duplicate operations, and restart read persisted state without provider calls. No SQLite migration was added.
 
-- NVIDIA 與一個使用者自行啟動的本機 llama.cpp endpoint，使用同一 adapter 通過一個代表情境。
-- deterministic matching、recommendation category、scoring 與 hard gates 不修改。
-- P7.2a 通過不得標記完整 P7.2 Complete。
+#### Main issues and final fixes
+
+- Readiness uses an explicit `status="ok"` JSON contract; readiness timeout remains 60 seconds with the existing 1–300 second process-level policy.
+- `analysis_option_detail` uses a provider-neutral 2048-token stage budget; other stage budgets, temperature, reasoning policy, and repair limits are unchanged.
+- Provider narration DTOs remain strict and separate from persisted compatibility DTOs; semantic safeguards stay in the application layer.
+- The final llama.cpp qualification used 16K context for the `governed_access` representative scenario. This is the qualified runtime configuration for that scenario, not a claim about every model or endpoint.
+
+#### Final acceptance evidence
+
+- The final dual UAT ran exactly once without retry, in the order `llama_cpp → remote NVIDIA endpoint`; both full `governed_access` workflows passed readiness, discovery, analysis, and report.
+- Both endpoints used JSON Schema with `fallback_used=false`. Each produced `option_count=3`; analysis used 1024 tokens for A0 and 2048 tokens for each option detail, while report Part A/B used 2048 tokens. All successful executor attempts were first-pass; report semantic pass was `[1]`; deterministic fallback was not invoked.
+- Normalized deterministic results were equal: `matching_status=matched`, `no_case_reason=null`, `recommendation_category=rules_first`, `decision_authority=human_final_decision`, `processing_boundary=private_endpoint`; reviewed cases were unique (`case-08`, `case-09`, `case-10`). Required phases and gates remained unchanged: `HG-01 blocked`, `HG-03 assistive_only`, `HG-05 requires_controls`, `HG-06 requires_controls`.
+- Duplicate/read-only, reload/history/download, restart, persistence, and secret-safety checks passed for both endpoints. Automatic approval, direct permission write, unapproved external PII processing, and high-risk autonomous provisioning remained disallowed.
+- Sanitized compatibility evidence is retained outside the repository without prompts, facts, provider content, reasoning, request payloads, or secrets. P7.2a checkpoint passed; the overall P7.2 initiative is not complete.
+
+#### P7.2b next boundary
+
+- The next checkpoint is the four-scenario golden compatibility matrix across the same provider-independent deterministic boundaries. Keep `P7.2b` Pending until that matrix is independently qualified.
 
 ### P7.2b Full golden-scenario compatibility matrix — Pending
 

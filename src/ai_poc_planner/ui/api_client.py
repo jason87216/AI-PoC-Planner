@@ -1,5 +1,8 @@
 """Safe, thin client for the local FastAPI product boundary."""
 
+# The message table is intentionally kept as a public-code compatibility map.
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -11,16 +14,42 @@ import httpx
 class ApiClientError(RuntimeError):
     """A public API failure represented by a safe, user-facing message."""
 
-    def __init__(self, code: str, user_message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        user_message: str,
+        *,
+        retryable: bool = False,
+        user_action: str | None = None,
+    ) -> None:
         self.code = code
         self.user_message = user_message
+        self.retryable = retryable
+        self.user_action = user_action
         super().__init__(user_message)
 
 
 _USER_MESSAGES = {
+    "provider_auth_required": "需要 API key 才能連線。",
+    "provider_auth_failed": "API key 或端點權限驗證失敗。",
+    "provider_parameter_unsupported": "端點不支援目前選擇的參數。",
+    "provider_structured_output_unsupported": "端點不支援目前的結構化輸出模式。",
+    "provider_not_found": "找不到端點或模型。",
+    "provider_timeout": "端點回應逾時。",
+    "provider_connection_failed": "無法連線到端點。",
+    "provider_rate_limited": "端點暫時限制請求頻率。",
+    "provider_unavailable": "端點目前無法使用。",
+    "provider_http_error": "端點請求失敗，請檢查設定後再試。",
+    "provider_invalid_response": "端點回傳格式無效。",
+    "provider_output_truncated": "端點輸出被截斷。",
+    "provider_output_invalid": "結構化結果無法通過驗證。",
+    "provider_schema_invalid": "本機結構化輸出契約設定無效。",
+    "model_profile_auth_required": "請輸入 API key，或改用不需要認證的端點。",
+    "model_profile_auth_forbidden": "此認證模式不允許保存 API key，請清除後再試。",
+    "model_profile_reasoning_unsupported": "此端點不支援 reasoning effort。",
+    "model_profile_structured_output_invalid": "請至少啟用一種結構化輸出模式，並選擇支援的 preferred mode。",
     "provider_not_ready": "尚未有可用的已測試模型設定。",
     "provider_profile_mismatch": "目前模型設定不適用於這份規劃，請重新選擇並測試模型。",
-    "provider_output_invalid": "模型暫時無法產生可用結果，請稍後再試。",
     "analysis_not_ready": "訪談尚未完成，暫時無法開始評估。",
     "analysis_not_found": "尚未找到這份規劃的評估結果。",
     "analysis_already_exists": "這份規劃已有評估結果，已保留原有內容。",
@@ -52,6 +81,27 @@ _USER_MESSAGES = {
     ),
     "runtime_version_mismatch": "本機服務版本不相容，請重新啟動應用程式。",
     "local_service_timeout": "AI PoC Planner 本機服務回應逾時，請重新執行啟動器。",
+}
+
+_SAFE_USER_ACTIONS = {
+    "provider_auth_required": "請補充 API key 後再測試。",
+    "provider_auth_failed": "請確認 API key 與端點權限後再試。",
+    "provider_parameter_unsupported": "請檢查模型能力設定中的參數相容性。",
+    "provider_structured_output_unsupported": "請改用支援的結構化輸出模式，或啟用 JSON Object fallback。",
+    "provider_not_found": "請確認端點網址與模型名稱。",
+    "provider_timeout": "請稍後重試，或檢查端點負載與 timeout 設定。",
+    "provider_connection_failed": "請確認端點正在執行且網路連線可用。",
+    "provider_rate_limited": "請稍後重試，或降低請求頻率。",
+    "provider_unavailable": "請稍後重試，並確認服務目前可用。",
+    "provider_http_error": "請檢查端點設定與請求能力後再試。",
+    "provider_invalid_response": "請確認端點回傳 OpenAI-compatible chat completion。",
+    "provider_output_truncated": "請提高輸出預算後再試。",
+    "provider_output_invalid": "請重試；若持續失敗，請檢查結構化輸出能力。",
+    "provider_schema_invalid": "目前的結構化輸出契約無法送出，請檢查 profile 設定。",
+    "model_profile_auth_required": "請輸入 API key，或改用不需要認證的端點。",
+    "model_profile_auth_forbidden": "請清除已保存 API key 後再使用 none 認證模式。",
+    "model_profile_reasoning_unsupported": "請清除 reasoning effort 後再儲存。",
+    "model_profile_structured_output_invalid": "請至少啟用一種模式，並選擇支援的 preferred mode。",
 }
 
 
@@ -362,14 +412,25 @@ class ApiClient:
     @staticmethod
     def _error_from_response(response: httpx.Response) -> ApiClientError:
         code = "internal_error"
+        retryable = False
+        user_action: str | None = None
         try:
             payload = response.json()
             if isinstance(payload, dict):
                 error = payload.get("error")
                 if isinstance(error, dict) and isinstance(error.get("code"), str):
                     code = error["code"]
+                    details = error.get("details")
+                    if isinstance(details, dict):
+                        retryable = details.get("retryable") is True
+                        action = details.get("user_action")
+                        if action == _SAFE_USER_ACTIONS.get(code):
+                            user_action = action
         except ValueError:
             pass
         return ApiClientError(
-            code, _USER_MESSAGES.get(code, _USER_MESSAGES["internal_error"])
+            code,
+            _USER_MESSAGES.get(code, _USER_MESSAGES["internal_error"]),
+            retryable=retryable,
+            user_action=user_action,
         )

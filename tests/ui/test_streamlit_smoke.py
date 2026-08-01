@@ -39,6 +39,23 @@ def test_product_pages_load_without_a_running_api(
     assert [item.value for item in app.title] == [title]
 
 
+def test_model_settings_exposes_safe_provider_capability_controls() -> None:
+    source = open("app_pages/model_settings.py", encoding="utf-8").read()
+
+    for label in (
+        "Authentication mode",
+        "Token parameter",
+        "Reasoning parameter",
+        "Supports JSON Schema",
+        "Supports JSON Object",
+        "清除已保存 API key",
+    ):
+        assert label in source
+    assert "ai_poc_planner.providers" not in source
+    assert "ai_poc_planner.persistence" not in source
+    assert "ai_poc_planner.application" not in source
+
+
 def test_global_navigation_contains_only_project_entry_points() -> None:
     source = open("streamlit_app.py", encoding="utf-8").read()
 

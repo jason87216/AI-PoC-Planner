@@ -8,7 +8,9 @@ import pytest
 
 from ai_poc_planner.ui.api_client import ApiClient, ApiClientError
 from ai_poc_planner.ui.results import (
+    MarkdownDownload,
     analysis_overview,
+    markdown_download,
     markdown_download_name,
     report_sections,
     report_synthesis_view,
@@ -153,6 +155,18 @@ def test_report_sections_cases_and_markdown_filename_use_persisted_content() -> 
         markdown_download_name("Invoice / triage", 2)
         == "AI-PoC-Plan-Invoice-triage-v2.md"
     )
+
+
+def test_markdown_download_uses_the_persisted_report_transformation() -> None:
+    report = {"markdown": "# 已保存報告\n\n內容。\n"}
+
+    download = markdown_download(report, "權限申請 / PoC", 3)
+
+    assert isinstance(download, MarkdownDownload)
+    assert download.data == report["markdown"].encode("utf-8")
+    assert download.data.decode("utf-8") == report["markdown"]
+    assert download.file_name == "AI-PoC-Plan-權限申請-PoC-v3.md"
+    assert download.mime == "text/markdown"
 
 
 def test_result_errors_are_mapped_to_safe_user_messages() -> None:

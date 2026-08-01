@@ -32,14 +32,23 @@ from ai_poc_planner.domain.enums import (
     DecisionAuthority,
     FactStatus,
     HighImpactDomain,
+    InterviewRole,
     ProcessingBoundary,
+    ProjectStatus,
     ScoreDimension,
+    VisibleMessageKind,
 )
-from ai_poc_planner.domain.project_history import FactRevision
+from ai_poc_planner.domain.project_history import (
+    FactRevision,
+    PlanningProject,
+    ProjectVersion,
+)
+from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.catalog_seed import (
     reviewed_cases,
     reviewed_solution_patterns,
 )
+from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.schema import initialize_database
 from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
 from ai_poc_planner.ui.results import case_centered_overview
@@ -142,6 +151,8 @@ def _draft_option(
     opportunity_type: OpportunityType,
     human_boundary: str = "由負責人依政策覆核後再執行。",
     deployment_constraint: str = "依目前資料與治理條件限制範圍。",
+    decision_authority: DecisionAuthority = DecisionAuthority.HUMAN_FINAL_DECISION,
+    processing_boundary: ProcessingBoundary = ProcessingBoundary.LOCAL_ONLY,
 ) -> AnalysisOptionDraft:
     opportunity = CatalogOpportunity(
         kind="catalog",
@@ -159,8 +170,8 @@ def _draft_option(
         prerequisites=["完成必要的資料與治理確認"],
         risks=["未確認條件不可視為已通過"],
         fact_refs=[fact_ref],
-        decision_authority=DecisionAuthority.HUMAN_FINAL_DECISION,
-        processing_boundary=ProcessingBoundary.LOCAL_ONLY,
+        decision_authority=decision_authority,
+        processing_boundary=processing_boundary,
         human_review_points=[human_boundary],
         ai_opportunity=opportunity
         if kind in {AnalysisOptionKind.AI, AnalysisOptionKind.HYBRID}
@@ -181,6 +192,10 @@ def _draft_option(
 def _formal_result(
     scenario: AcceptanceScenario,
     selected_kind_override: AnalysisOptionKind | None = None,
+    *,
+    provider_authority: DecisionAuthority = DecisionAuthority.HUMAN_FINAL_DECISION,
+    provider_boundary: ProcessingBoundary = ProcessingBoundary.LOCAL_ONLY,
+    persist: bool = False,
 ):
     facts = _facts(scenario)
     ordered_facts = sorted(facts, key=lambda item: item.fact_key.casefold())
@@ -222,12 +237,16 @@ def _formal_result(
                 ),
                 human_boundary=scenario.expected.human_decision_boundary,
                 deployment_constraint=scenario.expected.deployment_constraint,
+                decision_authority=provider_authority,
+                processing_boundary=provider_boundary,
             ),
             _draft_option(
                 key="o2",
                 kind=alternative_kind,
                 fact_ref=fact_ref,
                 opportunity_type=OpportunityType.ENTERPRISE_KNOWLEDGE_AND_PROFESSIONAL_DOCUMENT_ASSIST,
+                decision_authority=provider_authority,
+                processing_boundary=provider_boundary,
             ),
         ],
         recommended_option_key="o1",
@@ -256,9 +275,52 @@ def _formal_result(
     service._clock = lambda: datetime.now(UTC)
     service._uuid_factory = uuid4
     try:
-        return service._validated_result(
+        result = service._validated_result(
             SimpleNamespace(id=uuid4()), draft, ordered_facts, tokens
         )
+        if not persist:
+            return result
+        now = datetime.now(UTC)
+        history = SQLiteProjectHistoryRepository(connection)
+        project = PlanningProject(
+            id=uuid4(),
+            project_name="formal assessment policy persistence",
+            created_at=now,
+            updated_at=now,
+        )
+        version = ProjectVersion(
+            id=uuid4(),
+            project_id=project.id,
+            version_number=1,
+            status=ProjectStatus.READY_FOR_ASSESSMENT,
+            created_at=now,
+            updated_at=now,
+        )
+        history.create_project_with_version(project, version)
+        message = history.append_message(
+            version_id=version.id,
+            role=InterviewRole.USER,
+            message_kind=VisibleMessageKind.USER_INPUT.value,
+            content="確認的受控權限申請事實。",
+            created_at=now,
+            message_id=uuid4(),
+        )
+        for fact in ordered_facts:
+            history.create_fact(
+                fact.model_copy(
+                    update={
+                        "version_id": version.id,
+                        "reference_message_ids": [message.id],
+                    }
+                ),
+                project_updated_at=now,
+            )
+        analyses = SQLiteAnalysisRepository(connection)
+        persisted_result = result.model_copy(update={"version_id": version.id})
+        analyses.create(persisted_result, tokens)
+        persisted = analyses.get_by_version(version.id)
+        assert persisted is not None
+        return persisted
     finally:
         connection.close()
 
@@ -583,6 +645,48 @@ def test_governed_access_keeps_human_authority_and_exposes_gate_impacts() -> Non
         "hard gate" in item for item in result.case_centered.recommendation_basis
     )
     assert len(result.case_centered.phased_path) >= 3
+
+
+def test_governed_access_normalizes_provider_deployment_and_authority() -> None:
+    scenario = _scenario("governed_access")
+    nvidia_style = _formal_result(
+        scenario,
+        provider_authority=DecisionAuthority.AUTONOMOUS_ACTION,
+        provider_boundary=ProcessingBoundary.EXTERNAL_ENDPOINT,
+        persist=True,
+    )
+    llama_style = _formal_result(
+        scenario,
+        provider_authority=DecisionAuthority.ASSISTIVE_ONLY,
+        provider_boundary=ProcessingBoundary.LOCAL_ONLY,
+    )
+
+    for result in (nvidia_style, llama_style):
+        assert {option.processing_boundary for option in result.options} == {
+            ProcessingBoundary.PRIVATE_ENDPOINT
+        }
+        assert {option.decision_authority for option in result.options} == {
+            DecisionAuthority.HUMAN_FINAL_DECISION
+        }
+        assert tuple(
+            (item.rule_id, item.disposition.value) for item in result.gate_results
+        ) == (
+            ("HG-01", "blocked"),
+            ("HG-03", "assistive_only"),
+            ("HG-05", "requires_controls"),
+            ("HG-06", "requires_controls"),
+        )
+
+    assert [
+        (option.decision_authority, option.processing_boundary)
+        for option in nvidia_style.options
+    ] == [
+        (option.decision_authority, option.processing_boundary)
+        for option in llama_style.options
+    ]
+    assert nvidia_style.model_dump(
+        exclude={"id", "version_id", "created_at"}
+    ) == llama_style.model_dump(exclude={"id", "version_id", "created_at"})
 
 
 def test_coverage_gap_never_invents_a_case_and_keeps_unknowns_conservative() -> None:

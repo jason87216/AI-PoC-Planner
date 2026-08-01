@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from ai_poc_planner.app.api import create_app
+from ai_poc_planner.config import PROVIDER_READINESS_TIMEOUT_ENV
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderError
 
@@ -16,7 +18,7 @@ RAW_MARKER = "provider-raw-marker-7d14"
 
 class SuccessfulAdapter:
     def complete(self, **_: object) -> str:
-        return "connection ok"
+        return '{"status":"ok"}'
 
 
 class FailingAdapter:
@@ -26,14 +28,16 @@ class FailingAdapter:
 
 class CapturingDefaultAdapter:
     clients: list[httpx.Client] = []
+    arguments: list[dict[str, object]] = []
 
     def __init__(self, **kwargs: object) -> None:
+        self.arguments.append(dict(kwargs))
         client = kwargs["client"]
         assert isinstance(client, httpx.Client)
         self.clients.append(client)
 
     def complete(self, **_: object) -> str:
-        return "connection ok"
+        return '{"status":"ok"}'
 
 
 class InjectedClientAdapter:
@@ -41,7 +45,16 @@ class InjectedClientAdapter:
         self.client = client
 
     def complete(self, **_: object) -> str:
-        return "connection ok"
+        return '{"status":"ok"}'
+
+
+class PromptCapturingAdapter:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, str]] = []
+
+    def complete(self, **kwargs: object) -> str:
+        self.messages = [dict(message) for message in kwargs["messages"]]  # type: ignore[index]
+        return '{"status":"ok"}'
 
 
 def _client(tmp_path: Path, adapter: object = SuccessfulAdapter()) -> TestClient:
@@ -96,6 +109,57 @@ def test_profile_crud_returns_only_public_contract_and_safe_validation(
     assert deleted.status_code == 204
 
 
+def test_profile_capabilities_round_trip_and_key_patch_semantics(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    profile = client.post(
+        "/v1/model-profiles",
+        json={
+            "profile_name": "Explicit",
+            "base_url": "http://localhost:8080/v1",
+            "model_name": "qwen-local",
+            "api_key": SECRET_MARKER,
+            "structured_output_mode": "json_schema",
+            "capabilities": {
+                "authentication": "bearer_optional",
+                "token_parameter": "max_tokens",
+                "reasoning_parameter": "unsupported",
+                "json_schema": True,
+                "json_object": True,
+            },
+        },
+    )
+    assert profile.status_code == 201
+    public = profile.json()
+    assert public["capabilities"]["json_schema"] is True
+    assert "api_key" not in public
+
+    omitted = client.patch(
+        f"/v1/model-profiles/{public['id']}", json={"model_name": "qwen-local-2"}
+    )
+    assert omitted.status_code == 200
+    assert omitted.json()["capabilities"]["json_schema"] is True
+
+    forbidden = client.patch(
+        f"/v1/model-profiles/{public['id']}",
+        json={"capabilities": {"authentication": "none", "json_object": True}},
+    )
+    assert forbidden.status_code == 409
+    assert forbidden.json()["error"]["code"] == "model_profile_auth_forbidden"
+
+    cleared = client.patch(
+        f"/v1/model-profiles/{public['id']}",
+        json={
+            "api_key": None,
+            "structured_output_mode": "json_object",
+            "capabilities": {"authentication": "none", "json_object": True},
+        },
+    )
+    assert cleared.status_code == 200
+    assert "api_key" not in cleared.json()
+
+
 def test_selected_status_connection_test_and_readiness_guard(tmp_path: Path) -> None:
     client = _client(tmp_path)
     profile = _create_profile(client)
@@ -109,6 +173,33 @@ def test_selected_status_connection_test_and_readiness_guard(tmp_path: Path) -> 
     assert tested.json()["connection_state"] == "connected"
     assert tested.json()["formal_analysis_allowed"] is True
     assert ready.status_code == 200
+
+
+def test_readiness_prompt_states_exact_json_contract_without_runtime_data(
+    tmp_path: Path,
+) -> None:
+    adapter = PromptCapturingAdapter()
+    client = _client(tmp_path, adapter)
+    profile = _create_profile(client, name="profile-user-marker")
+
+    assert client.post(f"/v1/model-profiles/{profile['id']}/select").status_code == 200
+    response = client.post(f"/v1/model-profiles/{profile['id']}/test")
+
+    assert response.status_code == 200
+    assert len(adapter.messages) == 2
+    system_message = adapter.messages[0]["content"]
+    user_message = adapter.messages[1]["content"]
+    assert "JSON" in system_message
+    assert 'field named "status"' in system_message
+    assert 'literal string "ok"' in system_message
+    assert "Do not add any other fields" in system_message
+    assert "Markdown" in system_message
+    assert "explanation" in system_message
+    assert "reasoning" in system_message
+    assert user_message == 'Return exactly: {"status":"ok"}'
+    assert SECRET_MARKER not in system_message + user_message
+    assert "Authorization" not in system_message + user_message
+    assert "profile-user-marker" not in system_message + user_message
 
 
 def test_edit_disable_and_delete_invalidate_process_status(tmp_path: Path) -> None:
@@ -144,6 +235,9 @@ def test_failed_connection_keeps_safe_failed_status_without_raw_response(
 
     assert response.status_code == 200
     assert response.json()["connection_state"] == "failed"
+    assert response.json()["failure"]["code"] == "provider_unavailable"
+    assert response.json()["failure"]["operation"] == "readiness"
+    assert response.json()["failure"]["retryable"] is True
     assert RAW_MARKER not in response.text
 
 
@@ -170,6 +264,7 @@ def test_default_connection_tests_reuse_and_close_the_app_owned_http_client(
     monkeypatch: object, tmp_path: Path
 ) -> None:
     CapturingDefaultAdapter.clients = []
+    CapturingDefaultAdapter.arguments = []
     monkeypatch.setattr(
         "ai_poc_planner.app.api.OpenAICompatibleChatAdapter",
         CapturingDefaultAdapter,
@@ -195,8 +290,44 @@ def test_default_connection_tests_reuse_and_close_the_app_owned_http_client(
         assert CapturingDefaultAdapter.clients == [app_owned_client, app_owned_client]
         assert app_owned_client._trust_env is False
         assert not app_owned_client.is_closed
+        assert CapturingDefaultAdapter.arguments[0]["timeout_seconds"] == 60
 
     assert app_owned_client.is_closed
+
+
+def test_default_readiness_timeout_uses_process_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv(PROVIDER_READINESS_TIMEOUT_ENV, "300")
+    CapturingDefaultAdapter.clients = []
+    CapturingDefaultAdapter.arguments = []
+    monkeypatch.setattr(
+        "ai_poc_planner.app.api.OpenAICompatibleChatAdapter",
+        CapturingDefaultAdapter,
+    )
+    repository = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
+    app = create_app(
+        chat_model=GenericFakeChatModel(messages=iter([])),
+        model_profile_repository=repository,
+    )
+
+    with TestClient(app) as client:
+        profile = _create_profile(client)
+        client.post(f"/v1/model-profiles/{profile['id']}/select")
+        assert (
+            client.post(f"/v1/model-profiles/{profile['id']}/test").status_code == 200
+        )
+
+    assert CapturingDefaultAdapter.arguments[0]["timeout_seconds"] == 300
+
+
+def test_invalid_readiness_timeout_rejects_app_composition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(PROVIDER_READINESS_TIMEOUT_ENV, "0")
+
+    with pytest.raises(ValueError, match="provider_readiness_timeout_invalid"):
+        create_app(chat_model=GenericFakeChatModel(messages=iter([])))
 
 
 def test_injected_connection_adapter_client_is_not_owned_by_app_lifecycle(
@@ -229,6 +360,7 @@ def test_app_owned_client_shutdown_is_idempotent(
     monkeypatch: object, tmp_path: Path
 ) -> None:
     CapturingDefaultAdapter.clients = []
+    CapturingDefaultAdapter.arguments = []
     monkeypatch.setattr(
         "ai_poc_planner.app.api.OpenAICompatibleChatAdapter",
         CapturingDefaultAdapter,

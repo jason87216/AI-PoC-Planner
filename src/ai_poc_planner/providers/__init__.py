@@ -14,6 +14,17 @@ from ai_poc_planner.providers.base import (
     ReasoningEffort,
     StructuredOutputMode,
 )
+from ai_poc_planner.providers.capabilities import (
+    AuthenticationMode,
+    OpenAICompatibleCapabilities,
+    ReasoningParameter,
+    TokenParameter,
+)
+from ai_poc_planner.providers.errors import (
+    ProviderOperation,
+    ProviderOperationError,
+    SafeProviderFailure,
+)
 from ai_poc_planner.providers.fake import (
     FakeEmbeddingProvider,
     FakeModelProvider,
@@ -31,9 +42,15 @@ from ai_poc_planner.providers.profiles import (
     ModelProfilePublic,
     ProviderConnectionStatus,
 )
+from ai_poc_planner.providers.structured_output import (
+    StructuredOutputContentError,
+    StructuredOutputExecution,
+    StructuredOutputExecutor,
+)
 
 __all__ = [
     "AssessmentToolInputs",
+    "AuthenticationMode",
     "EmbeddingProvider",
     "FakeEmbeddingProvider",
     "FakeModelProvider",
@@ -43,6 +60,7 @@ __all__ = [
     "ModelProvider",
     "OpenAIChatCompletionRequest",
     "OpenAIChatMessage",
+    "OpenAICompatibleCapabilities",
     "JSONObjectResponseFormat",
     "OpenAICompatibleChatAdapter",
     "OpenAICompatibleProviderError",
@@ -54,6 +72,14 @@ __all__ = [
     "ProviderError",
     "ProviderPreparation",
     "ProviderRequest",
+    "ProviderOperation",
+    "ProviderOperationError",
     "ReasoningEffort",
+    "ReasoningParameter",
+    "SafeProviderFailure",
     "StructuredOutputMode",
+    "StructuredOutputContentError",
+    "StructuredOutputExecution",
+    "StructuredOutputExecutor",
+    "TokenParameter",
 ]

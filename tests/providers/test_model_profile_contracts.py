@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 import json
 from datetime import UTC, datetime
 from uuid import UUID
@@ -6,10 +8,16 @@ import pytest
 from pydantic import ValidationError
 
 from ai_poc_planner.providers import (
+    AuthenticationMode,
     ModelProfile,
+    OpenAICompatibleCapabilities,
     ProviderConnectionMessage,
     ProviderConnectionState,
     ProviderConnectionStatus,
+    ReasoningParameter,
+    SafeProviderFailure,
+    StructuredOutputMode,
+    TokenParameter,
 )
 
 PROFILE_ID = UUID("50000000-0000-0000-0000-000000000001")
@@ -35,6 +43,18 @@ def _profile(**overrides: object) -> ModelProfile:
     return ModelProfile.model_validate(values)
 
 
+def _capabilities(**overrides: object) -> OpenAICompatibleCapabilities:
+    values: dict[str, object] = {
+        "authentication": AuthenticationMode.BEARER_OPTIONAL,
+        "token_parameter": TokenParameter.MAX_TOKENS,
+        "reasoning_parameter": ReasoningParameter.UNSUPPORTED,
+        "json_schema": False,
+        "json_object": True,
+    }
+    values.update(overrides)
+    return OpenAICompatibleCapabilities.model_validate(values)
+
+
 def _status(**overrides: object) -> ProviderConnectionStatus:
     values: dict[str, object] = {
         "schema_version": "1.0",
@@ -45,6 +65,11 @@ def _status(**overrides: object) -> ProviderConnectionStatus:
         "model_name": "qwen-local",
     }
     values.update(overrides)
+    if values.get("connection_state") is ProviderConnectionState.FAILED:
+        values.setdefault(
+            "failure",
+            SafeProviderFailure.from_code("provider_unavailable", "readiness"),
+        )
     return ProviderConnectionStatus.model_validate(values)
 
 
@@ -93,6 +118,88 @@ def test_model_profile_allows_null_or_empty_api_key(api_key: str | None) -> None
     else:
         assert profile.api_key is not None
         assert profile.api_key.get_secret_value() == ""
+
+
+def test_legacy_profile_derives_conservative_effective_capabilities() -> None:
+    profile = _profile()
+
+    effective = profile.effective_capabilities
+
+    assert effective.authentication is AuthenticationMode.BEARER_OPTIONAL
+    assert effective.token_parameter is TokenParameter.MAX_TOKENS
+    assert effective.reasoning_parameter is ReasoningParameter.UNSUPPORTED
+    assert effective.json_schema is False
+    assert effective.json_object is True
+    assert profile.effective_structured_output_mode is StructuredOutputMode.JSON_OBJECT
+
+
+@pytest.mark.parametrize(
+    ("authentication", "api_key"),
+    [
+        (AuthenticationMode.BEARER_REQUIRED, None),
+        (AuthenticationMode.BEARER_REQUIRED, ""),
+        (AuthenticationMode.BEARER_REQUIRED, "   "),
+    ],
+)
+def test_required_authentication_rejects_missing_key(
+    authentication: AuthenticationMode, api_key: str | None
+) -> None:
+    with pytest.raises(ValidationError, match="model_profile_auth_required"):
+        _profile(
+            api_key=api_key,
+            capabilities=_capabilities(authentication=authentication),
+        )
+
+
+def test_none_authentication_rejects_a_key() -> None:
+    with pytest.raises(ValidationError, match="model_profile_auth_forbidden"):
+        _profile(
+            capabilities=_capabilities(authentication=AuthenticationMode.NONE),
+        )
+
+
+def test_profile_validation_rendering_never_contains_secret_marker() -> None:
+    marker = "profile-secret-marker-p72a"
+    with pytest.raises(ValidationError) as error:
+        _profile(
+            api_key=marker,
+            capabilities=_capabilities(authentication=AuthenticationMode.NONE),
+        )
+
+    assert marker not in str(error.value)
+    assert marker not in repr(error.value)
+
+
+def test_unsupported_reasoning_rejects_configured_effort() -> None:
+    with pytest.raises(ValidationError, match="model_profile_reasoning_unsupported"):
+        _profile(
+            reasoning_effort="low",
+            capabilities=_capabilities(
+                reasoning_parameter=ReasoningParameter.UNSUPPORTED,
+            ),
+        )
+
+
+def test_capabilities_require_preferred_structured_mode_to_be_supported() -> None:
+    with pytest.raises(
+        ValidationError, match="model_profile_structured_output_invalid"
+    ):
+        _profile(
+            structured_output_mode=StructuredOutputMode.JSON_SCHEMA,
+            capabilities=_capabilities(json_schema=False, json_object=True),
+        )
+
+
+def test_explicit_both_structured_modes_are_valid_and_immutable() -> None:
+    profile = _profile(
+        structured_output_mode=StructuredOutputMode.JSON_SCHEMA,
+        capabilities=_capabilities(json_schema=True, json_object=True),
+    )
+
+    assert profile.effective_capabilities.json_schema is True
+    assert profile.effective_capabilities.json_object is True
+    with pytest.raises(ValidationError):
+        profile.effective_capabilities.json_schema = False
 
 
 @pytest.mark.parametrize("field_name", ["profile_name", "model_name"])

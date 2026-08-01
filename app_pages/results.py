@@ -10,7 +10,7 @@ from ai_poc_planner.ui.api_client import ApiClientError
 from ai_poc_planner.ui.presentation import show_api_error, status_label
 from ai_poc_planner.ui.results import (
     analysis_overview,
-    markdown_download_name,
+    markdown_download,
     report_synthesis_view,
     result_view_for_status,
 )
@@ -162,11 +162,12 @@ def _render_synthesis(
 
     st.header("1. 專案評估摘要")
     st.write(view["executive_narrative"])
+    download = markdown_download(report, project_name, version_number)
     st.download_button(
         "下載 Markdown 報告",
-        data=str(report.get("markdown", "")).encode("utf-8"),
-        file_name=markdown_download_name(project_name, version_number),
-        mime="text/markdown",
+        data=download.data,
+        file_name=download.file_name,
+        mime=download.mime,
         icon=":material/download:",
     )
 

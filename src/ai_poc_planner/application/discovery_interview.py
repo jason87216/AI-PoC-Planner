@@ -5,16 +5,16 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ValidationError
-
 from ai_poc_planner.application.project_history import ProjectHistoryService
-from ai_poc_planner.application.provider_readiness import ProviderReadinessService
+from ai_poc_planner.application.provider_readiness import (
+    ProviderReadinessError,
+    ProviderReadinessService,
+)
 from ai_poc_planner.domain.discovery import (
     DiscoverySession,
     InitialBrief,
@@ -48,16 +48,18 @@ from ai_poc_planner.persistence.errors import (
     UnderstandingAlreadyConfirmedError,
     UnderstandingConfirmationRequiredError,
 )
-from ai_poc_planner.providers.base import StructuredOutputMode
 from ai_poc_planner.providers.discovery_contracts import (
     ProviderRequirementUnderstanding,
 )
-from ai_poc_planner.providers.json_schema import normalize_provider_schema
-from ai_poc_planner.providers.openai_compatible import (
-    JSONObjectResponseFormat,
-    JSONSchemaResponseFormat,
+from ai_poc_planner.providers.errors import (
+    ProviderOperation,
+    ProviderOperationError,
 )
 from ai_poc_planner.providers.profiles import ModelProfile
+from ai_poc_planner.providers.structured_output import (
+    StructuredOutputContentError,
+    StructuredOutputExecutor,
+)
 
 
 class DiscoveryError(RuntimeError):
@@ -85,25 +87,6 @@ def normalize_available_data(value: str) -> AvailableDataStatus:
     if normalized in {"目前没有", "没有", "none", "not available"}:
         return AvailableDataStatus.MISSING
     return AvailableDataStatus.KNOWN
-
-
-def parse_structured_output(raw: str, contract: type[BaseModel]) -> BaseModel:
-    """Accept one JSON object or one complete json fence, never embedded prose."""
-
-    candidate = raw.strip()
-    fence = re.fullmatch(r"```json\s*\n?(.*?)\n?```", candidate, flags=re.DOTALL)
-    if fence is not None:
-        candidate = fence.group(1).strip()
-    try:
-        payload = json.loads(candidate)
-    except (TypeError, json.JSONDecodeError) as error:
-        raise DiscoveryError("provider_output_invalid") from error
-    if not isinstance(payload, dict):
-        raise DiscoveryError("provider_output_invalid")
-    try:
-        return contract.model_validate(payload)
-    except ValidationError as error:
-        raise DiscoveryError("provider_output_invalid") from error
 
 
 class DiscoveryInterviewService:
@@ -739,6 +722,8 @@ class DiscoveryInterviewService:
                 if self._profile_getter is not None
                 else self._selected_profile_getter()
             )
+        except ProviderReadinessError as error:
+            raise DiscoveryError(error.code) from error
         except Exception:
             return None
         if (
@@ -750,6 +735,8 @@ class DiscoveryInterviewService:
             return None
         try:
             self._readiness.require_profile_ready(profile.id)
+        except ProviderReadinessError as error:
+            raise DiscoveryError(error.code) from error
         except Exception:
             return None
         return profile
@@ -772,50 +759,37 @@ class DiscoveryInterviewService:
         if profile is None:
             raise DiscoveryError("provider_not_ready")
         adapter = self._adapter_factory(profile)
-        provider_contract: type[BaseModel] = (
+        provider_contract = (
             ProviderRequirementUnderstanding
             if contract is RequirementUnderstanding
-            and profile.structured_output_mode is StructuredOutputMode.JSON_SCHEMA
+            and profile.effective_structured_output_mode.value == "json_schema"
             else contract
         )
-        response_format = (
-            JSONSchemaResponseFormat(
-                name="requirement_understanding"
-                if provider_contract is ProviderRequirementUnderstanding
-                else "interview_round",
-                schema=normalize_provider_schema(provider_contract.model_json_schema()),
+        try:
+            execution = StructuredOutputExecutor().execute(
+                adapter=adapter,
+                capabilities=profile.effective_capabilities,
+                preferred_mode=profile.effective_structured_output_mode,
+                operation=ProviderOperation.DISCOVERY,
+                schema_name=(
+                    "requirement_understanding"
+                    if provider_contract is ProviderRequirementUnderstanding
+                    else "interview_round"
+                ),
+                provider_contract=provider_contract,
+                messages=messages,
+                logical_max_tokens=4096,
+                temperature=0,
+                reasoning_effort=profile.reasoning_effort,
             )
-            if profile.structured_output_mode is StructuredOutputMode.JSON_SCHEMA
-            else JSONObjectResponseFormat()
-        )
-        for attempt in range(2):
-            try:
-                raw = adapter.complete(
-                    messages=messages,
-                    temperature=0,
-                    max_tokens=min(2048 * (2**attempt), 4096),
-                    response_format=response_format,
-                    reasoning_effort=profile.reasoning_effort,
-                )
-                parsed = parse_structured_output(raw, provider_contract)
-                if isinstance(parsed, ProviderRequirementUnderstanding):
-                    parsed = parsed.to_domain()
-                return parsed
-            except Exception as error:
-                if attempt:
-                    raise DiscoveryError("provider_output_invalid") from error
-                messages = [
-                    {
-                        **messages[0],
-                        "content": (
-                            str(messages[0]["content"])
-                            + " Repair all required fields. Return only one "
-                            "complete JSON object."
-                        ),
-                    },
-                    *messages[1:],
-                ]
-        raise DiscoveryError("provider_output_invalid")
+        except ProviderOperationError as error:
+            raise DiscoveryError(error.code) from error
+        except StructuredOutputContentError as error:
+            raise DiscoveryError(error.code) from error
+        parsed = execution.value
+        if isinstance(parsed, ProviderRequirementUnderstanding):
+            parsed = parsed.to_domain()
+        return parsed
 
     @staticmethod
     def _validate_understanding(

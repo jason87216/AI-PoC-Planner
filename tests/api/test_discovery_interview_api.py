@@ -8,11 +8,12 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from ai_poc_planner.app.api import create_app
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
+from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderError
 
 
 class ConnectedAdapter:
     def complete(self, **_: object) -> str:
-        return "connected"
+        return '{"status":"ok"}'
 
 
 class DiscoveryAdapter:
@@ -48,6 +49,14 @@ class DiscoveryAdapter:
         )
 
 
+class AuthFailingDiscoveryAdapter:
+    def complete(self, **kwargs: object) -> str:
+        response_format = kwargs["response_format"]
+        if response_format.name == "connection_probe":
+            return '{"status":"ok"}'
+        raise OpenAICompatibleProviderError("provider_auth_failed")
+
+
 def _client(tmp_path: Path) -> TestClient:
     profiles = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
     adapter = DiscoveryAdapter()
@@ -58,6 +67,19 @@ def _client(tmp_path: Path) -> TestClient:
             model_profile_repository=profiles,
             connection_adapter_factory=lambda _: ConnectedAdapter(),
             interview_adapter_factory=lambda _: adapter,
+        )
+    )
+
+
+def _auth_failing_client(tmp_path: Path) -> TestClient:
+    profiles = LocalModelProfileRepository(path=tmp_path / "auth-failing.json")
+    return TestClient(
+        create_app(
+            chat_model=GenericFakeChatModel(messages=iter([])),
+            database_path=tmp_path / "auth-failing.sqlite3",
+            model_profile_repository=profiles,
+            connection_adapter_factory=lambda _: ConnectedAdapter(),
+            interview_adapter_factory=lambda _: AuthFailingDiscoveryAdapter(),
         )
     )
 
@@ -140,6 +162,31 @@ def test_phase_three_initial_brief_understanding_and_bounded_round(
     )
     assert answered.status_code == 200
     assert answered.json()["status"] == "ready_for_next_round"
+
+
+def test_discovery_provider_auth_failure_is_safe_and_does_not_persist_assistant_output(
+    tmp_path: Path,
+) -> None:
+    client = _auth_failing_client(tmp_path)
+    _ready_profile(client)
+    created = client.post(
+        "/v1/discovery-projects",
+        json={
+            "project_name": "Auth failure",
+            "current_workflow_problem": "Manual routing",
+            "desired_outcome": "Faster routing",
+            "available_data": "Unknown",
+        },
+    )
+    project_id = created.json()["project"]["id"]
+
+    failed = client.post(f"/v1/projects/{project_id}/versions/1/understanding")
+
+    assert failed.status_code == 502
+    assert failed.json()["error"]["code"] == "provider_auth_failed"
+    assert failed.json()["error"]["details"]["operation"] == "discovery"
+    messages = client.get(f"/v1/projects/{project_id}/versions/1/messages").json()
+    assert all(message["role"] != "assistant" for message in messages)
 
 
 def test_requirement_feedback_accepts_natural_language_without_fact_ids(

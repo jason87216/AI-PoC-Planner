@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 _STATUS_VIEWS = {
@@ -527,3 +529,24 @@ def markdown_download_name(project_name: object, version_number: object) -> str:
     words = re.findall(r"[\w-]+", str(project_name), flags=re.UNICODE)
     project_part = "-".join(words) or "plan"
     return f"AI-PoC-Plan-{project_part}-v{version_number}.md"
+
+
+@dataclass(frozen=True)
+class MarkdownDownload:
+    """The exact persisted Markdown payload exposed by the Results download UI."""
+
+    data: bytes
+    file_name: str
+    mime: str
+
+
+def markdown_download(
+    report: Mapping[str, object], project_name: object, version_number: object
+) -> MarkdownDownload:
+    """Build the download payload without regenerating or transforming a report."""
+
+    return MarkdownDownload(
+        data=str(report.get("markdown", "")).encode("utf-8"),
+        file_name=markdown_download_name(project_name, version_number),
+        mime="text/markdown",
+    )

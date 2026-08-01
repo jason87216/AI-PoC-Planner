@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, model_validator
 
 from ai_poc_planner.domain.analysis import FactToken
 from ai_poc_planner.domain.case_centered import CaseCenteredNarrative
@@ -34,8 +34,27 @@ REPORT_SECTION_KEYS = (
     "open_issues_and_next_actions",
 )
 
+ProviderNarrationText = Annotated[
+    str,
+    StringConstraints(
+        strict=True,
+        strip_whitespace=True,
+        min_length=1,
+        pattern=r"^[^0-9]+$",
+    ),
+]
+
+
+class ProviderReportSectionDraft(ContractModel):
+    """Strict provider-facing narration; persisted reports use a wider contract."""
+
+    content: ProviderNarrationText
+    fact_refs: list[FactToken] = Field(min_length=1)
+
 
 class ReportSectionDraft(ContractModel):
+    """Persisted narration retained for backwards-compatible report reloads."""
+
     content: NonEmptyStr
     fact_refs: list[FactToken] = Field(min_length=1)
 
@@ -260,27 +279,27 @@ class PlanningReportDraft(ContractModel):
 
 
 class PlanningReportPartA(ContractModel):
-    executive_summary: ReportSectionDraft
-    requirement_understanding: ReportSectionDraft
-    current_process_and_pain_points: ReportSectionDraft
-    goals_and_proposed_success_criteria: ReportSectionDraft
-    ai_suitability_explanation: ReportSectionDraft
-    recommended_direction_explanation: ReportSectionDraft
-    alternatives_explanation: ReportSectionDraft
-    target_workflow: ReportSectionDraft
-    data_needs_and_gaps: ReportSectionDraft
+    executive_summary: ProviderReportSectionDraft
+    requirement_understanding: ProviderReportSectionDraft
+    current_process_and_pain_points: ProviderReportSectionDraft
+    goals_and_proposed_success_criteria: ProviderReportSectionDraft
+    ai_suitability_explanation: ProviderReportSectionDraft
+    recommended_direction_explanation: ProviderReportSectionDraft
+    alternatives_explanation: ProviderReportSectionDraft
+    target_workflow: ProviderReportSectionDraft
+    data_needs_and_gaps: ProviderReportSectionDraft
 
 
 class PlanningReportPartB(ContractModel):
-    deployment_comparison: ReportSectionDraft
-    poc_scope: ReportSectionDraft
-    in_scope: ReportSectionDraft
-    out_of_scope: ReportSectionDraft
-    kpi_and_acceptance_method: ReportSectionDraft
-    cost_assumptions: ReportSectionDraft
-    implementation_stages_and_roles: ReportSectionDraft
-    risks_governance_and_human_review: ReportSectionDraft
-    open_issues_and_next_actions: ReportSectionDraft
+    deployment_comparison: ProviderReportSectionDraft
+    poc_scope: ProviderReportSectionDraft
+    in_scope: ProviderReportSectionDraft
+    out_of_scope: ProviderReportSectionDraft
+    kpi_and_acceptance_method: ProviderReportSectionDraft
+    cost_assumptions: ProviderReportSectionDraft
+    implementation_stages_and_roles: ProviderReportSectionDraft
+    risks_governance_and_human_review: ProviderReportSectionDraft
+    open_issues_and_next_actions: ProviderReportSectionDraft
 
 
 class PersistedPlanningReport(ContractModel):

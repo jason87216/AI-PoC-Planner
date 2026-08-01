@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from ai_poc_planner.application.provider_readiness import ProviderReadinessService
+from ai_poc_planner.config import provider_readiness_timeout_seconds
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleChatAdapter
 
@@ -41,6 +42,8 @@ def test_user_started_llama_cpp_accepts_connection_test(tmp_path: Path) -> None:
                 else None
             ),
             client=httpx.Client(),
+            timeout_seconds=provider_readiness_timeout_seconds(),
+            capabilities=selected.effective_capabilities,
         ),
     )
 

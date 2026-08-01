@@ -34,17 +34,22 @@ def test_existing_assessment_is_returned_without_provider_or_duplicate_run(
             SQLiteProjectHistoryRepository(connection),
             selected_profile_getter=lambda: None,
         )
+        provider_calls: list[object] = []
+
+        def fail_if_called(_: object) -> object:
+            provider_calls.append(object())
+            raise AssertionError("provider must not be called")
+
         service = EvidenceAnalysisService(
             history=history,
             sessions=SQLiteDiscoveryRepository(connection),
             analyses=SQLiteAnalysisRepository(connection),
             readiness=object(),
             selected_profile_getter=lambda: None,
-            adapter_factory=lambda _: (_ for _ in ()).throw(
-                AssertionError("provider must not be called")
-            ),
+            adapter_factory=fail_if_called,
             catalog=SQLiteSolutionCatalogRepository(connection),
         )
         assert service.create(fixture.project_id, 1) == fixture.expected_analysis
+        assert provider_calls == []
     finally:
         connection.close()

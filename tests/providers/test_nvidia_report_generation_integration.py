@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from ai_poc_planner.app.api import create_app
+from ai_poc_planner.config import provider_readiness_timeout_seconds
 from ai_poc_planner.domain.enums import ProjectStatus
 from ai_poc_planner.domain.project_history import SelectedModelSnapshot
 from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
@@ -64,8 +65,13 @@ class RecordingNvidiaAdapter:
                 else None
             ),
             client=self._recorder._client,
-            timeout_seconds=240 if name.startswith("report_") else 10,
+            timeout_seconds=(
+                240
+                if name.startswith("report_")
+                else provider_readiness_timeout_seconds()
+            ),
             reasoning_effort=self._profile.reasoning_effort,
+            capabilities=self._profile.effective_capabilities,
         ).complete(**kwargs)
 
 

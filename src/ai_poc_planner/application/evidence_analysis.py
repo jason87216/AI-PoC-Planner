@@ -5,13 +5,14 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from pydantic import ValidationError
-
+from ai_poc_planner.application.assessment_policy import (
+    derive_decision_authority,
+    derive_processing_boundary,
+)
 from ai_poc_planner.application.case_centered_assessment import (
     _is_controlled_permission_request_workflow,
     build_case_centered_assessment,
@@ -24,7 +25,10 @@ from ai_poc_planner.application.discovery_interview import (
     InterviewCompletionAdapter,
 )
 from ai_poc_planner.application.project_history import ProjectHistoryService
-from ai_poc_planner.application.provider_readiness import ProviderReadinessService
+from ai_poc_planner.application.provider_readiness import (
+    ProviderReadinessError,
+    ProviderReadinessService,
+)
 from ai_poc_planner.domain.analysis import (
     AIAnalysisDraft,
     FactToken,
@@ -55,13 +59,15 @@ from ai_poc_planner.providers.analysis_contracts import (
     option_detail_contract,
     stage_a0_contract,
 )
-from ai_poc_planner.providers.json_schema import normalize_provider_schema
-from ai_poc_planner.providers.openai_compatible import (
-    JSONObjectResponseFormat,
-    JSONSchemaResponseFormat,
-    OpenAICompatibleProviderError,
+from ai_poc_planner.providers.errors import (
+    ProviderOperation,
+    ProviderOperationError,
 )
 from ai_poc_planner.providers.profiles import ModelProfile
+from ai_poc_planner.providers.structured_output import (
+    StructuredOutputContentError,
+    StructuredOutputExecutor,
+)
 
 
 class EvidenceAnalysisError(RuntimeError):
@@ -135,9 +141,25 @@ class EvidenceAnalysisService:
         # Scores and gates are program-owned. The provider is only used for
         # structured option/narrative content; no provider rubric or gate result
         # is accepted as a formal assessment value.
-        draft = self._to_domain_draft(stage_a, option_details, facts, tokens)
+        formal_decision_authority = derive_decision_authority(facts)
+        formal_processing_boundary = derive_processing_boundary(facts)
+        draft = self._to_domain_draft(
+            stage_a,
+            option_details,
+            facts,
+            tokens,
+            formal_decision_authority=formal_decision_authority,
+            formal_processing_boundary=formal_processing_boundary,
+        )
         self._validate_references(draft, facts, tokens)
-        result = self._validated_result(version, draft, facts, tokens)
+        result = self._validated_result(
+            version,
+            draft,
+            facts,
+            tokens,
+            formal_decision_authority=formal_decision_authority,
+            formal_processing_boundary=formal_processing_boundary,
+        )
         with self._history._repository.transaction():
             current = sorted(
                 self._history.list_current_facts(project_id, version_number),
@@ -156,14 +178,13 @@ class EvidenceAnalysisService:
 
     def _call_stage(self, profile, name, contract, payload):
         """Call one constrained stage; raw provider text never leaves this boundary."""
-        schema = normalize_provider_schema(contract.model_json_schema())
-        response_formats = (
-            JSONSchemaResponseFormat(name=name, schema=schema),
-            JSONObjectResponseFormat(),
-        )
         token_budgets = {
             "analysis_options_a0": 1024,
-            "analysis_option_detail": 1024,
+            # Option details combine multiple bounded arrays and structured
+            # fields; reasoning-capable models may share this budget with the
+            # visible JSON.  This provider-neutral, stage-specific headroom
+            # does not depend on a model or runtime name.
+            "analysis_option_detail": 2048,
             "analysis_rubric": 2048,
             "analysis_gates": 1024,
         }
@@ -206,91 +227,24 @@ class EvidenceAnalysisService:
             },
         ]
         adapter = self._adapter_factory(profile)
-        for response_format in response_formats:
-            messages = list(base_messages)
-            for attempt in range(2):
-                try:
-                    raw = adapter.complete(
-                        messages=messages,
-                        temperature=0,
-                        max_tokens=min(token_budgets[name] * (2**attempt), 4096),
-                        response_format=response_format,
-                        reasoning_effort=profile.reasoning_effort,
-                    )
-                    return self._parse_stage_output(raw, contract, name)
-                except OpenAICompatibleProviderError as error:
-                    if (
-                        isinstance(response_format, JSONSchemaResponseFormat)
-                        and error.code == "provider_http_error"
-                    ):
-                        # The provider rejected this schema shape.  Use its
-                        # explicitly supported JSON-object capability, then
-                        # keep the same strict DTO and domain validation.
-                        break
-                    if attempt:
-                        raise EvidenceAnalysisError(f"{name}_output_invalid") from error
-                except EvidenceAnalysisError as error:
-                    if attempt:
-                        raise error
-                    repair = (
-                        " Repair the reported schema condition: "
-                        + error.code.replace("_", " ")
-                        + ". Return only one complete JSON object."
-                    )
-                    messages[0] = {
-                        "role": "system",
-                        "content": str(base_messages[0]["content"]) + repair,
-                    }
-                    continue
-                except ValidationError as error:
-                    if attempt:
-                        location = error.errors()[0].get("loc", ())
-                        field = next(
-                            (str(part) for part in location if isinstance(part, str)),
-                            "schema",
-                        )
-                        raise EvidenceAnalysisError(
-                            f"{name}_output_invalid_{field}"
-                        ) from error
-                except Exception as error:
-                    if attempt:
-                        raise EvidenceAnalysisError(f"{name}_output_invalid") from error
-                messages[0] = {
-                    "role": "system",
-                    "content": (
-                        str(base_messages[0]["content"])
-                        + " Repair all required fields. Return only one complete JSON object."
-                    ),
-                }
-        raise EvidenceAnalysisError(f"{name}_output_invalid")
-
-    @staticmethod
-    def _parse_stage_output(raw: str, contract, name: str):
-        """Classify provider failures without retaining or exposing its content."""
-
-        candidate = raw.strip()
-        fence = re.fullmatch(r"```json\s*\n?(.*?)\n?```", candidate, flags=re.DOTALL)
-        if fence is not None:
-            candidate = fence.group(1).strip()
         try:
-            payload = json.loads(candidate)
-        except (TypeError, json.JSONDecodeError) as error:
-            raise EvidenceAnalysisError(f"{name}_output_invalid_json") from error
-        if not isinstance(payload, dict):
-            raise EvidenceAnalysisError(f"{name}_output_invalid_root")
-        try:
-            return contract.model_validate(payload)
-        except ValidationError as error:
-            location = error.errors()[0].get("loc", ())
-            field = "_".join(str(part) for part in location[:4])
-            if not field and name == "analysis_options_a0":
-                message = str(error.errors()[0].get("msg", ""))
-                if "alternative" in message:
-                    field = "alternative"
-                elif "recommended" in message or "conflicts" in message:
-                    field = "recommendation"
-            field = field or "schema"
-            raise EvidenceAnalysisError(f"{name}_output_invalid_{field}") from error
+            execution = StructuredOutputExecutor().execute(
+                adapter=adapter,
+                capabilities=profile.effective_capabilities,
+                preferred_mode=profile.effective_structured_output_mode,
+                operation=ProviderOperation.ANALYSIS,
+                schema_name=name,
+                provider_contract=contract,
+                messages=base_messages,
+                logical_max_tokens=token_budgets[name],
+                temperature=0,
+                reasoning_effort=profile.reasoning_effort,
+            )
+            return execution.value
+        except ProviderOperationError as error:
+            raise EvidenceAnalysisError(error.code) from error
+        except StructuredOutputContentError as error:
+            raise EvidenceAnalysisError(error.code) from error
 
     def _call_option_detail(
         self, profile, skeleton, catalog, confirmed_tokens: tuple[str, ...], index: int
@@ -348,7 +302,15 @@ class EvidenceAnalysisService:
         ]
 
     @staticmethod
-    def _to_domain_draft(stage_a, details, facts, tokens) -> AIAnalysisDraft:
+    def _to_domain_draft(
+        stage_a,
+        details,
+        facts,
+        tokens,
+        *,
+        formal_decision_authority: DecisionAuthority,
+        formal_processing_boundary: ProcessingBoundary,
+    ) -> AIAnalysisDraft:
         options = []
         for index, (skeleton, detail) in enumerate(
             zip(stage_a.options, details, strict=True), 1
@@ -359,6 +321,8 @@ class EvidenceAnalysisService:
                 "option_kind": skeleton.option_kind,
                 "summary": skeleton.summary,
                 **detail.model_dump(mode="json"),
+                "decision_authority": formal_decision_authority,
+                "processing_boundary": formal_processing_boundary,
             }
             kind = data.pop("opportunity_source_kind", None)
             opportunity_type = data.pop("opportunity_type", None)
@@ -482,6 +446,8 @@ class EvidenceAnalysisService:
             if snapshot is None:
                 raise EvidenceAnalysisError("provider_profile_mismatch")
             self._readiness.require_profile_ready(snapshot.profile_id)
+        except ProviderReadinessError as error:
+            raise EvidenceAnalysisError(error.code) from error
         except Exception as error:
             raise EvidenceAnalysisError("provider_not_ready") from error
         snapshot = version.selected_model
@@ -569,17 +535,39 @@ class EvidenceAnalysisService:
         draft: AIAnalysisDraft,
         facts: list[FactRevision],
         tokens: dict[str, UUID],
+        *,
+        formal_decision_authority: DecisionAuthority | None = None,
+        formal_processing_boundary: ProcessingBoundary | None = None,
     ) -> ValidatedAnalysisResult:
+        formal_decision_authority = (
+            formal_decision_authority or derive_decision_authority(facts)
+        )
+        formal_processing_boundary = (
+            formal_processing_boundary or derive_processing_boundary(facts)
+        )
+        formal_draft = draft.model_copy(
+            update={
+                "options": [
+                    option.model_copy(
+                        update={
+                            "decision_authority": formal_decision_authority,
+                            "processing_boundary": formal_processing_boundary,
+                        }
+                    )
+                    for option in draft.options
+                ]
+            }
+        )
         scores, weighted_total = build_deterministic_scores(facts, tokens)
         selected = next(
             item
-            for item in draft.options
-            if item.option_key == draft.recommended_option_key
+            for item in formal_draft.options
+            if item.option_key == formal_draft.recommended_option_key
         )
         evaluation = build_deterministic_gate_evaluation(
             facts,
-            selected_authority=selected.decision_authority,
-            selected_boundary=selected.processing_boundary,
+            selected_authority=formal_decision_authority,
+            selected_boundary=formal_processing_boundary,
         )
         gates = sorted(
             [
@@ -647,17 +635,17 @@ class EvidenceAnalysisService:
             rubric_version="1.0",
             hard_gate_version="case-centered-1",
             requirement_summary=draft.requirement_summary,
-            options=draft.options,
-            recommended_option_key=draft.recommended_option_key,
-            conclusion=draft.conclusion,
-            conclusion_rationale=draft.conclusion_rationale,
-            conclusion_fact_refs=sorted(draft.conclusion_fact_refs),
+            options=formal_draft.options,
+            recommended_option_key=formal_draft.recommended_option_key,
+            conclusion=formal_draft.conclusion,
+            conclusion_rationale=formal_draft.conclusion_rationale,
+            conclusion_fact_refs=sorted(formal_draft.conclusion_fact_refs),
             scores=scores,
             weighted_total=weighted_total,
             gate_results=gates,
             gate_disposition=evaluation.disposition,
-            overall_risks=draft.overall_risks,
-            unresolved_gaps=draft.unresolved_gaps,
+            overall_risks=formal_draft.overall_risks,
+            unresolved_gaps=formal_draft.unresolved_gaps,
             created_at=self._clock(),
             case_centered=case_centered,
         )

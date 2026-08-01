@@ -1,0 +1,449 @@
+# ruff: noqa: E501
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from enum import StrEnum
+from typing import Literal
+
+import pytest
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from ai_poc_planner.application.provider_readiness import ConnectionProbe
+from ai_poc_planner.domain.planning_report import ProviderReportSectionDraft
+from ai_poc_planner.providers.base import StructuredOutputMode
+from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
+from ai_poc_planner.providers.errors import (
+    ProviderOperation,
+    ProviderOperationError,
+    SafeProviderFailure,
+)
+from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderError
+from ai_poc_planner.providers.structured_output import (
+    StructuredOutputContentError,
+    StructuredOutputExecutor,
+    _repair_contract_hint,
+)
+
+
+class Probe(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["ok"]
+
+
+class ValueContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: int
+
+
+class UnionContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: int | str
+
+
+class LiteralContract(BaseModel):
+    mode: Literal["draft", "review", "final"]
+
+
+class Colour(StrEnum):
+    RED = "red"
+    BLUE = "blue"
+
+
+class EnumContract(BaseModel):
+    colour: Colour
+
+
+class PlainStringContract(BaseModel):
+    label: str
+
+
+class BrokenSchemaContract(BaseModel):
+    label: str
+
+    @classmethod
+    def model_json_schema(cls, *args: object, **kwargs: object) -> dict[str, object]:
+        del args, kwargs
+        raise ValueError("synthetic schema failure")
+
+
+class RecordingAdapter:
+    def __init__(self, outcomes: list[object]) -> None:
+        self.outcomes = list(outcomes)
+        self.calls: list[str] = []
+        self.budgets: list[int] = []
+
+    def complete(
+        self,
+        *,
+        messages: Sequence[Mapping[str, str]],
+        temperature: float,
+        max_tokens: int,
+        response_format: object,
+        reasoning_effort: object = None,
+    ) -> str:
+        del messages, temperature, reasoning_effort
+        self.budgets.append(max_tokens)
+        mode = response_format.as_request_value()["type"]
+        self.calls.append(mode)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return str(outcome)
+
+
+def _caps(
+    *, schema: bool = True, object_mode: bool = True
+) -> OpenAICompatibleCapabilities:
+    return OpenAICompatibleCapabilities(json_schema=schema, json_object=object_mode)
+
+
+def _execute(
+    adapter: RecordingAdapter,
+    *,
+    preferred: StructuredOutputMode = StructuredOutputMode.JSON_SCHEMA,
+    contract: type[BaseModel] = Probe,
+    capabilities: OpenAICompatibleCapabilities | None = None,
+    operation: ProviderOperation = ProviderOperation.READINESS,
+    schema_name: str = "connection_probe",
+    logical_max_tokens: int = 64,
+):
+    return StructuredOutputExecutor().execute(
+        adapter=adapter,
+        capabilities=capabilities or _caps(),
+        preferred_mode=preferred,
+        operation=operation,
+        schema_name=schema_name,
+        provider_contract=contract,
+        messages=[{"role": "user", "content": "probe"}],
+        logical_max_tokens=logical_max_tokens,
+        temperature=0,
+    )
+
+
+def test_schema_first_success_uses_one_call_and_records_metadata() -> None:
+    adapter = RecordingAdapter(['{"status":"ok"}'])
+
+    result = _execute(adapter)
+
+    assert adapter.calls == ["json_schema"]
+    assert result.mode_used is StructuredOutputMode.JSON_SCHEMA
+    assert result.attempt_count == 1
+    assert result.fallback_used is False
+    assert result.value.status == "ok"
+
+
+def test_object_first_success_uses_object_mode() -> None:
+    adapter = RecordingAdapter(['{"status":"ok"}'])
+
+    result = _execute(adapter, preferred=StructuredOutputMode.JSON_OBJECT)
+
+    assert adapter.calls == ["json_object"]
+    assert result.mode_used is StructuredOutputMode.JSON_OBJECT
+
+
+def test_connection_probe_accepts_only_literal_ok_contract() -> None:
+    assert ConnectionProbe.model_validate({"status": "ok"}).status == "ok"
+    for invalid in (
+        {"status": "ready"},
+        {"readiness": "ok"},
+        {"status": "ok", "message": "extra"},
+    ):
+        with pytest.raises(ValidationError):
+            ConnectionProbe.model_validate(invalid)
+
+
+def test_connection_probe_repair_hint_exposes_literal_constraint() -> None:
+    hint = _repair_contract_hint(ConnectionProbe)
+
+    assert "status" in hint
+    assert "string" in hint
+    assert '"ok"' in hint
+
+
+def test_repair_hint_lists_bounded_literal_and_enum_values() -> None:
+    literal_hint = _repair_contract_hint(LiteralContract)
+    enum_hint = _repair_contract_hint(EnumContract)
+
+    assert all(value in literal_hint for value in ('"draft"', '"review"', '"final"'))
+    assert all(value in enum_hint for value in ('"red"', '"blue"'))
+
+
+def test_repair_hint_does_not_invent_values_for_plain_strings() -> None:
+    hint = _repair_contract_hint(PlainStringContract)
+
+    assert hint == "label: string"
+    assert "allowed values" not in hint
+
+
+def test_repair_hint_falls_back_to_field_names_on_schema_failure() -> None:
+    assert _repair_contract_hint(BrokenSchemaContract) == "label"
+
+
+def test_repair_message_requires_complete_json_without_extra_text() -> None:
+    repair = StructuredOutputExecutor._repair_messages(
+        [{"role": "user", "content": "probe"}], ConnectionProbe
+    )[-1]["content"]
+
+    assert "complete JSON object" in repair
+    assert "status" in repair
+    assert "string" in repair
+    assert '"ok"' in repair
+    assert "Markdown" in repair
+    assert "explanation" in repair
+    assert "additional fields" in repair
+    assert "reasoning" in repair
+
+
+@pytest.mark.parametrize(
+    "bad_content",
+    ["not json", "[1]", 'prefix {"status":"ok"}', '```json\n{"status":"ok"}'],
+)
+def test_invalid_content_repairs_once_without_switching_mode(bad_content: str) -> None:
+    adapter = RecordingAdapter([bad_content, '{"status":"ok"}'])
+
+    result = _execute(adapter)
+
+    assert adapter.calls == ["json_schema", "json_schema"]
+    assert result.attempt_count == 2
+
+
+def test_schema_rejection_falls_back_once_to_object() -> None:
+    adapter = RecordingAdapter(
+        [
+            OpenAICompatibleProviderError("provider_structured_output_unsupported"),
+            '{"status":"ok"}',
+        ]
+    )
+
+    result = _execute(adapter)
+
+    assert adapter.calls == ["json_schema", "json_object"]
+    assert result.mode_used is StructuredOutputMode.JSON_OBJECT
+    assert result.fallback_used is True
+    assert result.attempt_count == 2
+
+
+def test_schema_rejection_object_invalid_then_object_repair() -> None:
+    adapter = RecordingAdapter(
+        [
+            OpenAICompatibleProviderError("provider_structured_output_unsupported"),
+            "not json",
+            '{"status":"ok"}',
+        ]
+    )
+
+    result = _execute(adapter)
+
+    assert adapter.calls == ["json_schema", "json_object", "json_object"]
+    assert result.attempt_count == 3
+    assert result.fallback_used is True
+
+
+def test_schema_rejection_without_object_support_does_not_retry() -> None:
+    adapter = RecordingAdapter(
+        [OpenAICompatibleProviderError("provider_structured_output_unsupported")]
+    )
+
+    with pytest.raises(ProviderOperationError) as error:
+        _execute(adapter, capabilities=_caps(schema=True, object_mode=False))
+
+    assert adapter.calls == ["json_schema"]
+    assert error.value.code == "provider_structured_output_unsupported"
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "provider_http_error",
+        "provider_auth_failed",
+        "provider_timeout",
+        "provider_rate_limited",
+    ],
+)
+def test_transport_failures_do_not_fallback_or_repair(code: str) -> None:
+    adapter = RecordingAdapter([OpenAICompatibleProviderError(code)])
+
+    with pytest.raises(ProviderOperationError) as error:
+        _execute(adapter)
+
+    assert adapter.calls == ["json_schema"]
+    assert error.value.code == code
+
+
+def test_pydantic_failure_repairs_in_same_mode() -> None:
+    adapter = RecordingAdapter(['{"value":"wrong"}', '{"value":3}'])
+
+    result = _execute(adapter, contract=ValueContract)
+
+    assert adapter.calls == ["json_schema", "json_schema"]
+    assert result.value.value == 3
+
+
+def test_connection_probe_wrong_status_repairs_in_same_object_mode() -> None:
+    adapter = RecordingAdapter(['{"status":"ready"}', '{"status":"ok"}'])
+
+    result = _execute(
+        adapter,
+        preferred=StructuredOutputMode.JSON_OBJECT,
+        capabilities=_caps(schema=False, object_mode=True),
+    )
+
+    assert adapter.calls == ["json_object", "json_object"]
+    assert result.value.status == "ok"
+    assert result.attempt_count == 2
+    assert result.mode_used is StructuredOutputMode.JSON_OBJECT
+    assert result.fallback_used is False
+
+
+def test_connection_probe_wrong_status_after_repair_is_safe_failure() -> None:
+    adapter = RecordingAdapter(['{"status":"ready"}', '{"status":"still_wrong"}'])
+
+    with pytest.raises(ProviderOperationError) as error:
+        _execute(
+            adapter,
+            preferred=StructuredOutputMode.JSON_OBJECT,
+            capabilities=_caps(schema=False, object_mode=True),
+        )
+
+    assert adapter.calls == ["json_object", "json_object"]
+    assert error.value.code == "provider_output_invalid"
+    assert error.value.failure.operation is ProviderOperation.READINESS
+    assert error.value.failure.retryable is False
+
+
+def test_connection_probe_valid_status_uses_one_call() -> None:
+    adapter = RecordingAdapter(['{"status":"ok"}'])
+
+    result = _execute(
+        adapter,
+        preferred=StructuredOutputMode.JSON_OBJECT,
+        capabilities=_caps(schema=False, object_mode=True),
+    )
+
+    assert adapter.calls == ["json_object"]
+    assert result.attempt_count == 1
+
+
+def test_provider_invalid_response_and_truncation_repair_once() -> None:
+    adapter = RecordingAdapter(
+        [
+            OpenAICompatibleProviderError("provider_output_truncated"),
+            '{"status":"ok"}',
+        ]
+    )
+
+    result = _execute(adapter)
+
+    assert adapter.calls == ["json_schema", "json_schema"]
+    assert result.attempt_count == 2
+
+
+def test_analysis_option_detail_truncation_repairs_with_same_2048_budget() -> None:
+    adapter = RecordingAdapter(
+        [
+            OpenAICompatibleProviderError("provider_output_truncated"),
+            '{"status":"ok"}',
+        ]
+    )
+
+    result = _execute(
+        adapter,
+        operation=ProviderOperation.ANALYSIS,
+        schema_name="analysis_option_detail",
+        logical_max_tokens=2048,
+    )
+
+    assert result.value.status == "ok"
+    assert result.attempt_count == 2
+    assert result.mode_used is StructuredOutputMode.JSON_SCHEMA
+    assert result.fallback_used is False
+    assert adapter.calls == ["json_schema", "json_schema"]
+    assert adapter.budgets == [2048, 2048]
+
+
+def test_report_narration_digits_trigger_bounded_contract_repair() -> None:
+    adapter = RecordingAdapter(
+        [
+            '{"content":"KPI 95%","fact_refs":["F001"]}',
+            '{"content":"定性敘述","fact_refs":["F001"]}',
+        ]
+    )
+
+    result = _execute(
+        adapter,
+        contract=ProviderReportSectionDraft,
+        operation=ProviderOperation.REPORT,
+        schema_name="report_part_a",
+        logical_max_tokens=2048,
+    )
+
+    assert result.value.content == "定性敘述"
+    assert result.attempt_count == 2
+    assert result.mode_used is StructuredOutputMode.JSON_SCHEMA
+    assert result.fallback_used is False
+    assert adapter.calls == ["json_schema", "json_schema"]
+    assert adapter.budgets == [2048, 2048]
+
+
+def test_repeated_report_narration_digits_remain_provider_output_invalid() -> None:
+    adapter = RecordingAdapter(
+        [
+            '{"content":"KPI 95%","fact_refs":["F001"]}',
+            '{"content":"第2階段","fact_refs":["F001"]}',
+        ]
+    )
+
+    with pytest.raises(ProviderOperationError) as error:
+        _execute(
+            adapter,
+            contract=ProviderReportSectionDraft,
+            operation=ProviderOperation.REPORT,
+            schema_name="report_part_a",
+            logical_max_tokens=2048,
+        )
+
+    assert error.value.code == "provider_output_invalid"
+    assert error.value.failure.operation is ProviderOperation.REPORT
+    assert error.value.failure.retryable is False
+    assert adapter.calls == ["json_schema", "json_schema"]
+    assert adapter.budgets == [2048, 2048]
+
+
+def test_local_schema_normalization_failure_makes_zero_provider_calls() -> None:
+    adapter = RecordingAdapter(['{"value":1}'])
+
+    with pytest.raises(StructuredOutputContentError):
+        _execute(adapter, contract=UnionContract)
+
+    assert adapter.calls == []
+
+
+def test_executor_does_not_run_domain_semantic_validation() -> None:
+    adapter = RecordingAdapter(['{"status":"ok"}'])
+
+    result = _execute(adapter)
+
+    assert result.value.status == "ok"
+
+
+def test_safe_provider_failure_is_immutable_and_secret_free() -> None:
+    failure = SafeProviderFailure.from_code(
+        "provider_unavailable", ProviderOperation.READINESS
+    )
+    marker = "raw-provider-marker-p72a"
+
+    assert marker not in str(failure)
+    assert marker not in repr(failure)
+    with pytest.raises(ValidationError):
+        failure.retryable = False
+    with pytest.raises(ValidationError):
+        SafeProviderFailure(
+            code="provider_unavailable",
+            operation=ProviderOperation.READINESS,
+            retryable=True,
+            user_action=f"{marker}",
+        )

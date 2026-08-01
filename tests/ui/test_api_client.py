@@ -178,6 +178,66 @@ def test_safe_error_never_exposes_api_error_payload_or_connection_address() -> N
     assert "raw-provider-detail" not in caught.value.user_message
 
 
+def test_provider_error_reads_only_whitelisted_safe_details() -> None:
+    raw_marker = "raw-provider-marker-ui-p72a"
+    api = _client(
+        lambda _: httpx.Response(
+            503,
+            json={
+                "error": {
+                    "code": "provider_unavailable",
+                    "message": raw_marker,
+                    "details": {
+                        "operation": "analysis",
+                        "retryable": True,
+                        "user_action": "請稍後重試，並確認服務目前可用。",
+                        "raw": raw_marker,
+                    },
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.provider_status()
+
+    assert caught.value.retryable is True
+    assert caught.value.user_action == "請稍後重試，並確認服務目前可用。"
+    assert raw_marker not in str(caught.value)
+    assert raw_marker not in repr(caught.value)
+
+
+def test_generic_provider_http_error_uses_safe_ui_mapping() -> None:
+    raw_marker = "raw-provider-http-marker-ui-p72a"
+    api = _client(
+        lambda _: httpx.Response(
+            400,
+            json={
+                "error": {
+                    "code": "provider_http_error",
+                    "message": raw_marker,
+                    "details": {
+                        "operation": "report",
+                        "retryable": False,
+                        "user_action": "請檢查端點設定與請求能力後再試。",
+                        "raw": raw_marker,
+                    },
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.provider_status()
+
+    assert caught.value.code == "provider_http_error"
+    assert caught.value.user_message != "服務暫時無法完成此操作，請稍後再試。"
+    assert caught.value.user_action == "請檢查端點設定與請求能力後再試。"
+    assert caught.value.retryable is False
+    assert raw_marker not in str(caught.value)
+    assert raw_marker not in repr(caught.value)
+
+
 def test_project_model_binding_sends_only_a_profile_reference() -> None:
     requests: list[httpx.Request] = []
 

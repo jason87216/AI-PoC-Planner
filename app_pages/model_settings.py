@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.model_profile_form import (
+    create_profile_authentication_error,
+    profile_payload,
+)
 from ai_poc_planner.ui.presentation import (
     connection_label,
     profile_label,
@@ -27,33 +29,6 @@ def _optional_choice(value: str) -> str | None:
 def _refresh_after_change(message: str) -> None:
     refresh_api_data()
     st.success(message)
-
-
-def _profile_payload(
-    *,
-    profile_name: str,
-    base_url: str,
-    model_name: str,
-    api_key: str,
-    structured_output_mode: str,
-    reasoning_effort: str,
-    is_enabled: bool,
-    include_required_fields: bool,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {"is_enabled": is_enabled}
-    if include_required_fields or profile_name:
-        payload["profile_name"] = profile_name
-    if include_required_fields or base_url:
-        payload["base_url"] = base_url
-    if include_required_fields or model_name:
-        payload["model_name"] = model_name
-    if api_key:
-        payload["api_key"] = api_key
-    if structured_output_mode:
-        payload["structured_output_mode"] = structured_output_mode
-    if reasoning_effort:
-        payload["reasoning_effort"] = reasoning_effort
-    return payload
 
 
 st.title("模型設定")
@@ -95,9 +70,17 @@ with st.form("create_model_profile", clear_on_submit=True):
             "json_object": "JSON Object",
         }[value],
     )
+    reasoning_parameter = st.selectbox(
+        "Reasoning parameter",
+        ["unsupported", "reasoning_effort"],
+    )
     reasoning_effort = st.selectbox(
         "推理強度（選填）",
-        options=["", "low", "medium", "high"],
+        options=(
+            ["", "low", "medium", "high"]
+            if reasoning_parameter != "unsupported"
+            else [""]
+        ),
         format_func=lambda value: {
             "": "不指定",
             "low": "低",
@@ -108,16 +91,48 @@ with st.form("create_model_profile", clear_on_submit=True):
     is_enabled = st.checkbox("建立後啟用", value=True)
     create_submitted = st.form_submit_button("建立設定", icon=":material/add:")
 
-if create_submitted:
+    with st.expander("Advanced compatibility settings"):
+        authentication = st.selectbox(
+            "Authentication mode",
+            ["bearer_optional", "bearer_required", "none"],
+        )
+        token_parameter = st.selectbox(
+            "Token parameter", ["max_tokens", "max_completion_tokens"]
+        )
+        supports_json_schema = st.checkbox("Supports JSON Schema", value=True)
+        supports_json_object = st.checkbox("Supports JSON Object", value=True)
+        preferred_mode = st.selectbox(
+            "Preferred structured-output mode", ["json_schema", "json_object"]
+        )
+
+if create_submitted and not (supports_json_schema or supports_json_object):
+    st.error("至少要選擇一種 structured-output mode。")
+elif create_submitted and (
+    (preferred_mode == "json_schema" and not supports_json_schema)
+    or (preferred_mode == "json_object" and not supports_json_object)
+):
+    st.error("Preferred mode 必須在支援的模式中。")
+elif create_submitted and reasoning_parameter == "unsupported" and reasoning_effort:
+    st.error("此端點不支援 reasoning effort，請清除該設定。")
+elif create_submitted and (
+    authentication_error := create_profile_authentication_error(authentication, api_key)
+):
+    st.error(authentication_error)
+elif create_submitted:
     try:
         get_api_client().create_profile(
-            _profile_payload(
+            profile_payload(
                 profile_name=profile_name,
                 base_url=base_url,
                 model_name=model_name,
                 api_key=api_key,
-                structured_output_mode=structured_output_mode,
+                structured_output_mode=preferred_mode,
                 reasoning_effort=reasoning_effort,
+                authentication=authentication,
+                token_parameter=token_parameter,
+                reasoning_parameter=reasoning_parameter,
+                supports_json_schema=supports_json_schema,
+                supports_json_object=supports_json_object,
                 is_enabled=is_enabled,
                 include_required_fields=True,
             )
@@ -138,6 +153,60 @@ if profiles:
     selected_profile = profiles_by_id[profile_id]
 
     with st.form("update_model_profile"):
+        current_capabilities = selected_profile.get("capabilities") or {}
+        update_authentication = st.selectbox(
+            "Authentication mode",
+            ["bearer_optional", "bearer_required", "none"],
+            index=["bearer_optional", "bearer_required", "none"].index(
+                current_capabilities.get("authentication", "bearer_optional")
+            ),
+        )
+        update_token_parameter = st.selectbox(
+            "Token parameter",
+            ["max_tokens", "max_completion_tokens"],
+            index=["max_tokens", "max_completion_tokens"].index(
+                current_capabilities.get("token_parameter", "max_tokens")
+            ),
+        )
+        update_reasoning_parameter = st.selectbox(
+            "Reasoning parameter",
+            ["unsupported", "reasoning_effort"],
+            index=["unsupported", "reasoning_effort"].index(
+                current_capabilities.get("reasoning_parameter", "unsupported")
+            ),
+        )
+        update_supports_json_schema = st.checkbox(
+            "Supports JSON Schema",
+            value=bool(current_capabilities.get("json_schema", False)),
+        )
+        update_supports_json_object = st.checkbox(
+            "Supports JSON Object",
+            value=bool(current_capabilities.get("json_object", True)),
+        )
+        update_preferred_mode = st.selectbox(
+            "Preferred structured-output mode",
+            ["json_schema", "json_object"],
+            index=0
+            if selected_profile.get("structured_output_mode") == "json_schema"
+            else 1,
+        )
+        update_reasoning_effort = st.selectbox(
+            "Reasoning effort",
+            options=(
+                ["", "low", "medium", "high"]
+                if update_reasoning_parameter != "unsupported"
+                else [""]
+            ),
+            index=(
+                ["", "low", "medium", "high"].index(
+                    selected_profile.get("reasoning_effort") or ""
+                )
+                if update_reasoning_parameter != "unsupported"
+                else 0
+            ),
+            disabled=update_reasoning_parameter == "unsupported",
+        )
+        update_clear_api_key = st.checkbox("清除已保存 API key")
         updated_name = st.text_input("設定名稱（留白則不變）")
         updated_endpoint = st.text_input("新服務端點（留白則不變）")
         updated_model_name = st.text_input("模型名稱（留白則不變）")
@@ -145,17 +214,38 @@ if profiles:
         enabled = st.checkbox("啟用此設定", value=bool(selected_profile["is_enabled"]))
         update_submitted = st.form_submit_button("儲存變更", icon=":material/save:")
 
-    if update_submitted:
+    if update_submitted and not (
+        update_supports_json_schema or update_supports_json_object
+    ):
+        st.error("至少要選擇一種 structured-output mode。")
+    elif update_submitted and (
+        (update_preferred_mode == "json_schema" and not update_supports_json_schema)
+        or (update_preferred_mode == "json_object" and not update_supports_json_object)
+    ):
+        st.error("Preferred mode 必須在支援的模式中。")
+    elif (
+        update_submitted
+        and update_reasoning_parameter == "unsupported"
+        and update_reasoning_effort
+    ):
+        st.error("此端點不支援 reasoning effort，請清除該設定。")
+    elif update_submitted:
         try:
             get_api_client().update_profile(
                 profile_id,
-                _profile_payload(
+                profile_payload(
                     profile_name=updated_name,
                     base_url=updated_endpoint,
                     model_name=updated_model_name,
                     api_key=updated_api_key,
-                    structured_output_mode="",
-                    reasoning_effort="",
+                    structured_output_mode=update_preferred_mode,
+                    reasoning_effort=update_reasoning_effort,
+                    authentication=update_authentication,
+                    token_parameter=update_token_parameter,
+                    reasoning_parameter=update_reasoning_parameter,
+                    supports_json_schema=update_supports_json_schema,
+                    supports_json_object=update_supports_json_object,
+                    clear_api_key=update_clear_api_key,
                     is_enabled=enabled,
                     include_required_fields=False,
                 ),
