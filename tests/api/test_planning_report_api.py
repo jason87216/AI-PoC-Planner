@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,6 +22,9 @@ from ai_poc_planner.application.planning_report import (
 from ai_poc_planner.domain.enums import FactStatus, ProjectStatus
 from ai_poc_planner.domain.planning_report import (
     REPORT_SECTION_KEYS,
+    PersistedPlanningReport,
+    PlanningReportDraft,
+    ProviderReportSectionDraft,
     ReportSectionDraft,
 )
 from ai_poc_planner.domain.project_history import SelectedModelSnapshot
@@ -27,10 +32,12 @@ from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.connection import database_connection
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
 from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
+from ai_poc_planner.persistence.report import SQLitePlanningReportRepository
 from ai_poc_planner.persistence.schema import initialize_database
 from ai_poc_planner.providers.base import StructuredOutputMode
 from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderError
+from ai_poc_planner.ui.results import markdown_download
 from tests.support.assessed_snapshot import build_assessed_snapshot
 
 
@@ -82,7 +89,7 @@ def test_report_prompt_distinguishes_digit_free_content_from_fact_tokens() -> No
     service._call(
         profile,
         {},
-        ReportSectionDraft,
+        ProviderReportSectionDraft,
         "report_part_a",
         semantic_repair=True,
     )
@@ -286,6 +293,69 @@ def test_report_only_flow_commits_assessed_snapshot_and_completes_version(
             == "complete"
         )
     assert fresh_adapter.calls == []
+
+
+def test_restart_reload_legacy_numeric_report_history_and_markdown_without_provider(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "legacy-reload.sqlite3"
+    profile_path = tmp_path / "profiles.json"
+    connection = database_connection(database_path)
+    try:
+        initialize_database(connection)
+        fixture = build_assessed_snapshot(
+            connection,
+            SelectedModelSnapshot(
+                profile_id=uuid4(),
+                profile_name="Legacy report profile",
+                model_name="legacy-model",
+            ),
+        )
+        sections = {
+            key: ReportSectionDraft(
+                content="2026年規劃，預計30天。",
+                fact_refs=["F001"],
+            )
+            for key in REPORT_SECTION_KEYS
+        }
+        SQLitePlanningReportRepository(connection).create(
+            PersistedPlanningReport(
+                id=uuid4(),
+                version_id=fixture.version_id,
+                analysis_id=fixture.expected_analysis.id,
+                report=PlanningReportDraft(schema_version="1.0", **sections),
+                markdown="# 舊報告 2026",
+                created_at=datetime.now(UTC),
+                synthesis=None,
+            )
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    report_endpoint = f"/v1/projects/{fixture.project_id}/versions/1/report"
+    first_adapter = ReportAdapter()
+    with TestClient(_app(database_path, profile_path, first_adapter)) as client:
+        report_response = client.get(report_endpoint)
+        assert report_response.status_code == 200
+        assert report_response.json()["report"]["executive_summary"]["content"] == (
+            "2026年規劃，預計30天。"
+        )
+        assert (
+            client.get(f"/v1/projects/{fixture.project_id}/versions").status_code == 200
+        )
+        download = markdown_download(report_response.json(), "客服请求分流 PoC", 1)
+        assert download.data == "# 舊報告 2026".encode()
+    assert first_adapter.calls == []
+
+    second_adapter = ReportAdapter()
+    with TestClient(_app(database_path, profile_path, second_adapter)) as restarted:
+        assert restarted.get(report_endpoint).status_code == 200
+        assert (
+            restarted.get(f"/v1/projects/{fixture.project_id}/versions").status_code
+            == 200
+        )
+    assert second_adapter.calls == []
 
 
 @pytest.mark.parametrize(

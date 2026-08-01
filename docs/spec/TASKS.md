@@ -153,6 +153,12 @@ Acceptance checkpoint:
   contract；`fact_refs` 仍要求合法 `Fxxx` tokens，deterministic validation 保留。
   本輪只完成 offline validation，尚無通過的 dual-endpoint artifact，P7.2a checkpoint
   仍 pending。
+- 獨立 diff review 發現將 digit-free 規則直接套用於 persisted section 會造成既有合法
+  報告 reload 的 backward-compatibility regression。現已分離 strict
+  `ProviderReportSectionDraft` 與可讀取歷史資料的 `ReportSectionDraft`；Part A/B 使用
+  provider DTO，而 `PlanningReportDraft`／`PersistedPlanningReport` 維持 persisted DTO。
+  `_validate_refs` 未放寬，並新增 SQLite／restart／history／Markdown offline regression
+  coverage；沒有新的 live artifact，P7.2a checkpoint 仍 pending。
 
 ### P7.2b Full golden-scenario compatibility matrix — Pending
 

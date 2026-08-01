@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 import pytest
 from pydantic import ValidationError
 
 from ai_poc_planner.domain.planning_report import (
     REPORT_SECTION_KEYS,
+    PersistedPlanningReport,
     PlanningReportDraft,
     PlanningReportPartA,
     PlanningReportPartB,
+    ProviderReportSectionDraft,
     ReportSectionDraft,
 )
 from ai_poc_planner.providers.json_schema import normalize_provider_schema
@@ -53,7 +58,7 @@ def test_report_forbids_program_owned_fields(field: str) -> None:
 
 
 def test_report_narration_accepts_digit_free_content_and_fact_tokens() -> None:
-    section = ReportSectionDraft(
+    section = ProviderReportSectionDraft(
         content="流程由人工確認並保留稽核軌跡。",
         fact_refs=["F001"],
     )
@@ -68,7 +73,38 @@ def test_report_narration_accepts_digit_free_content_and_fact_tokens() -> None:
 )
 def test_report_narration_rejects_ascii_digits(content: str) -> None:
     with pytest.raises(ValidationError):
-        ReportSectionDraft(content=content, fact_refs=["F001"])
+        ProviderReportSectionDraft(content=content, fact_refs=["F001"])
+
+
+@pytest.mark.parametrize("content", ["KPI 95%", "第2階段", "2026年規劃", "預計30天"])
+def test_persisted_report_narration_accepts_legacy_ascii_digits(content: str) -> None:
+    section = ReportSectionDraft(content=content, fact_refs=["F001"])
+
+    assert section.content == content
+
+
+def test_persisted_report_model_reads_legacy_digit_narration() -> None:
+    report = {
+        "schema_version": "1.0",
+        **{
+            key: {"content": "2026年規劃", "fact_refs": ["F001"]}
+            for key in REPORT_SECTION_KEYS
+        },
+    }
+
+    persisted = PersistedPlanningReport.model_validate(
+        {
+            "id": uuid4(),
+            "version_id": uuid4(),
+            "analysis_id": uuid4(),
+            "report": report,
+            "markdown": "2026年規劃",
+            "created_at": datetime.now(UTC),
+            "synthesis": None,
+        }
+    )
+
+    assert persisted.report.executive_summary.content == "2026年規劃"
 
 
 def test_report_part_schemas_preserve_narration_and_fact_token_patterns() -> None:

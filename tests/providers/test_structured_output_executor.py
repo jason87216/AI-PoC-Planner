@@ -10,7 +10,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ai_poc_planner.application.provider_readiness import ConnectionProbe
-from ai_poc_planner.domain.planning_report import ReportSectionDraft
+from ai_poc_planner.domain.planning_report import ProviderReportSectionDraft
 from ai_poc_planner.providers.base import StructuredOutputMode
 from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.errors import (
@@ -375,7 +375,7 @@ def test_report_narration_digits_trigger_bounded_contract_repair() -> None:
 
     result = _execute(
         adapter,
-        contract=ReportSectionDraft,
+        contract=ProviderReportSectionDraft,
         operation=ProviderOperation.REPORT,
         schema_name="report_part_a",
         logical_max_tokens=2048,
@@ -400,7 +400,7 @@ def test_repeated_report_narration_digits_remain_provider_output_invalid() -> No
     with pytest.raises(ProviderOperationError) as error:
         _execute(
             adapter,
-            contract=ReportSectionDraft,
+            contract=ProviderReportSectionDraft,
             operation=ProviderOperation.REPORT,
             schema_name="report_part_a",
             logical_max_tokens=2048,

@@ -41,6 +41,13 @@
   的 fact、confirmed evidence、KPI 與 numeric safeguards 保持不變。僅完成 offline
   validation，沒有新的 live provider、complete-local 或 dual-endpoint artifact；
   P7.2a checkpoint 仍 pending。
+- 獨立 diff review 發現上述收緊若直接套用於 persisted `ReportSectionDraft`，會造成
+  既有合法報告 reload 的 backward-compatibility regression。本輪已分離
+  `ProviderReportSectionDraft`（strict digit-free provider DTO）與 persisted
+  `ReportSectionDraft`（`NonEmptyStr`，保留歷史讀取相容性）；`PlanningReportPartA/B`
+  使用前者，`PlanningReportDraft`／`PersistedPlanningReport` 使用後者。此修正保留
+  `_validate_refs` defense-in-depth，並以 offline persistence／restart regression tests
+  驗證；沒有新的 live artifact，P7.2a checkpoint 仍 pending。
 
 ## PR #24 closeout
 
