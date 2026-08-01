@@ -100,7 +100,7 @@ def _model_binding(
     edit_key = f"workspace_model_edit_{project_id}_{version_number}"
     if binding_valid and not st.session_state.get(edit_key):
         st.caption(
-            f"本專案使用的模型：{bound_profile.get('profile_name')}｜{bound_profile.get('model_name')}"
+            f"本專案使用的模型服務：{bound_profile.get('profile_name')}｜{bound_profile.get('model_name')}"
         )
         if st.button("更換模型", key=f"change_model_{project_id}_{version_number}"):
             st.session_state[edit_key] = True
@@ -113,7 +113,7 @@ def _model_binding(
     elif isinstance(snapshot, dict) and not binding_valid:
         st.warning("原本綁定的模型設定已停用或內容已變更；請重新測試後再保存。")
     if not profiles:
-        st.warning("尚未建立可用模型設定，請先前往模型設定。")
+        st.warning("尚未建立可用的模型設定，請先到「模型設定」完成模型可用性測試。")
         if st.button(
             "前往模型設定", key=f"model_settings_{project_id}_{version_number}"
         ):
@@ -144,11 +144,12 @@ def _model_binding(
         show_api_error(error)
         return
     if readiness.get("formal_analysis_allowed"):
-        st.success("此模型已完成本次 runtime 連線測試。")
+        st.success("此模型服務已完成目前執行環境的模型可用性測試。")
     else:
-        st.warning("請先測試此模型連線；測試成功後才能保存本專案模型。")
+        st.warning("請先完成此模型服務的可用性測試；測試成功後才能保存到本專案。")
         if st.button(
-            "測試連線", key=f"test_workspace_profile_{project_id}_{version_number}"
+            "測試模型可用性",
+            key=f"test_workspace_profile_{project_id}_{version_number}",
         ):
             try:
                 tested = get_api_client().test_profile(profile_id)
@@ -159,7 +160,7 @@ def _model_binding(
                     refresh_api_data()
                     st.rerun()
                 else:
-                    st.error("模型連線未成功，請檢查設定後再試。")
+                    st.error("模型服務尚未連線成功，請檢查端點、模型名稱與能力設定。")
         return
     if st.button(
         "保存本專案模型",
@@ -250,7 +251,7 @@ def _brief() -> None:
 
 
 def _generation(project_id: str, number: int) -> None:
-    st.info("專案已建立，現在可以整理 AI 對需求的理解。")
+    st.info("專案已建立。接下來先確認 AI 對需求的理解，再進行訪談。")
     if st.button("整理需求", type="primary", icon=":material/auto_awesome:"):
         try:
             get_api_client().generate_understanding(project_id, number)
@@ -421,7 +422,7 @@ def _complete(project_id: str, number: int) -> None:
         ),
         "",
     )
-    st.success("需求訪談已完成，可以進入評估階段。")
+    st.success("需求訪談已完成，可以開始方案評估。")
     st.caption(f"目前專案：{project_name or '已選專案'}｜版本 {number}")
     st.subheader("已確認的需求")
     for item in summary["confirmed"]:

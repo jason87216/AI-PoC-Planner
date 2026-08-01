@@ -171,13 +171,29 @@ Acceptance checkpoint：
 - 文件 diff 通過 `git diff --check`，且不引入 production code、migration、dependency 或 CI workflow 變更。
 - 明確記錄目前 UI 不提供 profile import／export，API key 的明文 local profile storage limitation，以及只支援 Bearer authentication 的 capability scope。
 
-### P8.1b Product-owner and release acceptance — Pending
+### P8.1b-1 Traditional Chinese UI wording and product guidance — Complete
+
+- 完成模型設定、能力選擇、模型可用性測試與 API key 清除語意的繁體中文產品引導；
+- 完成 blocked-no-provider、Discovery、Assessment、Results、history 與 download 的使用者文案整理；
+- 保留安全錯誤與 fail-closed 語意，不顯示 raw provider response、secret 或內部例外；
+- 補上 UI helper、能力標籤與 Streamlit smoke 測試；
+- 未修改 API、provider、deterministic decision、SQLite schema、migration、dependency 或 CI。
+
+Acceptance checkpoint：
+
+- offline UI tests、完整測試、Ruff 與 format check 通過；
+- capability wire values 與 API key preserve／clear payload 語意不變；
+- P7.2b 仍 Pending，P7.2 overall 仍 incomplete。
+
+### P8.1b-2 Product-owner and release acceptance — Pending
 
 - Review Traditional Chinese wording and business usefulness；
 - Verify blocked-no-provider behavior and project-bound model selection；
 - Verify Discovery、Assessment、Results、reload、history 與 download；
 - Review P7.2 compatibility evidence；
 - Complete release-readiness acceptance and decide whether to start P7.2b。
+
+P8.1b overall remains Pending until P8.1b-2 is accepted。
 
 ## Deferred
 

@@ -28,7 +28,7 @@ AI PoC Planner 已完成從 real-provider foundation、durable project history�
 | Phase 6 | Complete | FastAPI／Streamlit 產品流程、history re-entry、Results 與 download |
 | P7.1 | Complete | 本機啟動／狀態／停止與 UAT runtime |
 | P7.2 | In progress | P7.2a Complete；P7.2b Pending；overall incomplete |
-| Phase 8 | In progress | P8.1a Complete；P8.1b release acceptance Pending |
+| Phase 8 | In progress | P8.1a Complete；P8.1b-1 Complete；P8.1b-2 release acceptance Pending |
 
 ## Phase 7 — Local runtime and provider compatibility
 
@@ -135,11 +135,21 @@ P8.1a portfolio baseline 可基於已完成的 P7.2a 代表情境證據先行整
 - 建立架構／workflow 圖、截圖清單、P7.2a 脫敏 evidence 摘要與 limitations；
 - 不修改 application behavior、provider implementation、deterministic logic、database schema 或 dependencies；以上文件基線已完成。
 
-### P8.1b — Product-owner and release acceptance — Pending
+### P8.1b-1 — Traditional Chinese UI wording and product guidance — Complete
+
+- 以繁體中文整理模型設定、能力選擇、模型可用性測試、需求訪談、評估、報告與歷史頁面的產品文案；
+- 對無可用模型、連線失敗與可重試錯誤提供 fail-closed、可行動的使用者引導；
+- 明確說明 AI 協助理解與整理，正式推薦、分數與硬性限制由程式規則負責；
+- UI 顯示安全能力標籤與端點文件提示，不根據品牌或模型名稱猜測能力；
+- 未修改 API 契約、provider、deterministic logic、SQLite schema、依賴或 runtime；本輪只完成 offline validation。
+
+### P8.1b-2 — Product-owner and release acceptance — Pending
 
 - 審查繁體中文文案與 business usefulness；
 - 驗證 blocked-no-provider、Discovery、Assessment、Results、history re-entry 與 download；
 - 完成 release-readiness acceptance，再決定是否啟動 P7.2b。
+
+P8.1b overall remains Pending until P8.1b-2 acceptance is complete.
 
 ## Testing policy
 

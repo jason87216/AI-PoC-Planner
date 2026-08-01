@@ -4,6 +4,48 @@ from __future__ import annotations
 
 from typing import Any
 
+_CAPABILITY_LABELS = {
+    "authentication": {
+        "none": "不需要認證（none）",
+        "bearer_optional": "可選 Bearer 認證（bearer_optional）",
+        "bearer_required": "必須使用 Bearer 認證（bearer_required）",
+    },
+    "token_parameter": {
+        "max_tokens": "max_tokens（一般輸出上限）",
+        "max_completion_tokens": "max_completion_tokens（部分端點使用）",
+    },
+    "reasoning_parameter": {
+        "unsupported": "不傳送推理參數（unsupported）",
+        "reasoning_effort": "傳送 reasoning_effort（reasoning_effort）",
+    },
+    "structured_output": {
+        "json_schema": "JSON Schema（較嚴格的欄位結構）",
+        "json_object": "JSON Object（物件格式）",
+    },
+}
+
+_CAPABILITY_HELP = {
+    "authentication": "請依端點文件選擇；端點需要認證時，目前只支援 Bearer 認證。",
+    "token_parameter": "選擇端點接受的輸出預算欄位；不會同時送出兩個欄位。",
+    "reasoning_parameter": "若端點不支援推理參數，請選擇不傳送並留白推理強度。",
+    "structured_output": (
+        "至少選擇一種端點支援的結構化輸出模式；不要依品牌或模型名稱猜測能力。"
+    ),
+    "preferred_mode": "這是首選模式；必須包含在上方已勾選的支援模式中。",
+}
+
+
+def capability_label(kind: str, value: str) -> str:
+    """Return a reader-friendly label while preserving the wire value."""
+
+    return _CAPABILITY_LABELS.get(kind, {}).get(value, value)
+
+
+def capability_help(kind: str) -> str:
+    """Return bounded product guidance for one capability control."""
+
+    return _CAPABILITY_HELP.get(kind, "請依端點文件確認後再保存設定。")
+
 
 def create_profile_authentication_error(
     authentication: str, api_key: str

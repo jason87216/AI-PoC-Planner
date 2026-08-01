@@ -80,7 +80,7 @@ def _render_header(
     )
     st.caption(
         f"{project_name} · 第 {version_number} 版 · "
-        f"{status_label(version.get('status'))} · 模型：{model_name or '未記錄'}"
+        f"{status_label(version.get('status'))} · 使用模型：{model_name or '未記錄'}"
     )
     with st.container(horizontal=True):
         if st.button("返回專案工作區", icon=":material/arrow_back:"):
@@ -154,7 +154,7 @@ def _render_synthesis(
 ) -> None:
     view = report_synthesis_view(report)
     if not view:
-        st.warning("這份舊版報告沒有文章式 synthesis；以下顯示已保存的 Markdown。")
+        st.warning("這份舊版報告沒有新的文章式摘要；以下顯示已保存的 Markdown 內容。")
         markdown = str(report.get("markdown", ""))
         if markdown:
             st.markdown(markdown)
@@ -296,8 +296,8 @@ def _refresh_after_write() -> None:
 
 
 def _render_ready(project_id: str, version_number: int) -> None:
-    st.info("訪談已完成，可以開始建立這個專案的案例中心評估。")
-    if st.button("開始評估", type="primary", icon=":material/insights:"):
+    st.info("需求訪談已完成。接下來會以已確認資訊建立案例與方案評估。")
+    if st.button("開始方案評估", type="primary", icon=":material/insights:"):
         try:
             with st.spinner("正在匹配成熟案例並建立評估結果…"):
                 get_api_client().create_analysis(project_id, version_number)
@@ -316,8 +316,8 @@ def _render_assessed(project_id: str, version_number: int) -> None:
     view = analysis_overview(analysis)
     st.header("評估結果已保存")
     st.write(view["conclusion_rationale"])
-    st.info("產生正式報告後，頁面會以文章、比較表與附錄呈現完整結果。")
-    if st.button("產生正式報告", type="primary", icon=":material/article:"):
+    st.info("產生規劃報告後，頁面會呈現推薦理由、成熟案例比較、實施路線與硬性限制。")
+    if st.button("產生規劃報告", type="primary", icon=":material/article:"):
         try:
             with st.spinner("正在整理正式報告…"):
                 get_api_client().create_report(project_id, version_number)
@@ -349,7 +349,9 @@ if target is None:
         target = None
     if target is None:
         st.title("評估與規劃報告")
-        st.info("請先從專案歷史選擇一個已完成訪談的專案。")
+        st.info(
+            "請先從專案歷史選擇一個已完成訪談的專案；重新進入只會讀取已保存結果，不會重新呼叫模型服務。"
+        )
         if st.button("前往專案歷史", icon=":material/history:"):
             st.switch_page("app_pages/history.py")
         st.stop()
