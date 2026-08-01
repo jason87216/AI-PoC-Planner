@@ -155,13 +155,28 @@ Acceptance checkpoint:
 
 ## Phase 8 — Portfolio and release UAT
 
-### P8.1 Product-owner and portfolio acceptance — Pending
+### P8.1a Portfolio baseline — Next
 
-- Review Traditional Chinese wording and business usefulness.
-- Verify blocked-no-provider behavior and project-bound model selection.
-- Verify Discovery, Assessment, Results, reload, history and download.
-- Review P7.2 compatibility evidence.
-- Complete honest portfolio and release-readiness documentation.
+- README 說明產品定位、使用者、AI／deterministic boundary、啟動方式與目前狀態；
+- 提供五分鐘 UAT runtime、model-profile readiness 與 synthetic `governed_access` Demo runbook；
+- 新增作品集 brief，包含架構圖、workflow 圖、P7.2a 脫敏 evidence、截圖清單、技術亮點與 limitations；
+- 明確保留 P7.2b Pending、P7.2 overall incomplete 與 P8.1b Pending；
+- 不修改 application behavior、provider implementation、deterministic logic、database schema 或 dependencies。
+
+Acceptance checkpoint：
+
+- 新使用者可依 README 建立 `.venv`、啟動 UAT、建立並測試 model profile，並依 runbook 展示 synthetic `governed_access`；
+- portfolio brief 不包含 API key、Authorization、prompt、provider raw response、reasoning 或真實員工資料；
+- P7.2a、P7.2b、P7.2 overall 與 P8.1b 狀態互相一致；
+- 文件 diff 通過 `git diff --check`，且不引入 production code、migration、dependency 或 CI workflow 變更。
+
+### P8.1b Product-owner and release acceptance — Pending
+
+- Review Traditional Chinese wording and business usefulness；
+- Verify blocked-no-provider behavior and project-bound model selection；
+- Verify Discovery、Assessment、Results、reload、history 與 download；
+- Review P7.2 compatibility evidence；
+- Complete release-readiness acceptance and decide whether to start P7.2b。
 
 ## Deferred
 

@@ -4,7 +4,7 @@
 
 AI PoC Planner 已完成從 real-provider foundation、durable project history、Discovery、Assessment、reviewed-case matching、article-style Results，到 P7.1 本機 UAT runtime 的主要產品流程。
 
-目前下一個 implementation phase 是 **P7.2 provider compatibility and structured-output policy**。P7.2 尚未開始實作。
+目前 P7.2a representative dual-endpoint compatibility 已完成；P7.2b full golden-scenario matrix 仍待驗證。P8.1a portfolio baseline 可在不宣告完整 P7.2 的前提下進行。
 
 ## Guiding decisions
 
@@ -27,8 +27,8 @@ AI PoC Planner 已完成從 real-provider foundation、durable project history�
 | Phase 5 | Complete | reviewed cases、PlanningRun 與 persisted Markdown report |
 | Phase 6 | Complete | FastAPI／Streamlit 產品流程、history re-entry、Results 與 download |
 | P7.1 | Complete | 本機啟動／狀態／停止與 UAT runtime |
-| P7.2 | Next | provider compatibility and structured-output policy |
-| Phase 8 | Pending | product-owner、portfolio 與 release UAT |
+| P7.2 | In progress | P7.2a Complete；P7.2b Pending；overall incomplete |
+| Phase 8 | Next | P8.1a portfolio baseline；P8.1b release acceptance Pending |
 
 ## Phase 7 — Local runtime and provider compatibility
 
@@ -46,7 +46,7 @@ P7.1 已完成：
 
 P7.1 只負責本機 runtime，不負責安裝 provider、下載模型、建立雲端帳號或發佈 consumer installer。
 
-### P7.2 — Provider compatibility and structured-output policy — Next
+### P7.2 — Provider compatibility and structured-output policy — In progress
 
 #### Formal goal
 
@@ -126,12 +126,20 @@ P7.2b 在 P7.2a 通過後：
 
 ## Phase 8 — Portfolio and release UAT
 
-Phase 8 在 P7.2 完成後執行：
+P8.1a portfolio baseline 可基於已完成的 P7.2a 代表情境證據先行整理；這不會改變 P7.2b Pending 或 P7.2 overall incomplete 狀態。
 
-- 產品擁有者審查 Traditional Chinese wording 與 business usefulness；
+### P8.1a — Portfolio baseline — Next
+
+- 同步 README、PROJECT_LOG 與本計畫中的產品狀態；
+- 提供五分鐘啟動、model profile readiness 與 synthetic `governed_access` Demo runbook；
+- 建立架構／workflow 圖、截圖清單、P7.2a 脫敏 evidence 摘要與 limitations；
+- 不修改 application behavior、provider implementation、deterministic logic、database schema 或 dependencies。
+
+### P8.1b — Product-owner and release acceptance — Pending
+
+- 審查繁體中文文案與 business usefulness；
 - 驗證 blocked-no-provider、Discovery、Assessment、Results、history re-entry 與 download；
-- 驗證 provider compatibility evidence；
-- 完成 portfolio README 與 release-readiness review。
+- 完成 release-readiness acceptance，再決定是否啟動 P7.2b。
 
 ## Testing policy
 
