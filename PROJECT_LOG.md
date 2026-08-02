@@ -30,6 +30,14 @@
 - 只完成 UI 文案、presentation helper、相關測試與 offline validation，未修改 API、provider、SQLite schema、deterministic logic 或 dependencies。
 - P8.1b-2 product-owner and release acceptance 仍 Pending；P8.1b overall 仍 Pending；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
 
+### P8.1b-2 product-owner and release acceptance — Pending
+
+- 人工驗收發現兩項 blocking defects：舊版 SQLite schema 仍可能讓 runtime 宣稱 running，以及模型設定頁把目前設定、新增、編輯與技術欄位塞在同一個長頁面。
+- 本修正拆分模型設定首頁、新增頁與編輯頁，將 capability 技術值收進「相容性設定（技術人員）」，並保留既有 API／provider contract。
+- 本修正讓 runtime 在 ready 前完成 SQLite initialization、migration 與 schema validation；migration 失敗時 fail closed，公開錯誤只提供可行動的本機資料庫指引。
+- 新建專案現在只要求專案名稱與目前流程與問題；其他四項 brief 欄位可留白並正規化為 missing facts，交由後續訪談補齊。
+- P8.1b-2 仍待重新人工驗收；P8.1b overall、P7.2b 與完整 P7.2 仍未完成。
+
 ### Historical diagnosis
 
 The earlier readiness, analysis-budget, report-contract, and persistence-compatibility investigations are retained below as historical context; the closeout above is the current status.

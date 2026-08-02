@@ -238,6 +238,28 @@ def test_generic_provider_http_error_uses_safe_ui_mapping() -> None:
     assert raw_marker not in repr(caught.value)
 
 
+def test_database_failure_has_actionable_safe_ui_guidance() -> None:
+    raw_marker = "C:\\private\\planner.sqlite3"
+    api = _client(
+        lambda _: httpx.Response(
+            500,
+            json={
+                "error": {
+                    "code": "database_operation_failed",
+                    "message": f"SQL traceback {raw_marker}",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.list_projects()
+
+    assert "本機資料庫無法初始化或升級" in caught.value.user_message
+    assert "重新啟動" in caught.value.user_message
+    assert raw_marker not in str(caught.value)
+
+
 def test_project_model_binding_sends_only_a_profile_reference() -> None:
     requests: list[httpx.Request] = []
 

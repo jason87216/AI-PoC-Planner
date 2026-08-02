@@ -85,6 +85,23 @@ def test_home_offers_model_settings_action() -> None:
     assert 'st.switch_page("app_pages/model_settings.py")' in source
 
 
+def test_new_project_marks_only_name_and_workflow_as_required() -> None:
+    source = open("app_pages/new_project.py", encoding="utf-8").read()
+
+    assert '"專案名稱",' in source
+    assert '"目前流程與問題",' in source
+    for label in (
+        "希望改善的成果（選填）",
+        "現有資料與文件（選填）",
+        "使用者與負責人（選填）",
+        "已知限制（選填）",
+    ):
+        assert label in source
+    assert "後續訪談會協助整理期望成果與驗收方式" in source
+    assert "可填寫預算、時程、" in source
+    assert "個資、法規、部署環境或人工核准要求" in source
+
+
 def test_global_navigation_contains_only_project_entry_points() -> None:
     source = open("streamlit_app.py", encoding="utf-8").read()
 

@@ -148,6 +148,8 @@ P8.1a portfolio baseline 可基於已完成的 P7.2a 代表情境證據先行整
 - 審查繁體中文文案與 business usefulness；
 - 驗證 blocked-no-provider、Discovery、Assessment、Results、history re-entry 與 download；
 - 完成 release-readiness acceptance，再決定是否啟動 P7.2b。
+- 人工驗收已揭露 runtime database preflight 與 model settings information architecture blocking defects；本修正以 bounded application/UI changes 修復，並重新建立乾淨 UAT schema v8。
+- 本修正不改變 provider、deterministic assessment、scoring、hard gates 或正式結果邏輯；P8.1b-2 必須重新人工驗收後才能改變狀態。
 
 P8.1b overall remains Pending until P8.1b-2 acceptance is complete.
 

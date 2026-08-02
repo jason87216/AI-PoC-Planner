@@ -192,6 +192,8 @@ Acceptance checkpoint：
 - Verify Discovery、Assessment、Results、reload、history 與 download；
 - Review P7.2 compatibility evidence；
 - Complete release-readiness acceptance and decide whether to start P7.2b。
+- Current acceptance blockers include stale SQLite runtime readiness and a combined model-settings long page; the bounded fix separates runtime preflight, profile create/edit IA, and minimal project brief input.
+- Re-acceptance must verify fresh schema v8, actionable database failure guidance, profile preservation, and the unchanged provider/deterministic boundaries.
 
 P8.1b overall remains Pending until P8.1b-2 is accepted。
 
