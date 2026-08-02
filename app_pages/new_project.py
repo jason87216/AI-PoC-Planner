@@ -15,6 +15,10 @@ def _profile_choice(profile: dict[str, object]) -> str:
     return f"{profile_label(profile)}｜{enabled}"
 
 
+def _optional_text(value: str) -> str | None:
+    return value.strip() or None
+
+
 st.title("新建專案")
 st.caption(
     "先選擇並測試本專案使用的模型，再輸入最小需求簡介；模型服務未通過測試時不會建立正式評估。"
@@ -80,25 +84,28 @@ with st.form("new_project_form"):
         height=140,
     )
     outcome = st.text_area(
-        "希望改善的成果",
-        help="描述希望改善的結果，不必先決定技術方案。",
+        "希望改善的成果（選填）",
+        help="尚未確定可先留白，後續訪談會協助整理期望成果與驗收方式。",
         key="new_project_outcome",
         height=120,
     )
     data = st.text_area(
-        "現有資料與文件",
-        help="列出可用的表單、規範、紀錄或其他參考資料。",
+        "現有資料與文件（選填）",
+        help="可列出表單、規範、紀錄或系統資料；不確定可先留白。",
         key="new_project_data",
         height=120,
     )
     owners = st.text_area(
-        "使用者與負責人",
-        help="可填寫實際使用者、審核者與維運角色。",
+        "使用者與負責人（選填）",
+        help="可填寫實際使用者、審核者、流程負責人與維運角色；不確定可先留白。",
         key="new_project_owners",
     )
     constraints = st.text_area(
-        "已知限制",
-        help="可包含預算、時程、個資／資料、法規／合規、部署與人工核准等限制。",
+        "已知限制（選填）",
+        help=(
+            "不確定可先留白，後續訪談會協助補充。可填寫預算、時程、"
+            "個資、法規、部署環境或人工核准要求。"
+        ),
         key="new_project_constraints",
     )
     submitted = st.form_submit_button(
@@ -113,10 +120,10 @@ if submitted:
             {
                 "project_name": project_name,
                 "current_workflow_problem": current,
-                "desired_outcome": outcome,
-                "available_data": data,
-                "users_and_owners": owners or None,
-                "known_constraints": constraints or None,
+                "desired_outcome": _optional_text(outcome),
+                "available_data": _optional_text(data),
+                "users_and_owners": _optional_text(owners),
+                "known_constraints": _optional_text(constraints),
                 "model_profile_id": profile_id,
             }
         )

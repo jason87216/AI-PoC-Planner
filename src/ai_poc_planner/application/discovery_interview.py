@@ -78,9 +78,11 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def normalize_available_data(value: str) -> AvailableDataStatus:
+def normalize_available_data(value: str | None) -> AvailableDataStatus:
     """Recognize only exact intentional unknown/missing tokens."""
 
+    if value is None:
+        return AvailableDataStatus.MISSING
     normalized = value.strip().casefold()
     if normalized in {"不知道", "不清楚", "unknown", "don't know", "do not know"}:
         return AvailableDataStatus.UNKNOWN
@@ -146,13 +148,22 @@ class DiscoveryInterviewService:
                 value=brief.current_workflow_problem,
                 reference_message_ids=[message.id],
             )
-            self._history.record_user_confirmed_fact(
-                project.id,
-                version.version_number,
-                fact_key="desired_outcome",
-                value=brief.desired_outcome,
-                reference_message_ids=[message.id],
-            )
+            if brief.desired_outcome is not None:
+                self._history.record_user_confirmed_fact(
+                    project.id,
+                    version.version_number,
+                    fact_key="desired_outcome",
+                    value=brief.desired_outcome,
+                    reference_message_ids=[message.id],
+                )
+            else:
+                self._history.record_unknown_or_missing(
+                    project.id,
+                    version.version_number,
+                    fact_key="desired_outcome",
+                    status=FactStatus.MISSING,
+                    reference_message_ids=[message.id],
+                )
             if available_status is AvailableDataStatus.KNOWN:
                 self._history.record_user_confirmed_fact(
                     project.id,
@@ -183,6 +194,14 @@ class DiscoveryInterviewService:
                         version.version_number,
                         fact_key=key,
                         value=value,
+                        reference_message_ids=[message.id],
+                    )
+                else:
+                    self._history.record_unknown_or_missing(
+                        project.id,
+                        version.version_number,
+                        fact_key=key,
+                        status=FactStatus.MISSING,
                         reference_message_ids=[message.id],
                     )
             timestamp = self._clock()

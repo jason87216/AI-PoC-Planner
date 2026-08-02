@@ -164,6 +164,36 @@ def test_phase_three_initial_brief_understanding_and_bounded_round(
     assert answered.json()["status"] == "ready_for_next_round"
 
 
+def test_minimal_initial_brief_persists_optional_fields_as_missing(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    profile_id = _ready_profile(client)
+    created = client.post(
+        "/v1/discovery-projects",
+        json={
+            "project_name": "Minimal brief",
+            "current_workflow_problem": "Manual routing",
+            "desired_outcome": "",
+            "available_data": "",
+            "users_and_owners": " ",
+            "known_constraints": None,
+            "model_profile_id": profile_id,
+        },
+    )
+
+    assert created.status_code == 201
+    assert created.json()["normalized_brief"]["desired_outcome"] is None
+    assert created.json()["normalized_brief"]["available_data"] is None
+    project_id = created.json()["project"]["id"]
+    facts = client.get(f"/v1/projects/{project_id}/versions/1/facts").json()
+    fact_statuses = {fact["fact_key"]: fact["status"] for fact in facts}
+    assert fact_statuses["desired_outcome"] == "missing"
+    assert fact_statuses["available_data"] == "missing"
+    assert fact_statuses["users_and_owners"] == "missing"
+    assert fact_statuses["known_constraints"] == "missing"
+
+
 def test_discovery_provider_auth_failure_is_safe_and_does_not_persist_assistant_output(
     tmp_path: Path,
 ) -> None:

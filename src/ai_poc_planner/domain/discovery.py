@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from ai_poc_planner.domain.enums import (
     AvailableDataStatus,
@@ -28,10 +28,25 @@ from ai_poc_planner.domain.models import (
 class InitialBrief(ContractModel):
     project_name: NonEmptyStr
     current_workflow_problem: NonEmptyStr
-    desired_outcome: NonEmptyStr
-    available_data: NonEmptyStr
+    desired_outcome: NonEmptyStr | None = None
+    available_data: NonEmptyStr | None = None
     users_and_owners: NonEmptyStr | None = None
     known_constraints: NonEmptyStr | None = None
+
+    @field_validator(
+        "desired_outcome",
+        "available_data",
+        "users_and_owners",
+        "known_constraints",
+        mode="before",
+    )
+    @classmethod
+    def blank_optional_text_is_missing(cls, value: object) -> object:
+        """Treat an empty form field as missing rather than confirmed content."""
+
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class NormalizedInitialBrief(InitialBrief):
