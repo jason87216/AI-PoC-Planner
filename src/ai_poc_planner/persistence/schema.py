@@ -1244,3 +1244,28 @@ def initialize_database(connection: sqlite3.Connection) -> None:
     except sqlite3.Error as error:
         _rollback_quietly(connection)
         raise DatabaseOperationError("unable to initialize database schema") from error
+
+
+def validate_database_schema(connection: sqlite3.Connection) -> None:
+    """Validate an already-initialized database without running migrations."""
+
+    version = read_schema_version(connection)
+    if version != CURRENT_SCHEMA_VERSION:
+        raise SchemaMismatchError(
+            "database schema must be initialized before repository operations"
+        )
+    try:
+        _validate_current_schema(connection)
+    except SchemaMismatchError:
+        raise
+    except sqlite3.Error as error:
+        raise DatabaseOperationError("unable to validate database schema") from error
+
+
+def ensure_database_schema(connection: sqlite3.Connection) -> None:
+    """Migrate legacy databases once, otherwise perform a lightweight validation."""
+
+    if read_schema_version(connection) != CURRENT_SCHEMA_VERSION:
+        initialize_database(connection)
+    else:
+        validate_database_schema(connection)

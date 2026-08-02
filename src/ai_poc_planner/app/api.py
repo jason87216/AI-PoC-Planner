@@ -93,6 +93,7 @@ from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import (
     CompletedVersionImmutableError,
     CurrentVersionRequiredError,
+    DatabasePreflightError,
     FactConfirmationInvalidError,
     FactConflictError,
     FactCorrectionInvalidError,
@@ -126,7 +127,11 @@ from ai_poc_planner.persistence.planning_runs import SQLitePlanningRunRepository
 from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.projects import SQLiteProjectRepository
 from ai_poc_planner.persistence.report import SQLitePlanningReportRepository
-from ai_poc_planner.persistence.schema import initialize_database
+from ai_poc_planner.persistence.schema import (
+    ensure_database_schema,
+    initialize_database,
+    validate_database_schema,
+)
 from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
 from ai_poc_planner.providers.base import (
     ModelProvider,
@@ -349,6 +354,17 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(lifespan_app: FastAPI) -> AsyncIterator[None]:
+        if database_path is not None:
+            connection = database_connection(database_path)
+            try:
+                initialize_database(connection)
+                validate_database_schema(connection)
+            except Exception as error:
+                raise DatabasePreflightError(
+                    "local database preflight failed"
+                ) from error
+            finally:
+                connection.close()
         try:
             yield
         finally:
@@ -428,7 +444,7 @@ def create_app(
             raise PersistedPlanningUnavailableError
         connection = database_connection(database_path)
         try:
-            initialize_database(connection)
+            ensure_database_schema(connection)
             project_repository = SQLiteProjectRepository(connection)
             yield PersistedPlanningFlow(
                 planning_agent=planning_agent,
@@ -449,7 +465,7 @@ def create_app(
             raise PersistedPlanningUnavailableError
         connection = database_connection(database_path)
         try:
-            initialize_database(connection)
+            ensure_database_schema(connection)
             yield ProjectHistoryService(
                 SQLiteProjectHistoryRepository(connection),
                 selected_profile_getter=profile_repository.get_selected,
@@ -463,7 +479,7 @@ def create_app(
             raise PersistedPlanningUnavailableError
         connection = database_connection(database_path)
         try:
-            initialize_database(connection)
+            ensure_database_schema(connection)
             history = ProjectHistoryService(
                 SQLiteProjectHistoryRepository(connection),
                 selected_profile_getter=profile_repository.get_selected,
@@ -485,7 +501,7 @@ def create_app(
             raise PersistedPlanningUnavailableError
         connection = database_connection(database_path)
         try:
-            initialize_database(connection)
+            ensure_database_schema(connection)
             history = ProjectHistoryService(
                 SQLiteProjectHistoryRepository(connection),
                 selected_profile_getter=profile_repository.get_selected,
@@ -509,7 +525,7 @@ def create_app(
             raise PersistedPlanningUnavailableError
         connection = database_connection(database_path)
         try:
-            initialize_database(connection)
+            ensure_database_schema(connection)
             yield PlanningReportService(
                 history=ProjectHistoryService(
                     SQLiteProjectHistoryRepository(connection),

@@ -209,6 +209,10 @@ def start(mode: Mode) -> int:
     )
     try:
         if not _wait_for_identity(api_port, instance_id):
+            if api.poll() is not None:
+                raise RuntimeError(
+                    "FastAPI 啟動失敗：本機資料庫無法初始化或升級；請查看本機啟動日誌。"
+                )
             raise RuntimeError("FastAPI 未通过本次启动的身份验证")
         print("FastAPI 已通過身份驗證。正在啟動 Streamlit…")
         api_url = f"http://127.0.0.1:{api_port}"

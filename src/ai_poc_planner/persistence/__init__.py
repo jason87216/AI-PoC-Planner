@@ -5,6 +5,7 @@ from ai_poc_planner.persistence.errors import (
     CompletedVersionImmutableError,
     CurrentVersionRequiredError,
     DatabaseOperationError,
+    DatabasePreflightError,
     FactConfirmationInvalidError,
     FactConflictError,
     FactCorrectionInvalidError,
@@ -33,8 +34,10 @@ from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepos
 from ai_poc_planner.persistence.projects import SQLiteProjectRepository
 from ai_poc_planner.persistence.schema import (
     CURRENT_SCHEMA_VERSION,
+    ensure_database_schema,
     initialize_database,
     read_schema_version,
+    validate_database_schema,
 )
 from ai_poc_planner.persistence.solution_catalog import CatalogCoverageError
 
@@ -44,6 +47,7 @@ __all__ = [
     "CompletedVersionImmutableError",
     "CurrentVersionRequiredError",
     "DatabaseOperationError",
+    "DatabasePreflightError",
     "InvalidProjectInputError",
     "InvalidProjectVersionTransitionError",
     "InvalidVisibleMessageError",
@@ -70,6 +74,8 @@ __all__ = [
     "SchemaMismatchError",
     "UnsupportedSchemaVersionError",
     "database_connection",
+    "ensure_database_schema",
     "initialize_database",
     "read_schema_version",
+    "validate_database_schema",
 ]
