@@ -28,6 +28,16 @@ page = st.navigation(
             icon=":material/tune:",
         ),
         st.Page(
+            "app_pages/model_settings_new.py",
+            title="新增模型設定",
+            visibility="hidden",
+        ),
+        st.Page(
+            "app_pages/model_settings_edit.py",
+            title="編輯模型設定",
+            visibility="hidden",
+        ),
+        st.Page(
             "app_pages/discovery.py",
             title="專案階段",
             url_path="project",

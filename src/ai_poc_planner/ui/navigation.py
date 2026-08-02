@@ -17,6 +17,18 @@ def open_history() -> None:
     st.switch_page("app_pages/history.py")
 
 
+def open_model_settings_new() -> None:
+    st.query_params.clear()
+    st.switch_page("app_pages/model_settings_new.py")
+
+
+def open_model_settings_edit(profile_id: str) -> None:
+    st.switch_page(
+        "app_pages/model_settings_edit.py",
+        query_params={"profile_id": profile_id},
+    )
+
+
 def open_workspace(project_id: str, version_number: int) -> None:
     st.switch_page(
         "app_pages/discovery.py",

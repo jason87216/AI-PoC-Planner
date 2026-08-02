@@ -57,16 +57,16 @@ def test_update_none_with_clear_sends_explicit_null_api_key() -> None:
 
 def test_capability_labels_are_product_facing_and_keep_stable_values() -> None:
     assert capability_label("authentication", "bearer_required") == (
-        "必須使用 Bearer 認證（bearer_required）"
+        "需要 API key（bearer_required）"
     )
     assert capability_label("token_parameter", "max_completion_tokens") == (
-        "max_completion_tokens（部分端點使用）"
+        "新版輸出長度參數（max_completion_tokens）"
     )
     assert capability_label("reasoning_parameter", "unsupported") == (
-        "不傳送推理參數（unsupported）"
+        "不傳送推理強度（unsupported）"
     )
     assert capability_label("structured_output", "json_schema") == (
-        "JSON Schema（較嚴格的欄位結構）"
+        "嚴格結構化輸出（json_schema）"
     )
 
 
@@ -76,12 +76,12 @@ def test_capability_help_explains_explicit_vendor_neutral_selection() -> None:
 
 
 def test_create_form_has_one_preferred_mode_and_keeps_wire_values() -> None:
-    source = open("app_pages/model_settings.py", encoding="utf-8").read()
-    create_form = source.split("if profiles:", 1)[0]
+    overview = open("app_pages/model_settings.py", encoding="utf-8").read()
+    source = open("app_pages/model_settings_new.py", encoding="utf-8").read()
 
-    assert "structured_output_mode = st.selectbox" not in source
-    assert create_form.count('"偏好的結構化輸出模式（選填）"') == 1
-    assert '"首選結構化輸出模式"' not in create_form
+    assert 'st.form("create_model_profile"' not in overview
+    assert source.count('"優先結構化輸出模式"') == 1
+    assert '"偏好的結構化輸出模式（選填）"' not in source
     assert "structured_output_mode=preferred_mode" in source
 
     for mode in ("json_schema", "json_object"):

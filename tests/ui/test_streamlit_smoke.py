@@ -28,6 +28,8 @@ def test_home_page_loads_without_a_running_api(monkeypatch: pytest.MonkeyPatch) 
         ("app_pages/history.py", "專案歷史"),
         ("app_pages/results.py", "評估與規劃報告"),
         ("app_pages/model_settings.py", "模型設定"),
+        ("app_pages/model_settings_new.py", "新增模型設定"),
+        ("app_pages/model_settings_edit.py", "編輯模型設定"),
     ],
 )
 def test_product_pages_load_without_a_running_api(
@@ -41,17 +43,21 @@ def test_product_pages_load_without_a_running_api(
 
 
 def test_model_settings_exposes_safe_provider_capability_controls() -> None:
-    source = open("app_pages/model_settings.py", encoding="utf-8").read()
+    overview = open("app_pages/model_settings.py", encoding="utf-8").read()
+    source = open("app_pages/model_settings_new.py", encoding="utf-8").read()
+    source += open("app_pages/model_settings_edit.py", encoding="utf-8").read()
+
+    assert 'st.form("create_model_profile"' not in overview
+    assert 'st.form("update_model_profile"' not in overview
 
     for label in (
         "認證方式",
-        "輸出預算欄位",
+        "輸出長度參數",
         "推理參數能力",
-        "支援 JSON Schema",
-        "支援 JSON Object",
+        "支援嚴格結構化輸出（JSON Schema）",
+        "支援一般 JSON 輸出（JSON Object）",
         "清除已保存的 API key",
-        "進階相容性設定",
-        "private model_profiles.json",
+        "相容性設定（技術人員）",
     ):
         assert label in source
     assert "ai_poc_planner.providers" not in source

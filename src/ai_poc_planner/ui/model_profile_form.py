@@ -6,26 +6,26 @@ from typing import Any
 
 _CAPABILITY_LABELS = {
     "authentication": {
-        "none": "不需要認證（none）",
-        "bearer_optional": "可選 Bearer 認證（bearer_optional）",
-        "bearer_required": "必須使用 Bearer 認證（bearer_required）",
+        "none": "不需要 API key（none）",
+        "bearer_optional": "可選擇使用 API key（bearer_optional）",
+        "bearer_required": "需要 API key（bearer_required）",
     },
     "token_parameter": {
-        "max_tokens": "max_tokens（一般輸出上限）",
-        "max_completion_tokens": "max_completion_tokens（部分端點使用）",
+        "max_tokens": "標準輸出長度參數（max_tokens）",
+        "max_completion_tokens": "新版輸出長度參數（max_completion_tokens）",
     },
     "reasoning_parameter": {
-        "unsupported": "不傳送推理參數（unsupported）",
-        "reasoning_effort": "傳送 reasoning_effort（reasoning_effort）",
+        "unsupported": "不傳送推理強度（unsupported）",
+        "reasoning_effort": "支援推理強度（reasoning_effort）",
     },
     "structured_output": {
-        "json_schema": "JSON Schema（較嚴格的欄位結構）",
-        "json_object": "JSON Object（物件格式）",
+        "json_schema": "嚴格結構化輸出（json_schema）",
+        "json_object": "一般 JSON 輸出（json_object）",
     },
 }
 
 _CAPABILITY_HELP = {
-    "authentication": "請依端點文件選擇；端點需要認證時，目前只支援 Bearer 認證。",
+    "authentication": ("請依端點文件選擇；端點需要認證時，目前只支援 Bearer 認證。"),
     "token_parameter": "選擇端點接受的輸出預算欄位；不會同時送出兩個欄位。",
     "reasoning_parameter": "若端點不支援推理參數，請選擇不傳送並留白推理強度。",
     "structured_output": (
@@ -33,6 +33,11 @@ _CAPABILITY_HELP = {
     ),
     "preferred_mode": "這是首選模式；必須包含在上方已勾選的支援模式中。",
 }
+
+_CAPABILITY_HELP["compatibility_intro"] = (
+    "多數使用者只需要依模型服務文件填寫；不確定時請先使用服務商建議值，"
+    "再執行模型可用性測試。"
+)
 
 
 def capability_label(kind: str, value: str) -> str:
