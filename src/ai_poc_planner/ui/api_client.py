@@ -69,6 +69,10 @@ _USER_MESSAGES = {
     "understanding_already_confirmed": "需求理解已確認。",
     "understanding_confirmation_required": "請先確認或修正目前的需求理解。",
     "internal_error": "服務暫時無法完成此操作，請稍後再試。",
+    "database_operation_failed": (
+        "本機資料庫無法初始化或升級。請重新啟動 AI PoC Planner；"
+        "若問題持續發生，請查看本機啟動日誌。"
+    ),
     "runtime_configuration_missing": "應用程式尚未透過本機啟動器啟動。",
     "local_service_unavailable": (
         "AI PoC Planner 本機服務目前未運行，請重新執行啟動器。"
