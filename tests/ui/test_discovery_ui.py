@@ -340,8 +340,8 @@ def test_history_maps_project_statuses_to_safe_actions() -> None:
     assert '"interviewing": "繼續處理"' in source
     assert '"clarification_required": "繼續處理"' in source
     assert '"ready_for_assessment": "繼續評估"' in source
-    assert '"assessed": "查看專案"' in source
-    assert '"proposal_generated": "查看專案"' in source
-    assert '"complete": "查看專案"' in source
+    assert '"assessed": "繼續生成報告"' in source
+    assert '"proposal_generated": "查看報告"' in source
+    assert '"complete": "查看報告"' in source
     assert '"failed": "查看問題"' in source
     assert "raw" not in source.lower()

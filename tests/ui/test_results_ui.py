@@ -209,6 +209,8 @@ def test_results_ui_does_not_expose_internal_details_or_forbidden_layers() -> No
     assert "case_support_summaries" in source
     assert "implementation_references" in source
     assert "source_url" in source
+    assert "_recover_latest_target" not in source
+    assert "workspace_target_from_query" in source
 
 
 def test_report_generation_is_one_primary_frontend_action() -> None:

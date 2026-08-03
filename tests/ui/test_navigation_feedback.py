@@ -7,6 +7,23 @@ import pytest
 import ai_poc_planner.ui.navigation as navigation
 
 
+@pytest.mark.parametrize(
+    ("status", "destination"),
+    [
+        ("draft", "workspace"),
+        ("interviewing", "workspace"),
+        ("clarification_required", "workspace"),
+        ("ready_for_assessment", "results"),
+        ("assessed", "results"),
+        ("complete", "results"),
+    ],
+)
+def test_history_destination_is_determined_by_persisted_status(
+    status: str, destination: str
+) -> None:
+    assert navigation.history_destination_for_status(status) == destination
+
+
 def test_first_entry_and_page_change_show_feedback_but_same_page_rerun_does_not(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -52,6 +69,35 @@ def test_switch_page_marks_destination_before_public_streamlit_switch(
         "page_key": "project-results",
         "label": "正在開啟評估報告……",
     }
+
+
+def test_open_results_sets_explicit_target_and_results_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, object]] = []
+    fake_streamlit = SimpleNamespace(
+        session_state={},
+        switch_page=lambda path, **kwargs: calls.append((path, kwargs)),
+    )
+    monkeypatch.setattr(navigation, "st", fake_streamlit)
+
+    navigation.open_results("project-id", 3)
+
+    assert fake_streamlit.session_state["selected_project"] == {
+        "project_id": "project-id",
+        "version_number": 3,
+    }
+    assert calls == [
+        (
+            "app_pages/results.py",
+            {
+                "query_params": {
+                    "workspace": navigation.workspace_route_key("project-id"),
+                    "version": "3",
+                }
+            },
+        )
+    ]
 
 
 def test_interrupted_source_render_keeps_pending_until_destination() -> None:

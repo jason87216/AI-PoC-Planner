@@ -7,7 +7,11 @@ from typing import Any
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
-from ai_poc_planner.ui.navigation import switch_page
+from ai_poc_planner.ui.navigation import (
+    switch_page,
+    workspace_route_key,
+    workspace_target_from_query,
+)
 from ai_poc_planner.ui.presentation import show_api_error, status_label
 from ai_poc_planner.ui.results import (
     analysis_overview,
@@ -36,6 +40,28 @@ def _target_from_state() -> tuple[str, int] | None:
     return project_id, version_number
 
 
+def _target_from_query() -> tuple[str, int] | None:
+    query_target = workspace_target_from_query()
+    if query_target is None:
+        return None
+    route_key, version_number = query_target
+    try:
+        project = next(
+            project
+            for project in load_projects()
+            if workspace_route_key(str(project.get("project_id"))) == route_key
+            and project.get("version_number") == version_number
+        )
+    except (ApiClientError, StopIteration):
+        return None
+    project_id = str(project["project_id"])
+    st.session_state["selected_project"] = {
+        "project_id": project_id,
+        "version_number": version_number,
+    }
+    return project_id, version_number
+
+
 def _project_name(project_id: str, version_number: int) -> str:
     for project in load_projects():
         if (
@@ -44,21 +70,6 @@ def _project_name(project_id: str, version_number: int) -> str:
         ):
             return str(project.get("project_name") or "未命名專案")
     return "未命名專案"
-
-
-def _recover_latest_target() -> tuple[str, int] | None:
-    for project in load_projects():
-        project_id = project.get("project_id")
-        version_number = project.get("version_number")
-        if (
-            result_view_for_status(project.get("status")) != "unavailable"
-            and isinstance(project_id, str)
-            and isinstance(version_number, int)
-        ):
-            target = {"project_id": project_id, "version_number": version_number}
-            st.session_state["selected_project"] = target
-            return project_id, version_number
-    return None
 
 
 def _items(values: object, empty: str = "目前未記錄。") -> None:
@@ -356,19 +367,15 @@ st.set_page_config(
 
 target = _target_from_state()
 if target is None:
-    try:
-        target = _recover_latest_target()
-    except ApiClientError as error:
-        show_api_error(error)
-        target = None
-    if target is None:
-        st.title("評估與規劃報告")
-        st.info(
-            "請先從專案歷史選擇一個已完成訪談的專案；重新進入只會讀取已保存結果，不會重新呼叫模型服務。"
-        )
-        if st.button("前往專案歷史", icon=":material/history:"):
-            switch_page("app_pages/history.py")
-        st.stop()
+    target = _target_from_query()
+if target is None:
+    st.title("評估與規劃報告")
+    st.info(
+        "請先從專案歷史選擇一個已完成訪談的專案；重新進入只會讀取已保存結果，不會重新呼叫模型服務。"
+    )
+    if st.button("前往專案歷史", icon=":material/history:"):
+        switch_page("app_pages/history.py")
+    st.stop()
 
 project_id, version_number = target
 try:

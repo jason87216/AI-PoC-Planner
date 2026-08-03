@@ -22,6 +22,21 @@ _PAGE_LABELS = {
     "project-results": "正在開啟評估報告……",
 }
 
+_RESULT_STATUSES = {
+    "ready_for_assessment",
+    "assessed",
+    "proposal_generated",
+    "complete",
+}
+
+
+def history_destination_for_status(status: object) -> str:
+    """Choose the durable history destination from persisted version status."""
+
+    if str(status) in _RESULT_STATUSES:
+        return "results"
+    return "workspace"
+
 
 def page_route_key(page_path: str) -> str:
     """Return the stable public route key used by transition state."""
@@ -109,8 +124,26 @@ def open_model_settings_edit(profile_id: str) -> None:
 
 
 def open_workspace(project_id: str, version_number: int) -> None:
-    switch_page(
+    _open_project_page(
         "app_pages/discovery.py",
+        project_id,
+        version_number,
+    )
+
+
+def open_results(project_id: str, version_number: int) -> None:
+    """Open the persisted results for an explicit project/version target."""
+
+    _open_project_page("app_pages/results.py", project_id, version_number)
+
+
+def _open_project_page(page_path: str, project_id: str, version_number: int) -> None:
+    st.session_state["selected_project"] = {
+        "project_id": project_id,
+        "version_number": version_number,
+    }
+    switch_page(
+        page_path,
         query_params={
             "workspace": workspace_route_key(project_id),
             "version": str(version_number),

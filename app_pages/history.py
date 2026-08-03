@@ -3,7 +3,11 @@
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
-from ai_poc_planner.ui.navigation import open_workspace
+from ai_poc_planner.ui.navigation import (
+    history_destination_for_status,
+    open_results,
+    open_workspace,
+)
 from ai_poc_planner.ui.presentation import show_api_error, status_label
 from ai_poc_planner.ui.runtime import load_projects, refresh_api_data
 
@@ -23,9 +27,9 @@ def _action_label(status: object) -> str:
         "interviewing": "繼續處理",
         "clarification_required": "繼續處理",
         "ready_for_assessment": "繼續評估",
-        "assessed": "查看專案",
-        "proposal_generated": "查看專案",
-        "complete": "查看專案",
+        "assessed": "繼續生成報告",
+        "proposal_generated": "查看報告",
+        "complete": "查看報告",
         "failed": "查看問題",
     }.get(str(status), "查看專案")
 
@@ -60,10 +64,9 @@ else:
                 key=f"open_project_{project.get('project_id')}",
                 icon=":material/folder_open:",
             ):
-                st.session_state["selected_project"] = {
-                    "project_id": project.get("project_id"),
-                    "version_number": project.get("version_number"),
-                }
-                open_workspace(
-                    str(project.get("project_id")), int(project.get("version_number"))
-                )
+                project_id = str(project.get("project_id"))
+                version_number = int(project.get("version_number"))
+                if history_destination_for_status(project.get("status")) == "results":
+                    open_results(project_id, version_number)
+                else:
+                    open_workspace(project_id, version_number)
