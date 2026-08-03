@@ -260,6 +260,35 @@ def test_database_failure_has_actionable_safe_ui_guidance() -> None:
     assert raw_marker not in str(caught.value)
 
 
+def test_analysis_result_validation_has_actionable_safe_ui_guidance() -> None:
+    raw_marker = "raw-provider-analysis-marker"
+    api = _client(
+        lambda _: httpx.Response(
+            502,
+            json={
+                "error": {
+                    "code": "analysis_result_invalid",
+                    "message": raw_marker,
+                    "details": {
+                        "operation": "analysis",
+                        "retryable": False,
+                        "user_action": "若持續失敗，請檢查模型相容性設定或更換模型。",
+                        "raw": raw_marker,
+                    },
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.list_projects()
+
+    assert "模型回傳的評估格式無法驗證" in caught.value.user_message
+    assert caught.value.user_action == "若持續失敗，請檢查模型相容性設定或更換模型。"
+    assert raw_marker not in str(caught.value)
+    assert raw_marker not in repr(caught.value)
+
+
 def test_project_model_binding_sends_only_a_profile_reference() -> None:
     requests: list[httpx.Request] = []
 

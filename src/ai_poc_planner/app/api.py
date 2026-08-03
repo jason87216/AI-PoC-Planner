@@ -323,6 +323,14 @@ _SAFE_PROVIDER_CODES = {
     "provider_schema_invalid",
 }
 
+_SAFE_ANALYSIS_CODES = {
+    "analysis_result_invalid": {
+        "operation": ProviderOperation.ANALYSIS.value,
+        "retryable": False,
+        "user_action": "若持續失敗，請檢查模型相容性設定或更換模型。",
+    }
+}
+
 _SAFE_PROFILE_CODES = {
     "model_profile_auth_required",
     "model_profile_auth_forbidden",
@@ -656,6 +664,13 @@ def create_app(
         if error.code in _SAFE_PROVIDER_CODES:
             return _provider_error_response(
                 error.code, ProviderOperation.ANALYSIS, uuid4()
+            )
+        if error.code in _SAFE_ANALYSIS_CODES:
+            return _error_response(
+                502,
+                error.code,
+                uuid4(),
+                details=_SAFE_ANALYSIS_CODES[error.code],
             )
         status = 502 if error.code == "provider_output_invalid" else 409
         if error.code == "analysis_not_found":

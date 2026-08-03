@@ -254,6 +254,15 @@ def _contains_positive(facts: Mapping[str, FactRevision], *words: str) -> bool:
     return False
 
 
+def _integration_counts(facts: Mapping[str, FactRevision]) -> tuple[int, int]:
+    """Derive architecture counts while preserving the domain invariant."""
+
+    integration_signal = _contains(facts, "api", "integration", "整合")
+    high_risk_signal = _contains(facts, "write", "寫入", "自動執行")
+    high_risk_count = int(high_risk_signal)
+    return max(int(integration_signal), high_risk_count), high_risk_count
+
+
 _RULES_FIRST_SIGNAL_WORDS = (
     "rule-based",
     "規則優先",
@@ -371,8 +380,7 @@ def build_deterministic_assessment_facts(
         if has_data
         else DigitizationLevel.NONE
     )
-    integration_signal = _contains(by_key, "api", "integration", "整合")
-    high_risk_integration_signal = _contains(by_key, "write", "寫入", "自動執行")
+    integration_count, high_risk_integration_count = _integration_counts(by_key)
     evidence = confirmed_ids
     return AssessmentFacts(
         business_value=BusinessValueFacts(
@@ -432,8 +440,8 @@ def build_deterministic_assessment_facts(
         ),
         architecture_controllability=ArchitectureControllabilityFacts(
             evidence_ids=evidence,
-            integration_count=int(integration_signal or high_risk_integration_signal),
-            high_risk_integration_count=int(high_risk_integration_signal),
+            integration_count=integration_count,
+            high_risk_integration_count=high_risk_integration_count,
             unknown_dependency_count=1
             if not _confirmed(by_key, "known_constraints")
             else 0,

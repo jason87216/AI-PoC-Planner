@@ -7,6 +7,10 @@ from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from ai_poc_planner.app.api import create_app
+from ai_poc_planner.application.evidence_analysis import (
+    EvidenceAnalysisError,
+    EvidenceAnalysisService,
+)
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderError
 
@@ -217,6 +221,43 @@ def test_discovery_provider_auth_failure_is_safe_and_does_not_persist_assistant_
     assert failed.json()["error"]["details"]["operation"] == "discovery"
     messages = client.get(f"/v1/projects/{project_id}/versions/1/messages").json()
     assert all(message["role"] != "assistant" for message in messages)
+
+
+def test_analysis_validation_failure_is_safe_and_not_generic_internal_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    def fail_closed(
+        _: EvidenceAnalysisService, project_id: object, version_number: int
+    ) -> object:
+        del project_id, version_number
+        raise EvidenceAnalysisError("analysis_result_invalid")
+
+    monkeypatch.setattr(EvidenceAnalysisService, "create", fail_closed)
+    client = TestClient(
+        create_app(
+            chat_model=GenericFakeChatModel(messages=iter([])),
+            database_path=tmp_path / "analysis-failure.sqlite3",
+            model_profile_repository=LocalModelProfileRepository(
+                path=tmp_path / "analysis-failure.json"
+            ),
+        )
+    )
+
+    response = client.post(
+        "/v1/projects/10000000-0000-0000-0000-000000000001/versions/1/analysis"
+    )
+
+    assert response.status_code == 502
+    payload = response.json()
+    assert payload["error"]["code"] == "analysis_result_invalid"
+    assert payload["error"]["details"] == {
+        "operation": "analysis",
+        "retryable": False,
+        "user_action": "若持續失敗，請檢查模型相容性設定或更換模型。",
+    }
+    assert "internal_error" not in response.text
+    assert "raw" not in response.text
+    assert "prompt" not in response.text
 
 
 def test_requirement_feedback_accepts_natural_language_without_fact_ids(

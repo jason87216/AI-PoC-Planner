@@ -37,6 +37,8 @@
 - provider wire contract 與 deterministic result contract 未變。
 - 本修正讓 runtime 在 ready 前完成 SQLite initialization、migration 與 schema validation；migration 失敗時 fail closed，公開錯誤只提供可行動的本機資料庫指引。
 - 新建專案現在只要求專案名稱與目前流程與問題；其他四項 brief 欄位可留白並正規化為 missing facts，交由後續訪談補齊。
+- 人工 UAT 另發現兩項 blocking defects：訪談 widget key 未包含 project/version/round/question，造成跨輪答案殘留；assessment 的 deterministic facts 組裝 `ValidationError` 未在 `EvidenceAnalysisService` 邊界包裝，曾落成 generic `internal_error`。
+- 本修正以完整情境 key builder、互斥 answer/unknown/missing 狀態與 fail-closed `analysis_result_invalid` 安全錯誤處理；不保存 partial analysis，版本維持 `ready_for_assessment`，可安全重試且不重跑已完成訪談。
 - P8.1b-2 仍待重新人工驗收；P8.1b overall、P7.2b 與完整 P7.2 仍未完成。
 
 ### Historical diagnosis
