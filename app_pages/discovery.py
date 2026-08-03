@@ -20,6 +20,7 @@ from ai_poc_planner.ui.discovery import (
 from ai_poc_planner.ui.navigation import (
     open_history,
     open_new_project,
+    open_results,
     switch_page,
     workspace_route_key,
     workspace_target_from_query,
@@ -468,10 +469,10 @@ def _complete(project_id: str, number: int) -> None:
             except ApiClientError as error:
                 refresh_api_data()
                 show_api_error(error)
-                switch_page("app_pages/results.py")
+                open_results(project_id, number)
             else:
                 refresh_api_data()
-                switch_page("app_pages/results.py")
+                open_results(project_id, number)
         if st.button("返回首頁", icon=":material/home:"):
             switch_page("app_pages/home.py")
         if st.button("查看歷史", icon=":material/history:"):

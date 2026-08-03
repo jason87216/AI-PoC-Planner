@@ -235,6 +235,8 @@ def test_report_generation_is_one_primary_frontend_action() -> None:
     assert 'st.button("繼續生成報告"' in results
     assert 'if view["reviewed_cases"]:' in results
     assert 'if view["case_support_summaries"]:' in results
+    assert "open_results(project_id, number)" in discovery
+    assert 'switch_page("app_pages/results.py")' not in discovery
 
 
 def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> None:

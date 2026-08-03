@@ -91,3 +91,55 @@ def test_results_app_reads_complete_persisted_report_without_generation_button(
     assert not app.exception
     assert any("Persisted complete report" in item.value for item in app.markdown)
     assert not any("生成評估報告" in button.label for button in app.button)
+
+
+def test_results_app_recovers_target_from_hashed_query_after_session_reset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = "10000000-0000-0000-0000-000000000099"
+    monkeypatch.setattr(
+        runtime,
+        "load_projects",
+        lambda: [
+            {
+                "project_id": project_id,
+                "version_number": 1,
+                "project_name": "Query recovered project",
+                "status": "complete",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        runtime,
+        "load_project_version",
+        lambda *_args: {
+            "status": "complete",
+            "selected_model": {"model_name": "test-model"},
+        },
+    )
+    monkeypatch.setattr(
+        runtime,
+        "load_report",
+        lambda *_args: {"markdown": "Query recovered persisted report"},
+    )
+
+    app = AppTest.from_file(str(Path("app_pages/results.py")))
+    app.query_params["workspace"] = navigation.workspace_route_key(project_id)
+    app.query_params["version"] = "1"
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert any(
+        "Query recovered persisted report" in item.value for item in app.markdown
+    )
+    assert app.session_state["selected_project"] == {
+        "project_id": project_id,
+        "version_number": 1,
+    }
+
+
+def test_discovery_report_destinations_keep_explicit_project_query_target() -> None:
+    source = Path("app_pages/discovery.py").read_text(encoding="utf-8")
+
+    assert source.count("open_results(project_id, number)") == 2
+    assert 'switch_page("app_pages/results.py")' not in source
