@@ -209,17 +209,21 @@ def _render_synthesis(
             ("conclusion", "判斷"),
         ),
     )
-    st.subheader("成熟案例介紹")
-    _render_reviewed_cases(view["reviewed_cases"])
-    st.subheader("案例支持關係摘要")
-    _table(
-        view["case_support_summaries"],
-        (
-            ("case_title", "案例"),
-            ("supported_practices", "主要支持做法"),
-            ("project_adoption", "本專案採用方式"),
-        ),
-    )
+    if view["reviewed_cases"]:
+        st.subheader("成熟案例介紹")
+        _render_reviewed_cases(view["reviewed_cases"])
+    else:
+        st.info("本次沒有匹配的已審核成熟案例。")
+    if view["case_support_summaries"]:
+        st.subheader("案例支持關係摘要")
+        _table(
+            view["case_support_summaries"],
+            (
+                ("case_title", "案例"),
+                ("supported_practices", "主要支持做法"),
+                ("project_adoption", "本專案採用方式"),
+            ),
+        )
     st.subheader("官方實施參考")
     reference_rows = [
         {
@@ -297,12 +301,16 @@ def _refresh_after_write() -> None:
 
 def _render_ready(project_id: str, version_number: int) -> None:
     st.info("需求訪談已完成。接下來會以已確認資訊建立案例與方案評估。")
-    if st.button("開始方案評估", type="primary", icon=":material/insights:"):
+    if st.button("生成評估報告", type="primary", icon=":material/insights:"):
         try:
-            with st.spinner("正在匹配成熟案例並建立評估結果…"):
+            with st.spinner("正在分析需求並評估方案……"):
                 get_api_client().create_analysis(project_id, version_number)
+            with st.spinner("正在整理完整規劃報告……"):
+                get_api_client().create_report(project_id, version_number)
         except ApiClientError as error:
             show_api_error(error)
+            refresh_api_data()
+            st.rerun()
         else:
             _refresh_after_write()
 
@@ -317,12 +325,14 @@ def _render_assessed(project_id: str, version_number: int) -> None:
     st.header("評估結果已保存")
     st.write(view["conclusion_rationale"])
     st.info("產生規劃報告後，頁面會呈現推薦理由、成熟案例比較、實施路線與硬性限制。")
-    if st.button("產生規劃報告", type="primary", icon=":material/article:"):
+    if st.button("繼續生成報告", type="primary", icon=":material/article:"):
         try:
             with st.spinner("正在整理正式報告…"):
                 get_api_client().create_report(project_id, version_number)
         except ApiClientError as error:
             show_api_error(error)
+            refresh_api_data()
+            st.rerun()
         else:
             _refresh_after_write()
 

@@ -176,7 +176,7 @@ def test_phase_three_initial_brief_understanding_and_bounded_round(
         },
     )
     assert answered.status_code == 200
-    assert answered.json()["status"] == "ready_for_next_round"
+    assert answered.json()["status"] == "ready_for_assessment"
 
 
 def test_minimal_initial_brief_persists_optional_fields_as_missing(
