@@ -24,6 +24,50 @@ _FACT_LABELS = {
 }
 
 
+def interview_widget_key(
+    kind: str,
+    project_id: str,
+    version_number: int,
+    round_number: int,
+    question_id: str,
+) -> str:
+    """Build a stable, project/version/round/question-scoped widget key."""
+
+    return (
+        f"interview_{kind}_{project_id}_{version_number}_{round_number}_{question_id}"
+    )
+
+
+def interview_form_key(project_id: str, version_number: int, round_number: int) -> str:
+    """Keep a Streamlit form identity isolated to one interview round."""
+
+    return f"interview_answers_{project_id}_{version_number}_{round_number}"
+
+
+def supplementary_note_key(
+    project_id: str, version_number: int, round_number: int
+) -> str:
+    """Build the round-scoped key for the optional supplementary note."""
+
+    return f"interview_supplementary_note_{project_id}_{version_number}_{round_number}"
+
+
+def resolve_interview_answer_status(
+    answer: str, *, unknown: bool, missing: bool
+) -> str:
+    """Resolve one mutually exclusive answer status for the interview payload."""
+
+    if answer.strip():
+        return "answered"
+    if unknown and missing:
+        raise ValueError("unknown and missing answer statuses are mutually exclusive")
+    if unknown:
+        return "unknown"
+    if missing:
+        return "missing"
+    return ""
+
+
 def select_active_project(
     state: MutableMapping[str, Any], project_id: str, version_number: int
 ) -> None:

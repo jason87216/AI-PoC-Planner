@@ -11,8 +11,12 @@ from ai_poc_planner.ui.api_client import ApiClient, ApiClientError
 from ai_poc_planner.ui.discovery import (
     discovery_view_for_status,
     facts_summary,
+    interview_form_key,
     interview_payload,
+    interview_widget_key,
     question_details,
+    resolve_interview_answer_status,
+    supplementary_note_key,
 )
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -114,6 +118,44 @@ def test_unknown_answer_and_supplementary_note_use_the_round_contract() -> None:
     assert payload["supplementary_note"] == "The finance lead retains approval."
     assert payload["additional_facts"] == []
     assert payload["corrections"] == []
+
+
+def test_interview_widget_keys_are_isolated_by_project_version_round_and_question() -> (
+    None
+):
+    first = interview_widget_key("answer", PROJECT_ID, 1, 1, QUESTION_ID)
+    second_round = interview_widget_key("answer", PROJECT_ID, 1, 2, QUESTION_ID)
+    other_question = interview_widget_key("answer", PROJECT_ID, 1, 1, FACT_ID)
+    other_project = interview_widget_key("answer", "other-project", 1, 1, QUESTION_ID)
+
+    assert first == f"interview_answer_{PROJECT_ID}_1_1_{QUESTION_ID}"
+    assert len({first, second_round, other_question, other_project}) == 4
+    assert interview_form_key(PROJECT_ID, 1, 1) != interview_form_key(PROJECT_ID, 1, 2)
+    assert supplementary_note_key(PROJECT_ID, 1, 1) != supplementary_note_key(
+        PROJECT_ID, 2, 1
+    )
+
+
+@pytest.mark.parametrize(
+    ("answer", "unknown", "missing", "expected"),
+    [
+        ("沒有", False, False, "answered"),
+        ("", True, False, "unknown"),
+        ("", False, True, "missing"),
+    ],
+)
+def test_interview_answer_status_is_explicit_and_mutually_exclusive(
+    answer: str, unknown: bool, missing: bool, expected: str
+) -> None:
+    assert (
+        resolve_interview_answer_status(answer, unknown=unknown, missing=missing)
+        == expected
+    )
+
+
+def test_interview_answer_status_rejects_conflicting_checkboxes() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        resolve_interview_answer_status("", unknown=True, missing=True)
 
 
 def test_interview_answer_submission_uses_the_formal_round_endpoint() -> None:

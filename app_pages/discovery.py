@@ -10,8 +10,12 @@ from ai_poc_planner.ui.api_client import ApiClientError
 from ai_poc_planner.ui.discovery import (
     discovery_view_for_status,
     facts_summary,
+    interview_form_key,
     interview_payload,
+    interview_widget_key,
     question_details,
+    resolve_interview_answer_status,
+    supplementary_note_key,
 )
 from ai_poc_planner.ui.navigation import (
     open_history,
@@ -340,43 +344,66 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
     except ApiClientError as error:
         show_api_error(error)
         return
-    with st.form("key_questions"):
+    round_number = int(session.get("current_round") or 0)
+
+    def _clear_statuses(*keys: str) -> None:
+        for key in keys:
+            st.session_state[key] = False
+
+    with st.form(interview_form_key(project_id, number, round_number)):
         answers = []
-        for index, question in enumerate(questions):
+        for question in questions:
             detail = question_details(question)
+            question_id = str(question["id"])
+            answer_key = interview_widget_key(
+                "answer", project_id, number, round_number, question_id
+            )
+            unknown_key = interview_widget_key(
+                "unknown", project_id, number, round_number, question_id
+            )
+            missing_key = interview_widget_key(
+                "missing", project_id, number, round_number, question_id
+            )
             with st.container(border=True):
                 st.subheader(detail["question"])
                 st.caption(f"為什麼需要確認：{detail['why_it_matters']}")
                 answer = st.text_area(
                     "回答",
-                    key=f"question_{index}",
+                    key=answer_key,
+                    on_change=_clear_statuses,
+                    args=(unknown_key, missing_key),
                     placeholder="可提供粗略範圍或質性描述。",
                     height=100,
                 )
                 unknown, missing = st.columns(2)
-                unknown_choice = unknown.checkbox("目前不清楚", key=f"unknown_{index}")
+                unknown_choice = unknown.checkbox(
+                    "目前不清楚",
+                    key=unknown_key,
+                    on_change=_clear_statuses,
+                    args=(missing_key,),
+                )
                 missing_choice = missing.checkbox(
-                    "目前沒有相關資料", key=f"missing_{index}"
+                    "目前沒有相關資料",
+                    key=missing_key,
+                    on_change=_clear_statuses,
+                    args=(unknown_key,),
                 )
-                status = (
-                    "answered"
-                    if answer.strip()
-                    else (
-                        "unknown"
-                        if unknown_choice
-                        else ("missing" if missing_choice else "")
+                try:
+                    status = resolve_interview_answer_status(
+                        answer, unknown=unknown_choice, missing=missing_choice
                     )
-                )
+                except ValueError:
+                    status = ""
                 answers.append(
                     {
-                        "question_id": str(question["id"]),
+                        "question_id": question_id,
                         "answer_status": status,
                         "answer": answer if answer.strip() else None,
                     }
                 )
         note = st.text_area(
             "還有其他想補充或更正的內容嗎？（選填）",
-            key="supplementary_note",
+            key=supplementary_note_key(project_id, number, round_number),
             placeholder="例如：最終核准必須由部門主管完成；第一階段不能傳送個人資料到未核准的外部服務。",
             height=120,
         )
@@ -394,10 +421,12 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
         except ApiClientError as error:
             show_api_error(error)
         else:
-            keys = ["supplementary_note"] + [
-                f"{part}_{i}"
-                for i in range(len(questions))
-                for part in ("question", "unknown", "missing")
+            keys = [supplementary_note_key(project_id, number, round_number)] + [
+                interview_widget_key(
+                    part, project_id, number, round_number, str(question["id"])
+                )
+                for question in questions
+                for part in ("answer", "unknown", "missing")
             ]
             if updated.get("status") == "ready_for_next_round":
                 try:
