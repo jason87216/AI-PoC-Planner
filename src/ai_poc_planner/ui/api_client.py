@@ -53,7 +53,7 @@ _USER_MESSAGES = {
     "analysis_not_ready": "訪談尚未完成，暫時無法開始評估。",
     "analysis_not_found": "尚未找到這份規劃的評估結果。",
     "analysis_already_exists": "這份規劃已有評估結果，已保留原有內容。",
-    "analysis_result_invalid": "模型回傳的評估格式無法驗證，請重新嘗試。",
+    "analysis_result_invalid": "評估結果格式無法驗證，請重新嘗試。",
     "report_not_ready": "請先完成評估，再產生規劃報告。",
     "report_not_found": "尚未找到這份規劃的報告。",
     "report_already_exists": "這份規劃已有報告，已保留原有內容。",
@@ -89,7 +89,7 @@ _USER_MESSAGES = {
 }
 
 _SAFE_USER_ACTIONS = {
-    "analysis_result_invalid": "若持續失敗，請檢查模型相容性設定或更換模型。",
+    "analysis_result_invalid": "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。",
     "provider_auth_required": "請補充 API key 後再測試。",
     "provider_auth_failed": "請確認 API key 與端點權限後再試。",
     "provider_parameter_unsupported": "請檢查模型能力設定中的參數相容性。",

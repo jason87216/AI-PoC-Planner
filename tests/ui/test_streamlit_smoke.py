@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 
 import pytest
 from streamlit.testing.v1 import AppTest
+
+import ai_poc_planner.ui.runtime as runtime
 
 
 def test_home_page_loads_without_a_running_api(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -155,3 +158,115 @@ def test_workspace_refresh_uses_route_parameters_not_only_session_state() -> Non
     assert "workspace_route_key" in source
     assert "open_workspace" in source
     assert "workspace_target_from_query" in source
+
+
+def test_discovery_interview_form_renders_and_isolates_round_and_project_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = "project-one"
+    other_project_id = "project-two"
+    question_id = "question-one"
+
+    class FakeApi:
+        current_project = project_id
+        current_round = 1
+        submitted: list[dict[str, object]] = []
+
+        def get_project_version(self, *_args: object) -> dict[str, object]:
+            return {"project_name": "Render test project", "phase": "第一階段 PoC"}
+
+        def profile_status(self, *_args: object) -> dict[str, object]:
+            return {"formal_analysis_allowed": True}
+
+        def submit_interview_answers(self, *_args: object) -> dict[str, str]:
+            self.submitted.append(_args[-1])
+            self.current_round = 2
+            return {"status": "ready_for_next_round"}
+
+        def generate_interview_round(self, *_args: object) -> list[dict[str, object]]:
+            return []
+
+    fake = FakeApi()
+
+    def load_session(*_args: object) -> dict[str, object]:
+        return {
+            "status": "awaiting_answers",
+            "current_round": fake.current_round,
+            "phase": "interview",
+        }
+
+    def load_questions(*_args: object) -> list[dict[str, object]]:
+        return [
+            {
+                "id": question_id,
+                "round_number": fake.current_round,
+                "answer_message_id": None,
+                "question": f"Question {fake.current_round}",
+                "why_it_matters": "Render safety",
+                "affected_judgement": "Data readiness",
+                "example": "A short answer",
+            }
+        ]
+
+    monkeypatch.setattr(runtime, "get_api_client", lambda: fake)
+    monkeypatch.setattr(runtime, "load_discovery_session", load_session)
+    monkeypatch.setattr(runtime, "load_interview_questions", load_questions)
+    monkeypatch.setattr(
+        runtime,
+        "load_projects",
+        lambda: [
+            {
+                "project_id": fake.current_project,
+                "version_number": 1,
+                "project_name": "Render test project",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        runtime,
+        "load_profiles",
+        lambda: [
+            {
+                "id": "profile-1",
+                "profile_name": "Test",
+                "model_name": "model",
+                "is_enabled": True,
+            }
+        ],
+    )
+    monkeypatch.setattr(runtime, "load_current_facts", lambda *_args: [])
+    monkeypatch.setattr(runtime, "refresh_api_data", lambda: None)
+
+    app = AppTest.from_file(str(Path("app_pages/discovery.py")))
+    app.session_state["selected_project"] = {
+        "project_id": project_id,
+        "version_number": 1,
+    }
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert app.radio[0].value == "提供回答"
+    assert app.text_area[0].value == ""
+    assert app.text_area[1].value == ""
+
+    app.text_area[0].set_value("round one answer")
+    next(button for button in app.button if button.label == "送出回答並繼續").click()
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert fake.submitted[0]["answers"][0]["answer_status"] == "answered"
+    assert app.radio[0].value == "提供回答"
+    assert app.text_area[0].value == ""
+    assert app.text_area[1].value == ""
+
+    fake.current_project = other_project_id
+    app.session_state["selected_project"] = {
+        "project_id": other_project_id,
+        "version_number": 1,
+    }
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert app.radio[0].value == "提供回答"
+    assert app.text_area[0].value == ""
+    assert app.text_area[1].value == ""

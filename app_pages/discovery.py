@@ -346,10 +346,6 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
         return
     round_number = int(session.get("current_round") or 0)
 
-    def _clear_statuses(*keys: str) -> None:
-        for key in keys:
-            st.session_state[key] = False
-
     with st.form(interview_form_key(project_id, number, round_number)):
         answers = []
         for question in questions:
@@ -358,42 +354,28 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
             answer_key = interview_widget_key(
                 "answer", project_id, number, round_number, question_id
             )
-            unknown_key = interview_widget_key(
-                "unknown", project_id, number, round_number, question_id
-            )
-            missing_key = interview_widget_key(
-                "missing", project_id, number, round_number, question_id
+            status_key = interview_widget_key(
+                "status", project_id, number, round_number, question_id
             )
             with st.container(border=True):
                 st.subheader(detail["question"])
                 st.caption(f"為什麼需要確認：{detail['why_it_matters']}")
+                answer_status = st.radio(
+                    "回答狀態",
+                    options=("提供回答", "目前不清楚", "目前沒有相關資料"),
+                    key=status_key,
+                )
                 answer = st.text_area(
                     "回答",
                     key=answer_key,
-                    on_change=_clear_statuses,
-                    args=(unknown_key, missing_key),
                     placeholder="可提供粗略範圍或質性描述。",
                     height=100,
                 )
-                unknown, missing = st.columns(2)
-                unknown_choice = unknown.checkbox(
-                    "目前不清楚",
-                    key=unknown_key,
-                    on_change=_clear_statuses,
-                    args=(missing_key,),
+                status = resolve_interview_answer_status(
+                    answer,
+                    unknown=answer_status == "目前不清楚",
+                    missing=answer_status == "目前沒有相關資料",
                 )
-                missing_choice = missing.checkbox(
-                    "目前沒有相關資料",
-                    key=missing_key,
-                    on_change=_clear_statuses,
-                    args=(unknown_key,),
-                )
-                try:
-                    status = resolve_interview_answer_status(
-                        answer, unknown=unknown_choice, missing=missing_choice
-                    )
-                except ValueError:
-                    status = ""
                 answers.append(
                     {
                         "question_id": question_id,
@@ -426,7 +408,7 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
                     part, project_id, number, round_number, str(question["id"])
                 )
                 for question in questions
-                for part in ("answer", "unknown", "missing")
+                for part in ("answer", "status")
             ]
             if updated.get("status") == "ready_for_next_round":
                 try:

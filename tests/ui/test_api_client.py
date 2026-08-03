@@ -272,7 +272,9 @@ def test_analysis_result_validation_has_actionable_safe_ui_guidance() -> None:
                     "details": {
                         "operation": "analysis",
                         "retryable": False,
-                        "user_action": "若持續失敗，請檢查模型相容性設定或更換模型。",
+                        "user_action": (
+                            "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。"
+                        ),
                         "raw": raw_marker,
                     },
                 }
@@ -283,8 +285,11 @@ def test_analysis_result_validation_has_actionable_safe_ui_guidance() -> None:
     with pytest.raises(ApiClientError) as caught:
         api.list_projects()
 
-    assert "模型回傳的評估格式無法驗證" in caught.value.user_message
-    assert caught.value.user_action == "若持續失敗，請檢查模型相容性設定或更換模型。"
+    assert "評估結果格式無法驗證" in caught.value.user_message
+    assert (
+        caught.value.user_action
+        == "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。"
+    )
     assert raw_marker not in str(caught.value)
     assert raw_marker not in repr(caught.value)
 

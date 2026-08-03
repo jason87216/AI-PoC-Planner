@@ -39,6 +39,8 @@
 - 新建專案現在只要求專案名稱與目前流程與問題；其他四項 brief 欄位可留白並正規化為 missing facts，交由後續訪談補齊。
 - 人工 UAT 另發現兩項 blocking defects：訪談 widget key 未包含 project/version/round/question，造成跨輪答案殘留；assessment 的 deterministic facts 組裝 `ValidationError` 未在 `EvidenceAnalysisService` 邊界包裝，曾落成 generic `internal_error`。
 - 本修正以完整情境 key builder、互斥 answer/unknown/missing 狀態與 fail-closed `analysis_result_invalid` 安全錯誤處理；不保存 partial analysis，版本維持 `ready_for_assessment`，可安全重試且不重跑已完成訪談。
+- 最終獨立審查另發現 Streamlit `st.form` 內使用輸入 widget callbacks；本修正改用單一 radio（提供回答／目前不清楚／目前沒有相關資料）與 scoped text area，表單只保留 submit callback，並以 AppTest 驗證實際訪談頁可渲染、跨輪與跨專案狀態隔離。
+- 新增 temporary SQLite analysis failure integration test：invalid domain assembly 不產生 partial row、訪談資料保留、版本維持 `ready_for_assessment`，修正 fake output 後可再次提交成功；UI 錯誤文案改為中立的「評估結果格式無法驗證」。
 - P8.1b-2 仍待重新人工驗收；P8.1b overall、P7.2b 與完整 P7.2 仍未完成。
 
 ### Historical diagnosis

@@ -195,6 +195,7 @@ Acceptance checkpoint：
 - Current acceptance blockers include stale SQLite runtime readiness and a combined model-settings long page; the bounded fix separates runtime preflight, profile create/edit IA, and minimal project brief input.
 - Re-acceptance must verify fresh schema v8, actionable database failure guidance, profile preservation, and the unchanged provider/deterministic boundaries.
 - Subsequent manual UAT also found cross-round interview widget-state leakage and an assessment validation exception escaping as generic `internal_error`; the bounded fix scopes widget keys by project/version/round/question, enforces mutually exclusive answer states, and returns safe fail-closed `analysis_result_invalid` without partial persistence.
+- Independent review additionally found illegal callbacks on widgets inside the Streamlit form. The follow-up uses one mutually exclusive answer-status radio plus a scoped text area, with no input-widget callbacks; AppTest covers real rendering and round/project isolation. A temporary-SQLite API test covers safe failure, no partial analysis, preserved interview data, and successful retry after valid fake output.
 
 P8.1b overall remains Pending until P8.1b-2 is accepted。
 

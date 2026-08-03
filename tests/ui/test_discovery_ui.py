@@ -134,6 +134,9 @@ def test_interview_widget_keys_are_isolated_by_project_version_round_and_questio
     assert supplementary_note_key(PROJECT_ID, 1, 1) != supplementary_note_key(
         PROJECT_ID, 2, 1
     )
+    assert interview_widget_key(
+        "status", PROJECT_ID, 1, 1, QUESTION_ID
+    ) != interview_widget_key("status", PROJECT_ID, 1, 2, QUESTION_ID)
 
 
 @pytest.mark.parametrize(
