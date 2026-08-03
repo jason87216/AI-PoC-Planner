@@ -327,7 +327,7 @@ _SAFE_ANALYSIS_CODES = {
     "analysis_result_invalid": {
         "operation": ProviderOperation.ANALYSIS.value,
         "retryable": False,
-        "user_action": "若持續失敗，請檢查模型相容性設定或更換模型。",
+        "user_action": "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。",
     }
 }
 

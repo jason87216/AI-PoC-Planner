@@ -15,7 +15,7 @@ from ai_poc_planner.ui.discovery import (
     interview_payload,
     interview_widget_key,
     question_details,
-    resolve_interview_answer_status,
+    resolve_interview_answer,
     supplementary_note_key,
 )
 
@@ -140,25 +140,23 @@ def test_interview_widget_keys_are_isolated_by_project_version_round_and_questio
 
 
 @pytest.mark.parametrize(
-    ("answer", "unknown", "missing", "expected"),
+    ("choice", "answer", "expected"),
     [
-        ("沒有", False, False, "answered"),
-        ("", True, False, "unknown"),
-        ("", False, True, "missing"),
+        ("提供回答", "  正常回答  ", ("answered", "正常回答")),
+        ("目前不清楚", "先前輸入的文字", ("unknown", None)),
+        ("目前沒有相關資料", "先前輸入的文字", ("missing", None)),
+        ("提供回答", "", ("", None)),
     ],
 )
-def test_interview_answer_status_is_explicit_and_mutually_exclusive(
-    answer: str, unknown: bool, missing: bool, expected: str
+def test_interview_choice_is_authoritative_for_answer_payload(
+    choice: str, answer: str, expected: tuple[str, str | None]
 ) -> None:
-    assert (
-        resolve_interview_answer_status(answer, unknown=unknown, missing=missing)
-        == expected
-    )
+    assert resolve_interview_answer(choice, answer) == expected
 
 
-def test_interview_answer_status_rejects_conflicting_checkboxes() -> None:
-    with pytest.raises(ValueError, match="mutually exclusive"):
-        resolve_interview_answer_status("", unknown=True, missing=True)
+def test_interview_choice_rejects_unknown_values() -> None:
+    with pytest.raises(ValueError, match="unknown interview answer choice"):
+        resolve_interview_answer("invalid", "answer")
 
 
 def test_interview_answer_submission_uses_the_formal_round_endpoint() -> None:

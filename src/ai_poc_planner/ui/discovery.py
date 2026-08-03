@@ -52,20 +52,17 @@ def supplementary_note_key(
     return f"interview_supplementary_note_{project_id}_{version_number}_{round_number}"
 
 
-def resolve_interview_answer_status(
-    answer: str, *, unknown: bool, missing: bool
-) -> str:
-    """Resolve one mutually exclusive answer status for the interview payload."""
+def resolve_interview_answer(choice: str, answer: str) -> tuple[str, str | None]:
+    """Normalize the answer from the one authoritative interview choice."""
 
-    if answer.strip():
-        return "answered"
-    if unknown and missing:
-        raise ValueError("unknown and missing answer statuses are mutually exclusive")
-    if unknown:
-        return "unknown"
-    if missing:
-        return "missing"
-    return ""
+    normalized = answer.strip()
+    if choice == "提供回答":
+        return ("answered", normalized) if normalized else ("", None)
+    if choice == "目前不清楚":
+        return "unknown", None
+    if choice == "目前沒有相關資料":
+        return "missing", None
+    raise ValueError("unknown interview answer choice")
 
 
 def select_active_project(

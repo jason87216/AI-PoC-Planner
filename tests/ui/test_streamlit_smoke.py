@@ -254,7 +254,11 @@ def test_discovery_interview_form_renders_and_isolates_round_and_project_state(
     app.run(timeout=10)
 
     assert not app.exception
-    assert fake.submitted[0]["answers"][0]["answer_status"] == "answered"
+    assert fake.submitted[0]["answers"][0] == {
+        "question_id": "question-one",
+        "answer_status": "answered",
+        "answer": "round one answer",
+    }
     assert app.radio[0].value == "提供回答"
     assert app.text_area[0].value == ""
     assert app.text_area[1].value == ""

@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
@@ -19,6 +20,7 @@ from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
 from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderError
+from ai_poc_planner.ui.api_client import ApiClient, ApiClientError
 from tests.providers.test_p7_2a_provider_compatibility_integration import (
     OfflineGovernedAccessAdapter,
 )
@@ -262,11 +264,26 @@ def test_analysis_validation_failure_is_safe_and_not_generic_internal_error(
     assert payload["error"]["details"] == {
         "operation": "analysis",
         "retryable": False,
-        "user_action": "若持續失敗，請檢查模型相容性設定或更換模型。",
+        "user_action": (
+            "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。"
+        ),
     }
     assert "internal_error" not in response.text
     assert "raw" not in response.text
     assert "prompt" not in response.text
+
+    api = ApiClient(client=client)
+    with pytest.raises(ApiClientError) as parsed:
+        api.create_analysis("10000000-0000-0000-0000-000000000001", 1)
+    assert parsed.value.user_message == "評估結果格式無法驗證，請重新嘗試。"
+    assert (
+        parsed.value.user_action
+        == "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。"
+    )
+    assert all(
+        marker not in str(parsed.value)
+        for marker in ("raw", "prompt", "SQL", "secret", "10000000")
+    )
 
 
 def test_analysis_validation_failure_preserves_persistence_and_allows_retry(

@@ -14,7 +14,7 @@ from ai_poc_planner.ui.discovery import (
     interview_payload,
     interview_widget_key,
     question_details,
-    resolve_interview_answer_status,
+    resolve_interview_answer,
     supplementary_note_key,
 )
 from ai_poc_planner.ui.navigation import (
@@ -371,16 +371,14 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
                     placeholder="可提供粗略範圍或質性描述。",
                     height=100,
                 )
-                status = resolve_interview_answer_status(
-                    answer,
-                    unknown=answer_status == "目前不清楚",
-                    missing=answer_status == "目前沒有相關資料",
+                status, normalized_answer = resolve_interview_answer(
+                    answer_status, answer
                 )
                 answers.append(
                     {
                         "question_id": question_id,
                         "answer_status": status,
-                        "answer": answer if answer.strip() else None,
+                        "answer": normalized_answer,
                     }
                 )
         note = st.text_area(
