@@ -45,6 +45,11 @@
 
 ### P8.1b-2 renewed manual UAT follow-up — Pending
 
+- Initial brief 的 missing／unknown facts 會以 canonical fact key 允許第一輪詢問一次；已詢問且回答 unknown／missing 的 topic 仍封存，不會改名重問。
+- 需求確認成功後若問題生成失敗，session 仍停在 `READY_FOR_INTERVIEW`，前台顯示安全錯誤與「重新產生訪談問題」，不回到確認頁。
+- Interview answer 會以 superseding fact revision 保留原始 gap、answer message reference 與 `supersedes_fact_id`；confirmed fact 仍只能走 explicit correction。
+- 第一輪由 deterministic material-gap policy 防止 provider 以 `interview_complete=true` 略過仍未確認的成果、責任、資料或治理議題；bounded retry 失敗時保持可重試狀態。
+
 - The next bounded follow-up stops re-asking unknown/missing interview topics, combines analysis and report generation into one explicit user action, and keeps analysis/report persistence transitions separate.
 - Report references are now solution-scoped; empty reviewed-case sections are omitted with a safe explanatory message, and the generic roadmap distinguishes pre-scale review from the PoC phase.
 - This remains offline implementation work pending renewed manual acceptance; P7.2b remains pending and P7.2 overall remains incomplete.

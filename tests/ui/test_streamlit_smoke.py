@@ -274,3 +274,76 @@ def test_discovery_interview_form_renders_and_isolates_round_and_project_state(
     assert app.radio[0].value == "提供回答"
     assert app.text_area[0].value == ""
     assert app.text_area[1].value == ""
+
+
+def test_confirmation_generation_failure_stays_on_interview_retry_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = "confirmation-project"
+
+    class FakeApi:
+        status = "awaiting_understanding_confirmation"
+
+        def get_project_version(self, *_args: object) -> dict[str, object]:
+            return {"project_name": "Confirmation test", "phase": "interview"}
+
+        def profile_status(self, *_args: object) -> dict[str, object]:
+            return {"formal_analysis_allowed": True}
+
+        def confirm_understanding(self, *_args: object) -> dict[str, str]:
+            self.status = "ready_for_interview"
+            return {"status": self.status}
+
+        def generate_interview_round(self, *_args: object) -> list[dict[str, object]]:
+            from ai_poc_planner.ui.api_client import ApiClientError
+
+            raise ApiClientError(
+                "interview_questions_unavailable",
+                "目前無法產生合適的訪談問題，請稍後再試。",
+                retryable=True,
+                user_action="請重新產生訪談問題。",
+            )
+
+    fake = FakeApi()
+
+    monkeypatch.setattr(runtime, "get_api_client", lambda: fake)
+    monkeypatch.setattr(
+        runtime,
+        "load_discovery_session",
+        lambda *_args: {"status": fake.status, "current_round": 0},
+    )
+    monkeypatch.setattr(
+        runtime,
+        "load_projects",
+        lambda: [
+            {
+                "project_id": project_id,
+                "version_number": 1,
+                "project_name": "Confirmation test",
+            }
+        ],
+    )
+    monkeypatch.setattr(runtime, "load_profiles", lambda: [])
+    monkeypatch.setattr(runtime, "load_current_facts", lambda *_args: [])
+    monkeypatch.setattr(
+        runtime,
+        "load_visible_messages",
+        lambda *_args: [{"id": "understanding-1", "content": "理解摘要"}],
+    )
+    monkeypatch.setattr(runtime, "refresh_api_data", lambda: None)
+
+    app = AppTest.from_file(str(Path("app_pages/discovery.py")))
+    app.session_state["selected_project"] = {
+        "project_id": project_id,
+        "version_number": 1,
+    }
+    app.run(timeout=10)
+    assert not app.exception
+    next(button for button in app.button if button.label == "確認").click()
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert fake.status == "ready_for_interview"
+    assert any(button.label == "重新產生訪談問題" for button in app.button)
+    assert not any(button.label == "確認" for button in app.button)
+    assert any("目前無法產生合適的訪談問題" in item.value for item in app.error)

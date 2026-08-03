@@ -232,6 +232,59 @@ class ProjectHistoryService:
             reference_message_ids=reference_message_ids,
         )
 
+    def resolve_open_fact_from_interview(
+        self,
+        project_id: UUID,
+        version_number: int,
+        fact_id: UUID,
+        *,
+        status: FactStatus,
+        value: object,
+        reference_message_ids: Sequence[UUID],
+    ) -> FactRevision:
+        """Append an interview answer that supersedes an open fact revision.
+
+        Initial ``missing``/``unknown`` brief facts are intentionally open to one
+        interview answer.  This path keeps the original revision and visible
+        answer evidence while preserving the stricter explicit-correction rule
+        for facts that were already confirmed.
+        """
+
+        if status is FactStatus.ASSUMPTION:
+            raise FactCorrectionInvalidError(
+                "interview answers cannot create assumptions"
+            )
+        if status is FactStatus.CONFIRMED and value is None:
+            raise FactCorrectionInvalidError(
+                "confirmed interview answers require a value"
+            )
+        if status in {FactStatus.UNKNOWN, FactStatus.MISSING} and value is not None:
+            raise FactCorrectionInvalidError(
+                "unknown and missing interview answers require null value"
+            )
+        version = self._require_mutable_latest(project_id, version_number)
+        target = self._require_current_fact(version.id, fact_id)
+        if target.status is FactStatus.CONFIRMED:
+            raise FactCorrectionRequiredError(
+                "confirmed facts require an explicit correction"
+            )
+        if target.status not in {FactStatus.UNKNOWN, FactStatus.MISSING}:
+            raise FactConflictError("only open facts can be resolved by interview")
+        self._validate_references(
+            version.id,
+            reference_message_ids,
+            required_role=InterviewRole.USER,
+            allowed_kinds={"answer"},
+        )
+        return self._write_fact(
+            version.id,
+            fact_key=target.fact_key,
+            value=value,
+            status=status,
+            reference_message_ids=reference_message_ids,
+            supersedes_fact_id=target.id,
+        )
+
     def record_user_confirmed_fact(
         self,
         project_id: UUID,

@@ -34,6 +34,7 @@ def test_interview_prompt_limits_questions_to_material_decisions() -> None:
     assert "deterministic reviewed-case matching" in prompt
     assert "gap analysis" in prompt
     assert "Do not keep asking merely to fill facts" in prompt
+    assert "initial missing or unknown fact may be asked once" in prompt
 
 
 def test_interview_prompt_carries_safe_question_history_and_closes_gaps() -> None:

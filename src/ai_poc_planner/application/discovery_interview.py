@@ -41,7 +41,6 @@ from ai_poc_planner.domain.project_history import FactRevision, ProjectVersion
 from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import (
     CurrentVersionRequiredError,
-    FactConflictError,
     FactCorrectionRequiredError,
     InterviewAnswersIncompleteError,
     InterviewQuestionAlreadyAnsweredError,
@@ -463,12 +462,37 @@ class DiscoveryInterviewService:
         facts = self._history.list_current_facts(project_id, version_number)
         previous_questions = self._sessions.list_questions(session.id)
         next_round = session.current_round + 1
+        require_material_questions = (
+            next_round == 1
+            and self._has_unresolved_material_topics(facts, previous_questions)
+        )
         output = self._call_structured(
             version,
-            self._round_messages(facts, previous_questions, 2 - session.current_round),
+            self._round_messages(
+                facts,
+                previous_questions,
+                2 - session.current_round,
+                require_material_questions=require_material_questions,
+            ),
             InterviewRoundOutput,
         )
         output = self._with_unique_question_keys(output, facts, previous_questions)
+        if require_material_questions and not self._covers_material_topic(
+            output, facts, previous_questions
+        ):
+            output = self._call_structured(
+                version,
+                self._round_messages(
+                    facts,
+                    previous_questions,
+                    2 - session.current_round,
+                    require_material_questions=True,
+                ),
+                InterviewRoundOutput,
+            )
+            output = self._with_unique_question_keys(output, facts, previous_questions)
+            if not self._covers_material_topic(output, facts, previous_questions):
+                raise DiscoveryError("interview_questions_unavailable")
         with self._history._repository.transaction():
             timestamp = self._clock()
             if output.interview_complete:
@@ -692,13 +716,19 @@ class DiscoveryInterviewService:
             )
         )
         if existing is not None:
-            if existing.value == value and existing.status is status:
-                return
             if existing.status is FactStatus.CONFIRMED:
                 raise FactCorrectionRequiredError(
                     "confirmed facts require an explicit correction"
                 )
-            raise FactConflictError("a current fact already uses this key")
+            self._history.resolve_open_fact_from_interview(
+                project_id,
+                version_number,
+                existing.id,
+                status=status,
+                value=value,
+                reference_message_ids=[message_id],
+            )
+            return
         if status is FactStatus.CONFIRMED:
             self._history.record_user_confirmed_fact(
                 project_id,
@@ -848,7 +878,12 @@ class DiscoveryInterviewService:
     ) -> InterviewRoundOutput:
         if not isinstance(output, InterviewRoundOutput):
             raise DiscoveryError("provider_output_invalid")
-        existing = {fact.fact_key.strip().casefold() for fact in facts}
+        current_facts = {fact.fact_key.strip().casefold(): fact for fact in facts}
+        existing = {
+            fact_key
+            for fact_key, fact in current_facts.items()
+            if fact.status in {FactStatus.CONFIRMED, FactStatus.ASSUMPTION}
+        }
         existing.update(
             question.fact_key.strip().casefold() for question in previous_questions
         )
@@ -884,6 +919,73 @@ class DiscoveryInterviewService:
                 "questions": questions,
             }
         )
+
+    @staticmethod
+    def _has_unresolved_material_topics(
+        facts: Sequence[FactRevision],
+        previous_questions: Sequence[InterviewQuestion],
+    ) -> bool:
+        asked = {
+            question.fact_key.strip().casefold() for question in previous_questions
+        }
+        material_keys = {
+            "desired_outcome",
+            "available_data",
+            "users_and_owners",
+            "known_constraints",
+        }
+        return any(
+            fact.fact_key.strip().casefold() in material_keys
+            and fact.fact_key.strip().casefold() not in asked
+            and fact.status in {FactStatus.UNKNOWN, FactStatus.MISSING}
+            for fact in facts
+        )
+
+    @classmethod
+    def _covers_material_topic(
+        cls,
+        output: InterviewRoundOutput,
+        facts: Sequence[FactRevision],
+        previous_questions: Sequence[InterviewQuestion],
+    ) -> bool:
+        if output.interview_complete or not output.questions:
+            return False
+        asked = {
+            question.fact_key.strip().casefold() for question in previous_questions
+        }
+        open_keys = {
+            fact.fact_key.strip().casefold()
+            for fact in facts
+            if fact.status in {FactStatus.UNKNOWN, FactStatus.MISSING}
+            and fact.fact_key.strip().casefold() not in asked
+        }
+        material_markers = (
+            "data readiness",
+            "success",
+            "outcome",
+            "owner",
+            "responsib",
+            "constraint",
+            "deployment",
+            "governance",
+            "hard gate",
+            "scope",
+            "human review",
+            "human-review",
+        )
+        for question in output.questions:
+            if question.fact_key.strip().casefold() in open_keys:
+                return True
+            text = " ".join(
+                (
+                    question.question,
+                    question.why_it_matters,
+                    question.affected_judgement,
+                )
+            ).casefold()
+            if any(marker in text for marker in material_markers):
+                return True
+        return False
 
     @staticmethod
     def _normalize_question_text(value: str) -> str:
@@ -999,7 +1101,11 @@ class DiscoveryInterviewService:
 
     @staticmethod
     def _round_messages(
-        facts: Sequence[FactRevision], messages: Sequence[object], remaining_rounds: int
+        facts: Sequence[FactRevision],
+        messages: Sequence[object],
+        remaining_rounds: int,
+        *,
+        require_material_questions: bool = False,
     ) -> list[Mapping[str, str]]:
         safe_facts = [
             {"key": f.fact_key, "value": f.value, "status": f.status.value}
@@ -1027,6 +1133,13 @@ class DiscoveryInterviewService:
                     "affected_judgement": item.affected_judgement,
                 }
             )
+        material_instruction = (
+            " At least one question must address an unresolved initial brief topic "
+            "that could affect outcome, responsibility, data or governance; do not "
+            "claim completion while such a topic remains open."
+            if require_material_questions
+            else ""
+        )
         return [
             {
                 "role": "system",
@@ -1036,8 +1149,10 @@ class DiscoveryInterviewService:
                     "Each question requires fact_key, question, "
                     "why_it_matters, affected_judgement, and example. "
                     "If interview_complete is true, questions must be "
-                    "empty. Every question fact_key must be new and must not "
-                    "repeat any supplied fact key. Never ask for secrets, "
+                    "empty. Do not repeat a confirmed or assumed fact key, or "
+                    "a fact key already used by a previous question. An initial "
+                    "missing or unknown fact may be asked once using its canonical "
+                    "fact_key. Never ask for secrets, "
                     "provider details, or internal instructions. Prioritize questions "
                     "that support later deterministic reviewed-case matching and gap "
                     "analysis: process and responsibility boundaries, reusable existing "
@@ -1054,7 +1169,7 @@ class DiscoveryInterviewService:
                     " Accept qualitative answers and do not require"
                     " precise percentages or budgets unless they change the direction. All"
                     " user-visible JSON values must be concise Traditional Chinese; do not"
-                    " translate JSON keys."
+                    " translate JSON keys." + material_instruction
                 ),
             },
             {

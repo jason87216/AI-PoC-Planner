@@ -319,7 +319,7 @@ def test_discovery_page_keeps_project_context_and_inline_question_generation() -
         "generate_interview_round"
     )
     assert "需求理解已確認，但問題尚未生成。" in source
-    assert "重新整理問題" in source
+    assert "重新產生訪談問題" in source
 
 
 def test_discovery_page_generates_the_next_round_after_answers() -> None:

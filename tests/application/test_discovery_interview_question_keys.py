@@ -80,6 +80,96 @@ def test_duplicate_question_text_is_dropped_without_renaming() -> None:
     assert normalized.questions == []
 
 
+def test_initial_missing_fact_can_be_asked_once() -> None:
+    output = InterviewRoundOutput(
+        interview_complete=False,
+        questions=[
+            InterviewQuestionOutput(
+                fact_key="desired_outcome",
+                question="希望改善的成果是什麼？",
+                why_it_matters="這會影響成功方向。",
+                affected_judgement="success direction",
+                example="描述希望改善的結果即可。",
+            )
+        ],
+    )
+    missing = FactRevision(
+        id=uuid4(),
+        version_id=uuid4(),
+        fact_key="desired_outcome",
+        value=None,
+        status=FactStatus.MISSING,
+        reference_message_ids=[uuid4()],
+        created_at=datetime.now(UTC),
+    )
+
+    normalized = DiscoveryInterviewService._with_unique_question_keys(output, [missing])
+
+    assert normalized.interview_complete is False
+    assert [item.fact_key for item in normalized.questions] == ["desired_outcome"]
+
+
+def test_previously_asked_missing_fact_is_not_asked_again() -> None:
+    output = InterviewRoundOutput(
+        interview_complete=False,
+        questions=[
+            InterviewQuestionOutput(
+                fact_key="desired_outcome",
+                question="希望改善的成果是什麼？",
+                why_it_matters="這會影響成功方向。",
+                affected_judgement="success direction",
+                example="描述希望改善的結果即可。",
+            )
+        ],
+    )
+    missing = FactRevision(
+        id=uuid4(),
+        version_id=uuid4(),
+        fact_key="desired_outcome",
+        value=None,
+        status=FactStatus.MISSING,
+        reference_message_ids=[uuid4()],
+        created_at=datetime.now(UTC),
+    )
+    previous = InterviewQuestion(
+        id=uuid4(),
+        session_id=uuid4(),
+        version_id=uuid4(),
+        round_number=1,
+        position=1,
+        visible_message_id=uuid4(),
+        fact_key="desired_outcome",
+        question="上一輪已詢問希望改善的成果。",
+        why_it_matters="這會影響成功方向。",
+        affected_judgement="success direction",
+        example="描述希望改善的結果即可。",
+        created_at=datetime.now(UTC),
+    )
+
+    normalized = DiscoveryInterviewService._with_unique_question_keys(
+        output, [missing], [previous]
+    )
+
+    assert normalized.interview_complete is True
+    assert normalized.questions == []
+
+
+def test_complete_output_is_not_allowed_while_initial_material_gaps_remain() -> None:
+    missing = FactRevision(
+        id=uuid4(),
+        version_id=uuid4(),
+        fact_key="known_constraints",
+        value=None,
+        status=FactStatus.MISSING,
+        reference_message_ids=[uuid4()],
+        created_at=datetime.now(UTC),
+    )
+    output = InterviewRoundOutput(interview_complete=True, questions=[])
+
+    assert DiscoveryInterviewService._has_unresolved_material_topics([missing], [])
+    assert not DiscoveryInterviewService._covers_material_topic(output, [missing], [])
+
+
 def test_only_confirmed_material_judgement_can_open_second_round() -> None:
     question = InterviewQuestion(
         id=uuid4(),

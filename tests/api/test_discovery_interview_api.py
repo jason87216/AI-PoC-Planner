@@ -64,6 +64,42 @@ class DiscoveryAdapter:
         )
 
 
+class InitialGapDiscoveryAdapter:
+    def __init__(self, *, premature_completion: bool = False) -> None:
+        self.calls = 0
+        self.premature_completion = premature_completion
+
+    def complete(self, **_: object) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            return json.dumps(
+                {
+                    "concise_requirement_summary": "目前流程仍有人工處理。",
+                    "current_workflow_understanding": "資料由人工整理。",
+                    "desired_outcome_understanding": "希望降低重工。",
+                    "available_data_understanding": "資料狀態仍待確認。",
+                    "proposed_assumptions": [],
+                    "detected_contradictions_or_ambiguities": [],
+                }
+            )
+        if self.premature_completion:
+            return json.dumps({"interview_complete": True, "questions": []})
+        return json.dumps(
+            {
+                "interview_complete": False,
+                "questions": [
+                    {
+                        "fact_key": "desired_outcome",
+                        "question": "希望改善的成果是什麼？",
+                        "why_it_matters": "這會影響成功方向。",
+                        "affected_judgement": "success direction",
+                        "example": "描述希望改善的結果即可。",
+                    }
+                ],
+            }
+        )
+
+
 class AuthFailingDiscoveryAdapter:
     def complete(self, **kwargs: object) -> str:
         response_format = kwargs["response_format"]
@@ -75,6 +111,19 @@ class AuthFailingDiscoveryAdapter:
 def _client(tmp_path: Path) -> TestClient:
     profiles = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
     adapter = DiscoveryAdapter()
+    return TestClient(
+        create_app(
+            chat_model=GenericFakeChatModel(messages=iter([])),
+            database_path=tmp_path / "discovery.sqlite3",
+            model_profile_repository=profiles,
+            connection_adapter_factory=lambda _: ConnectedAdapter(),
+            interview_adapter_factory=lambda _: adapter,
+        )
+    )
+
+
+def _client_with_interview_adapter(tmp_path: Path, adapter: object) -> TestClient:
+    profiles = LocalModelProfileRepository(path=tmp_path / "model_profiles.json")
     return TestClient(
         create_app(
             chat_model=GenericFakeChatModel(messages=iter([])),
@@ -207,6 +256,86 @@ def test_minimal_initial_brief_persists_optional_fields_as_missing(
     assert fact_statuses["available_data"] == "missing"
     assert fact_statuses["users_and_owners"] == "missing"
     assert fact_statuses["known_constraints"] == "missing"
+
+
+def test_initial_missing_canonical_fact_is_asked_and_revised_from_answer(
+    tmp_path: Path,
+) -> None:
+    client = _client_with_interview_adapter(tmp_path, InitialGapDiscoveryAdapter())
+    profile_id = _ready_profile(client)
+    created = client.post(
+        "/v1/discovery-projects",
+        json={
+            "project_name": "Initial gap",
+            "current_workflow_problem": "多年資料尚未整理",
+            "desired_outcome": "",
+            "available_data": "",
+            "users_and_owners": "",
+            "known_constraints": "",
+            "model_profile_id": profile_id,
+        },
+    )
+    project_id = created.json()["project"]["id"]
+    client.post(f"/v1/projects/{project_id}/versions/1/understanding")
+    client.post(f"/v1/projects/{project_id}/versions/1/understanding/confirm")
+    questions = client.post(f"/v1/projects/{project_id}/versions/1/interview-rounds")
+
+    assert questions.status_code == 200
+    question = questions.json()[0]
+    answered = client.post(
+        f"/v1/projects/{project_id}/versions/1/interview-answers",
+        json={
+            "answers": [
+                {
+                    "question_id": question["id"],
+                    "answer_status": "answered",
+                    "answer": "減少人工重工。",
+                }
+            ]
+        },
+    )
+
+    assert answered.status_code == 200
+    current = client.get(f"/v1/projects/{project_id}/versions/1/facts").json()
+    desired = next(item for item in current if item["fact_key"] == "desired_outcome")
+    assert desired["status"] == "confirmed"
+    assert desired["value"] == "減少人工重工。"
+    history = client.get(f"/v1/projects/{project_id}/versions/1/facts/history").json()
+    desired_history = [
+        item for item in history if item["fact_key"] == "desired_outcome"
+    ]
+    assert [item["status"] for item in desired_history] == ["missing", "confirmed"]
+    assert desired_history[-1]["supersedes_fact_id"] == desired_history[0]["id"]
+    assert desired_history[-1]["reference_message_ids"]
+
+
+def test_minimal_brief_cannot_complete_when_provider_claims_no_questions(
+    tmp_path: Path,
+) -> None:
+    client = _client_with_interview_adapter(
+        tmp_path, InitialGapDiscoveryAdapter(premature_completion=True)
+    )
+    profile_id = _ready_profile(client)
+    created = client.post(
+        "/v1/discovery-projects",
+        json={
+            "project_name": "Premature completion",
+            "current_workflow_problem": "多年資料尚未整理",
+            "model_profile_id": profile_id,
+        },
+    )
+    project_id = created.json()["project"]["id"]
+    client.post(f"/v1/projects/{project_id}/versions/1/understanding")
+    client.post(f"/v1/projects/{project_id}/versions/1/understanding/confirm")
+
+    failed = client.post(f"/v1/projects/{project_id}/versions/1/interview-rounds")
+
+    assert failed.status_code == 502
+    assert failed.json()["error"]["code"] == "interview_questions_unavailable"
+    session = client.get(f"/v1/projects/{project_id}/versions/1/discovery").json()
+    version = client.get(f"/v1/projects/{project_id}/versions/1").json()
+    assert session["status"] == "ready_for_interview"
+    assert version["status"] == "interviewing"
 
 
 def test_discovery_provider_auth_failure_is_safe_and_does_not_persist_assistant_output(

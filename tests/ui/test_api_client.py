@@ -238,6 +238,38 @@ def test_generic_provider_http_error_uses_safe_ui_mapping() -> None:
     assert raw_marker not in repr(caught.value)
 
 
+def test_interview_questions_unavailable_keeps_safe_retry_guidance() -> None:
+    api = _client(
+        lambda _: httpx.Response(
+            502,
+            json={
+                "error": {
+                    "code": "interview_questions_unavailable",
+                    "message": "raw provider detail must not surface",
+                    "details": {
+                        "operation": "discovery",
+                        "retryable": True,
+                        "user_action": (
+                            "請重新產生訪談問題；若持續失敗，請重新測試模型設定並查看"
+                            "本機啟動日誌。"
+                        ),
+                    },
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.generate_interview_round("10000000-0000-0000-0000-000000000001", 1)
+
+    assert caught.value.code == "interview_questions_unavailable"
+    assert caught.value.retryable is True
+    assert caught.value.user_action == (
+        "請重新產生訪談問題；若持續失敗，請重新測試模型設定並查看本機啟動日誌。"
+    )
+    assert "raw provider detail" not in str(caught.value)
+
+
 def test_database_failure_has_actionable_safe_ui_guidance() -> None:
     raw_marker = "C:\\private\\planner.sqlite3"
     api = _client(

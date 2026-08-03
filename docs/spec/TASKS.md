@@ -201,6 +201,11 @@ P8.1b overall remains Pending until P8.1b-2 is accepted。
 
 ### Renewed manual UAT follow-up — Pending
 
+- Allow an initial missing/unknown brief fact to be asked once with its canonical key; an already-asked gap remains closed.
+- Preserve interview answers as superseding fact revisions with visible answer references; confirmed facts still require explicit correction.
+- Enforce a deterministic first-round material-gap policy and bounded semantic retry when the provider incorrectly claims `interview_complete=true`.
+- Keep confirmation success persisted before round generation; generation failure stays retryable from `READY_FOR_INTERVIEW` with safe UI guidance.
+
 - Stop re-asking unknown/missing interview topics and keep the second round only for confirmed material decision gaps。
 - Combine the explicit frontend action into analysis followed by report, while preserving separate persisted analysis/report states and retry behavior。
 - Keep implementation references solution-scoped, omit empty reviewed-case sections, and distinguish the pre-scale roadmap review。

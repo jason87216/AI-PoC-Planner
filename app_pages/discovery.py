@@ -289,9 +289,12 @@ def _confirmation(session: dict[str, Any], project_id: str, number: int) -> None
             try:
                 with st.spinner("正在整理需要進一步確認的重點……"):
                     get_api_client().generate_interview_round(project_id, number)
-            except ApiClientError:
-                st.session_state["question_generation_pending"] = True
-            _refresh("feedback_text", "show_feedback")
+            except ApiClientError as error:
+                st.session_state["discovery_generation_error"] = error
+                refresh_api_data()
+                st.rerun()
+            else:
+                _refresh("feedback_text", "show_feedback")
     if modify:
         st.session_state["show_feedback"] = True
     if st.session_state.get("show_feedback"):
@@ -322,14 +325,15 @@ def _confirmation(session: dict[str, Any], project_id: str, number: int) -> None
 
 def _next_round(project_id: str, number: int) -> None:
     st.warning("需求理解已確認，但問題尚未生成。")
-    if st.button("重新整理問題", type="primary", icon=":material/refresh:"):
+    if st.button("重新產生訪談問題", type="primary", icon=":material/refresh:"):
         try:
             with st.spinner("正在整理需要進一步確認的重點……"):
                 get_api_client().generate_interview_round(project_id, number)
         except ApiClientError as error:
-            show_api_error(error)
+            st.session_state["discovery_generation_error"] = error
+            refresh_api_data()
+            st.rerun()
         else:
-            st.session_state.pop("question_generation_pending", None)
             _refresh()
 
 
@@ -412,8 +416,10 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
                 try:
                     with st.spinner("正在整理需要進一步確認的重點……"):
                         get_api_client().generate_interview_round(project_id, number)
-                except ApiClientError:
-                    st.session_state["question_generation_pending"] = True
+                except ApiClientError as error:
+                    st.session_state["discovery_generation_error"] = error
+                    refresh_api_data()
+                    st.rerun()
             _refresh(*keys)
 
 
@@ -474,6 +480,9 @@ try:
 except ApiClientError as error:
     show_api_error(error)
     st.stop()
+generation_error = st.session_state.pop("discovery_generation_error", None)
+if isinstance(generation_error, ApiClientError):
+    show_api_error(generation_error)
 _project_heading(project_id, version_number, session)
 view = discovery_view_for_status(session.get("status"))
 if view == "understanding_generation":

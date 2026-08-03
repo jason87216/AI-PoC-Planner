@@ -331,6 +331,14 @@ _SAFE_ANALYSIS_CODES = {
     }
 }
 
+_SAFE_DISCOVERY_CODES = {
+    "interview_questions_unavailable": {
+        "operation": ProviderOperation.DISCOVERY.value,
+        "retryable": True,
+        "user_action": "請重新產生訪談問題；若持續失敗，請重新測試模型設定並查看本機啟動日誌。",
+    }
+}
+
 _SAFE_PROFILE_CODES = {
     "model_profile_auth_required",
     "model_profile_auth_forbidden",
@@ -654,6 +662,13 @@ def create_app(
         if error.code in _SAFE_PROVIDER_CODES:
             return _provider_error_response(
                 error.code, ProviderOperation.DISCOVERY, uuid4()
+            )
+        if error.code in _SAFE_DISCOVERY_CODES:
+            return _error_response(
+                502,
+                error.code,
+                uuid4(),
+                details=_SAFE_DISCOVERY_CODES[error.code],
             )
         return _error_response(
             502 if error.code == "provider_output_invalid" else 409, error.code, uuid4()
