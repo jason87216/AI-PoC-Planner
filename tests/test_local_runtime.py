@@ -62,3 +62,21 @@ def test_powershell_launcher_requires_project_venv_and_no_system_fallback() -> N
     assert ".venv\\Scripts\\python.exe" in source
     assert "Test-Path -LiteralPath $python" in source
     assert "local_runtime start --mode" in source
+
+
+def test_streamlit_command_hides_error_details_in_uat() -> None:
+    from ai_poc_planner.local_runtime import streamlit_command
+
+    command = streamlit_command(Path("python"), 18501, "uat")
+
+    assert "--client.showErrorDetails=none" in command
+    assert "--client.showErrorLinks=false" in command
+
+
+def test_streamlit_command_keeps_full_error_details_in_local_dev() -> None:
+    from ai_poc_planner.local_runtime import streamlit_command
+
+    command = streamlit_command(Path("python"), 18501, "local")
+
+    assert "--client.showErrorDetails=full" in command
+    assert "--client.showErrorLinks=true" in command

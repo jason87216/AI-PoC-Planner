@@ -210,6 +210,7 @@ P8.1b overall remains Pending until P8.1b-2 is accepted。
 - Combine the explicit frontend action into analysis followed by report, while preserving separate persisted analysis/report states and retry behavior。
 - Keep implementation references solution-scoped, omit empty reviewed-case sections, and distinguish the pre-scale roadmap review。
 - P8.1b-2 remains Pending; P7.2b remains Pending and P7.2 overall remains incomplete。
+- Renewed UAT follow-up also requires nullable new-project widget state to render safely and UAT browser errors to hide local traceback details without changing provider, deterministic, persistence, or schema behavior。
 
 ## Deferred
 

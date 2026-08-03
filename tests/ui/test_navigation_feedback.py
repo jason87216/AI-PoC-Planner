@@ -75,3 +75,21 @@ def test_interrupted_source_render_keeps_pending_until_destination() -> None:
 
     assert navigation._NAVIGATION_PENDING_KEY not in state
     assert state[navigation._STABLE_PAGE_KEY] == "history"
+
+
+def test_page_error_cleanup_can_finish_destination_transition() -> None:
+    state = {
+        navigation._NAVIGATION_PENDING_KEY: {
+            "page_key": "project",
+            "label": "正在開啟專案……",
+        }
+    }
+    fake_streamlit = SimpleNamespace(session_state=state)
+    original = navigation.st
+    navigation.st = fake_streamlit
+    try:
+        navigation.finish_page_render("project")
+    finally:
+        navigation.st = original
+
+    assert navigation._NAVIGATION_PENDING_KEY not in state

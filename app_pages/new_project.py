@@ -15,8 +15,47 @@ def _profile_choice(profile: dict[str, object]) -> str:
     return f"{profile_label(profile)}｜{enabled}"
 
 
-def _optional_text(value: str) -> str | None:
-    return value.strip() or None
+_NEW_PROJECT_WIDGET_KEYS = (
+    "new_project_name",
+    "new_project_current",
+    "new_project_outcome",
+    "new_project_data",
+    "new_project_owners",
+    "new_project_constraints",
+)
+
+
+def normalize_widget_text(value: object) -> str:
+    """Return a safe string for a Streamlit text widget state value."""
+
+    return value if isinstance(value, str) else ""
+
+
+def optional_text(value: object) -> str | None:
+    """Normalize optional text without serializing non-string sentinel values."""
+
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+# Keep the private name for callers/tests that used the original helper.
+_optional_text = optional_text
+
+
+def _clear_new_project_form_state() -> None:
+    for key in _NEW_PROJECT_WIDGET_KEYS:
+        st.session_state.pop(key, None)
+
+
+def _normalize_new_project_state(prefill: object) -> None:
+    if isinstance(prefill, dict):
+        for key, value in prefill.items():
+            if key in _NEW_PROJECT_WIDGET_KEYS:
+                st.session_state[key] = normalize_widget_text(value)
+    for key in _NEW_PROJECT_WIDGET_KEYS:
+        st.session_state[key] = normalize_widget_text(st.session_state.get(key))
 
 
 st.title("新建專案")
@@ -24,9 +63,7 @@ st.caption(
     "先選擇並測試本專案使用的模型，再輸入最小需求簡介；模型服務未通過測試時不會建立正式評估。"
 )
 prefill = st.session_state.pop("new_project_prefill", None)
-if isinstance(prefill, dict):
-    for key, value in prefill.items():
-        st.session_state.setdefault(key, value)
+_normalize_new_project_state(prefill)
 try:
     profiles = load_profiles()
 except ApiClientError as error:
@@ -122,15 +159,20 @@ with st.form("new_project_form"):
     )
 
 if submitted:
+    normalized_project_name = normalize_widget_text(project_name).strip()
+    normalized_current = normalize_widget_text(current).strip()
+    if not normalized_project_name or not normalized_current:
+        st.warning("請填寫專案名稱與目前流程與問題，才能建立專案。")
+        st.stop()
     try:
         created = get_api_client().create_discovery_project(
             {
-                "project_name": project_name,
-                "current_workflow_problem": current,
-                "desired_outcome": _optional_text(outcome),
-                "available_data": _optional_text(data),
-                "users_and_owners": _optional_text(owners),
-                "known_constraints": _optional_text(constraints),
+                "project_name": normalized_project_name,
+                "current_workflow_problem": normalized_current,
+                "desired_outcome": optional_text(outcome),
+                "available_data": optional_text(data),
+                "users_and_owners": optional_text(owners),
+                "known_constraints": optional_text(constraints),
                 "model_profile_id": profile_id,
             }
         )
@@ -146,6 +188,7 @@ if submitted:
         except ApiClientError:
             st.warning("專案已建立，但需求理解尚未生成。可在工作區重新整理需求。")
         refresh_api_data()
+        _clear_new_project_form_state()
         open_workspace(str(project["id"]), int(version["version_number"]))
     except ApiClientError as error:
         show_api_error(error)

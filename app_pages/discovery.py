@@ -224,7 +224,12 @@ def _project_heading(
         except ApiClientError as error:
             show_api_error(error)
         else:
-            values = {str(item.get("fact_key")): item.get("value") for item in facts}
+            values = {
+                str(item.get("fact_key")): item.get("value")
+                if item.get("status") == "confirmed"
+                else None
+                for item in facts
+            }
             st.session_state["new_project_prefill"] = {
                 "new_project_name": f"{project_name} 副本",
                 "new_project_current": values.get("current_workflow_problem", ""),
