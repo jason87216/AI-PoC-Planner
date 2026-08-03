@@ -384,7 +384,11 @@ def test_synthesis_uses_reviewed_catalogue_content() -> None:
 
 def test_empty_reviewed_cases_do_not_render_empty_case_sections() -> None:
     synthesis = _synthesis("governed_access").model_copy(
-        update={"reviewed_cases": (), "case_support_summaries": ()}
+        update={
+            "reviewed_cases": (),
+            "case_support_summaries": (),
+            "implementation_references": (),
+        }
     )
 
     markdown = render_synthesis_markdown(synthesis)
@@ -392,6 +396,7 @@ def test_empty_reviewed_cases_do_not_render_empty_case_sections() -> None:
     assert "本次沒有匹配的已審核成熟案例。" in markdown
     assert "### 成熟案例介紹" not in markdown
     assert "### 案例支持關係摘要" not in markdown
+    assert "目前沒有適用的官方實施參考。" in markdown
 
 
 def test_generic_roadmap_has_distinct_pre_scale_review() -> None:

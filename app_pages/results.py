@@ -236,14 +236,17 @@ def _render_synthesis(
         }
         for reference in view["implementation_references"]
     ]
-    _markdown_table(
-        reference_rows,
-        (
-            ("topic", "主題"),
-            ("display_title_zh", "參考文件"),
-            ("purpose_zh", "用途"),
-        ),
-    )
+    if reference_rows:
+        _markdown_table(
+            reference_rows,
+            (
+                ("topic", "主題"),
+                ("display_title_zh", "參考文件"),
+                ("purpose_zh", "用途"),
+            ),
+        )
+    else:
+        st.caption("目前沒有適用的官方實施參考。")
     st.subheader("目前狀態、目標狀態與主要差距")
     _table(
         view["current_target_comparison"],

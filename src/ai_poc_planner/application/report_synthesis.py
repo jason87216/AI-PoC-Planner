@@ -1496,7 +1496,7 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
             for reference in synthesis.implementation_references
         )
     else:
-        lines.append("目前沒有另外列出的官方實施參考。")
+        lines.append("目前沒有適用的官方實施參考。")
     lines.extend(
         [
             "",
