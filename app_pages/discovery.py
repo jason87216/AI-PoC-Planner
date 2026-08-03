@@ -317,14 +317,17 @@ def _confirmation(session: dict[str, Any], project_id: str, number: int) -> None
             if not feedback.strip():
                 st.warning("請先輸入修改內容。")
             else:
+                progress = st.status("正在保存修改並重新整理需求理解……", expanded=True)
                 try:
                     get_api_client().submit_understanding_feedback(
                         project_id, number, feedback
                     )
                     get_api_client().generate_understanding(project_id, number)
                 except ApiClientError as error:
+                    progress.update(label="修改需求失敗", state="error")
                     show_api_error(error)
                 else:
+                    progress.update(label="需求理解已更新", state="complete")
                     st.session_state.pop("show_feedback", None)
                     _refresh("feedback_text", "show_feedback")
 

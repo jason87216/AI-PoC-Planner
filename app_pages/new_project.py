@@ -164,6 +164,7 @@ if submitted:
     if not normalized_project_name or not normalized_current:
         st.warning("請填寫專案名稱與目前流程與問題，才能建立專案。")
         st.stop()
+    progress = st.status("正在建立專案……", expanded=True)
     try:
         created = get_api_client().create_discovery_project(
             {
@@ -177,6 +178,7 @@ if submitted:
             }
         )
         project, version = created["project"], created["version"]
+        progress.update(label="正在整理需求理解……")
         st.session_state["selected_project"] = {
             "project_id": str(project["id"]),
             "version_number": int(version["version_number"]),
@@ -187,8 +189,11 @@ if submitted:
             )
         except ApiClientError:
             st.warning("專案已建立，但需求理解尚未生成。可在工作區重新整理需求。")
+        progress.update(label="正在開啟專案……")
         refresh_api_data()
         _clear_new_project_form_state()
+        progress.update(label="專案已開啟", state="complete")
         open_workspace(str(project["id"]), int(version["version_number"]))
     except ApiClientError as error:
+        progress.update(label="建立專案失敗", state="error")
         show_api_error(error)

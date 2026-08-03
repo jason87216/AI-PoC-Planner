@@ -54,6 +54,7 @@
 - Report references are now solution-scoped; empty reviewed-case sections are omitted with a safe explanatory message, and the generic roadmap distinguishes pre-scale review from the PoC phase.
 - Renewed UAT also found nullable copy-prefill values reaching Streamlit text widgets and browser-level traceback exposure; the bounded fix normalizes all new-project widget state, preserves failed-submit input, clears successful-submit state, and uses public UAT error-detail suppression while retaining local logs.
 - This remains offline implementation work pending renewed manual acceptance; P7.2b remains pending and P7.2 overall remains incomplete.
+- The latest bounded UAT follow-up adds canonical interview-topic de-duplication (without renaming duplicate keys), closes unknown/missing topics, and exposes visible status progress for project creation and feedback submission. No provider, deterministic, persistence-schema, or P7.2b behavior changes are included.
 
 ### Historical diagnosis
 

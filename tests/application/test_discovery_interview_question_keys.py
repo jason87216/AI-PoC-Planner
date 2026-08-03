@@ -199,3 +199,160 @@ def test_only_confirmed_material_judgement_can_open_second_round() -> None:
         )
         is True
     )
+
+
+def _output_question(
+    *, fact_key: str, question: str, affected_judgement: str = "scope"
+) -> InterviewRoundOutput:
+    return InterviewRoundOutput(
+        interview_complete=False,
+        questions=[
+            InterviewQuestionOutput(
+                fact_key=fact_key,
+                question=question,
+                why_it_matters="This can change the planning direction.",
+                affected_judgement=affected_judgement,
+                example="A concise answer is enough.",
+            )
+        ],
+    )
+
+
+def _previous_question(
+    *, fact_key: str, question: str, affected_judgement: str = "scope"
+) -> InterviewQuestion:
+    return InterviewQuestion(
+        id=uuid4(),
+        session_id=uuid4(),
+        version_id=uuid4(),
+        round_number=1,
+        position=1,
+        visible_message_id=uuid4(),
+        fact_key=fact_key,
+        question=question,
+        why_it_matters="This can change the planning direction.",
+        affected_judgement=affected_judgement,
+        example="A concise answer is enough.",
+        created_at=datetime.now(UTC),
+    )
+
+
+def test_canonical_topic_maps_outcome_synonyms_and_separates_measurement() -> None:
+    for question in (
+        "What outcome do you want to improve?",
+        "What specific goal should this project achieve?",
+        "How do you judge whether this project succeeds?",
+    ):
+        assert (
+            DiscoveryInterviewService.canonical_question_topic(
+                "provider_key", question, "", ""
+            )
+            == "desired_outcome"
+        )
+
+    assert (
+        DiscoveryInterviewService.canonical_question_topic(
+            "provider_metric_key",
+            "How will you measure the confirmed goal?",
+            "",
+            "",
+        )
+        == "success_measure"
+    )
+
+
+def test_semantic_duplicate_with_different_key_and_text_is_dropped() -> None:
+    previous = _previous_question(
+        fact_key="clarification_round_1_question_1",
+        question="What outcome do you want to improve?",
+    )
+    normalized = DiscoveryInterviewService._with_unique_question_keys(
+        _output_question(
+            fact_key="objective_detail",
+            question="What specific goal should this project achieve?",
+        ),
+        [],
+        [previous],
+    )
+
+    assert normalized.interview_complete is True
+    assert normalized.questions == []
+
+
+def test_unknown_or_missing_topic_is_closed_by_canonical_history() -> None:
+    previous = _previous_question(
+        fact_key="clarification_round_1_question_1",
+        question="What outcome do you want to improve?",
+    )
+    missing = FactRevision(
+        id=uuid4(),
+        version_id=previous.version_id,
+        fact_key="desired_outcome",
+        value=None,
+        status=FactStatus.MISSING,
+        reference_message_ids=[uuid4()],
+        created_at=datetime.now(UTC),
+    )
+    normalized = DiscoveryInterviewService._with_unique_question_keys(
+        _output_question(
+            fact_key="different_goal_key",
+            question="What business goal should the project achieve?",
+        ),
+        [missing],
+        [previous],
+    )
+
+    assert normalized.questions == []
+
+
+def test_confirmed_outcome_allows_independent_deployment_boundary() -> None:
+    previous = _previous_question(
+        fact_key="desired_outcome",
+        question="What outcome do you want to improve?",
+    )
+    normalized = DiscoveryInterviewService._with_unique_question_keys(
+        _output_question(
+            fact_key="deployment_check",
+            question="Where will this workflow be deployed?",
+            affected_judgement="deployment posture",
+        ),
+        [],
+        [previous],
+    )
+
+    assert [item.fact_key for item in normalized.questions] == ["deployment_check"]
+
+
+def test_unclassified_questions_still_use_exact_duplicate_guard() -> None:
+    previous = _previous_question(
+        fact_key="first_topic",
+        question="Please describe the current process.",
+    )
+    normalized = DiscoveryInterviewService._with_unique_question_keys(
+        _output_question(
+            fact_key="different_topic",
+            question="Please describe the current process.",
+        ),
+        [],
+        [previous],
+    )
+
+    assert normalized.questions == []
+
+
+def test_different_canonical_topic_is_not_over_filtered() -> None:
+    previous = _previous_question(
+        fact_key="desired_outcome",
+        question="What outcome do you want to improve?",
+    )
+    normalized = DiscoveryInterviewService._with_unique_question_keys(
+        _output_question(
+            fact_key="approval_boundary",
+            question="Who makes the final human approval decision?",
+            affected_judgement="human decision boundary",
+        ),
+        [],
+        [previous],
+    )
+
+    assert [item.fact_key for item in normalized.questions] == ["approval_boundary"]

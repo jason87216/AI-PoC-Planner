@@ -212,6 +212,8 @@ P8.1b overall remains Pending until P8.1b-2 is accepted。
 - P8.1b-2 remains Pending; P7.2b remains Pending and P7.2 overall remains incomplete。
 - Renewed UAT follow-up also requires nullable new-project widget state to render safely and UAT browser errors to hide local traceback details without changing provider, deterministic, persistence, or schema behavior。
 
+ - Latest bounded UAT follow-up adds deterministic canonical-topic de-duplication and visible create-project/feedback action progress; P8.1b-2 remains Pending and P7.2b remains Pending.
+
 ## Deferred
 
 - Consumer installer and release packaging.

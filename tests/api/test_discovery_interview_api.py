@@ -100,6 +100,54 @@ class InitialGapDiscoveryAdapter:
         )
 
 
+class SemanticDuplicateDiscoveryAdapter:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, **_: object) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            return json.dumps(
+                {
+                    "concise_requirement_summary": "Manual workflow.",
+                    "current_workflow_understanding": "Manual workflow.",
+                    "desired_outcome_understanding": "Improve throughput.",
+                    "available_data_understanding": "Data exists.",
+                    "proposed_assumptions": [],
+                    "detected_contradictions_or_ambiguities": [],
+                }
+            )
+        if self.calls == 2:
+            return json.dumps(
+                {
+                    "interview_complete": False,
+                    "questions": [
+                        {
+                            "fact_key": "desired_outcome",
+                            "question": "What outcome should improve?",
+                            "why_it_matters": "It affects the hard gate.",
+                            "affected_judgement": "hard gate",
+                            "example": "A concise goal is enough.",
+                        }
+                    ],
+                }
+            )
+        return json.dumps(
+            {
+                "interview_complete": False,
+                "questions": [
+                    {
+                        "fact_key": "objective_detail",
+                        "question": "What specific goal should this project achieve?",
+                        "why_it_matters": "It affects the scope.",
+                        "affected_judgement": "scope",
+                        "example": "A concise goal is enough.",
+                    }
+                ],
+            }
+        )
+
+
 class AuthFailingDiscoveryAdapter:
     def complete(self, **kwargs: object) -> str:
         response_format = kwargs["response_format"]
@@ -226,6 +274,67 @@ def test_phase_three_initial_brief_understanding_and_bounded_round(
     )
     assert answered.status_code == 200
     assert answered.json()["status"] == "ready_for_assessment"
+
+
+def test_semantic_duplicate_round_is_completed_without_persisting_a_question(
+    tmp_path: Path,
+) -> None:
+    client = _client_with_interview_adapter(
+        tmp_path, SemanticDuplicateDiscoveryAdapter()
+    )
+    profile_id = _ready_profile(client)
+    created = client.post(
+        "/v1/discovery-projects",
+        json={
+            "project_name": "Semantic duplicate",
+            "current_workflow_problem": "Manual workflow",
+            "model_profile_id": profile_id,
+        },
+    )
+    project_id = created.json()["project"]["id"]
+    assert (
+        client.post(f"/v1/projects/{project_id}/versions/1/understanding").status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/v1/projects/{project_id}/versions/1/understanding/confirm"
+        ).status_code
+        == 200
+    )
+    first_round = client.post(f"/v1/projects/{project_id}/versions/1/interview-rounds")
+    assert first_round.status_code == 200
+    first_question = first_round.json()[0]
+    answered = client.post(
+        f"/v1/projects/{project_id}/versions/1/interview-answers",
+        json={
+            "answers": [
+                {
+                    "question_id": first_question["id"],
+                    "answer_status": "answered",
+                    "answer": "Improve throughput",
+                }
+            ]
+        },
+    )
+    assert answered.status_code == 200
+    assert answered.json()["status"] == "ready_for_next_round"
+
+    second_round = client.post(f"/v1/projects/{project_id}/versions/1/interview-rounds")
+    assert second_round.status_code == 200
+    assert second_round.json() == []
+    assert (
+        len(
+            client.get(
+                f"/v1/projects/{project_id}/versions/1/interview-questions"
+            ).json()
+        )
+        == 1
+    )
+    assert (
+        client.get(f"/v1/projects/{project_id}/versions/1/discovery").json()["status"]
+        == "ready_for_assessment"
+    )
 
 
 def test_minimal_initial_brief_persists_optional_fields_as_missing(

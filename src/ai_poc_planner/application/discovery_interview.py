@@ -75,6 +75,129 @@ class InterviewCompletionAdapter(Protocol):
     def complete(self, **kwargs: object) -> str: ...
 
 
+_CANONICAL_INTERVIEW_TOPICS = frozenset(
+    {
+        "desired_outcome",
+        "available_data",
+        "users_and_owners",
+        "known_constraints",
+        "first_phase_scope",
+        "success_measure",
+        "human_decision_boundary",
+        "deployment_boundary",
+    }
+)
+
+
+_TOPIC_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "success_measure",
+        (
+            "量測",
+            "衡量",
+            "指標",
+            "kpi",
+            "metric",
+            "measure",
+            "metrics",
+            "驗收方式",
+            "如何量化",
+        ),
+    ),
+    (
+        "desired_outcome",
+        (
+            "成果",
+            "目標",
+            "改善",
+            "達成",
+            "outcome",
+            "goal",
+            "objective",
+            "improve",
+            "成功",
+            "success",
+            "succeed",
+        ),
+    ),
+    (
+        "first_phase_scope",
+        (
+            "第一階段",
+            "第一期",
+            "poc範圍",
+            "試點範圍",
+            "pilot scope",
+            "first phase",
+            "phase 1",
+        ),
+    ),
+    (
+        "human_decision_boundary",
+        (
+            "人工核准",
+            "人工決策",
+            "誰核准",
+            "最終決定",
+            "human decision",
+            "human review",
+            "approval",
+            "approver",
+        ),
+    ),
+    (
+        "deployment_boundary",
+        (
+            "部署",
+            "上線",
+            "執行環境",
+            "部署姿態",
+            "deployment",
+            "runtime",
+            "processing boundary",
+            "private endpoint",
+        ),
+    ),
+    (
+        "available_data",
+        (
+            "資料來源",
+            "資料格式",
+            "資料結構",
+            "資料可用",
+            "dataset",
+            "data source",
+            "data availability",
+        ),
+    ),
+    (
+        "users_and_owners",
+        (
+            "使用者",
+            "負責人",
+            "角色",
+            "維運",
+            "owner",
+            "responsib",
+            "who uses",
+        ),
+    ),
+    (
+        "known_constraints",
+        (
+            "限制",
+            "約束",
+            "預算",
+            "時程",
+            "法規",
+            "合規",
+            "constraint",
+            "resource limit",
+        ),
+    ),
+)
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -476,11 +599,14 @@ class DiscoveryInterviewService:
             ),
             InterviewRoundOutput,
         )
+        raw_question_count = len(output.questions)
         output = self._with_unique_question_keys(output, facts, previous_questions)
-        if require_material_questions and not self._covers_material_topic(
-            output, facts, previous_questions
+        if (
+            require_material_questions
+            and output.questions
+            and not self._covers_material_topic(output, facts, previous_questions)
         ):
-            output = self._call_structured(
+            repaired_output = self._call_structured(
                 version,
                 self._round_messages(
                     facts,
@@ -490,9 +616,18 @@ class DiscoveryInterviewService:
                 ),
                 InterviewRoundOutput,
             )
-            output = self._with_unique_question_keys(output, facts, previous_questions)
-            if not self._covers_material_topic(output, facts, previous_questions):
+            repaired_question_count = len(repaired_output.questions)
+            output = self._with_unique_question_keys(
+                repaired_output, facts, previous_questions
+            )
+            if output.questions and not self._covers_material_topic(
+                output, facts, previous_questions
+            ):
                 raise DiscoveryError("interview_questions_unavailable")
+            if repaired_question_count == 0:
+                raise DiscoveryError("interview_questions_unavailable")
+        elif require_material_questions and raw_question_count == 0:
+            raise DiscoveryError("interview_questions_unavailable")
         with self._history._repository.transaction():
             timestamp = self._clock()
             if output.interview_complete:
@@ -870,6 +1005,43 @@ class DiscoveryInterviewService:
             if assumption.fact_key.strip().casefold() not in existing
         ]
 
+    @classmethod
+    def canonical_question_topic(
+        cls,
+        fact_key: str,
+        question: str,
+        why_it_matters: str,
+        affected_judgement: str,
+    ) -> str | None:
+        """Map an interview question to a bounded semantic topic when reliable."""
+
+        key = fact_key.strip().casefold()
+        if key in _CANONICAL_INTERVIEW_TOPICS:
+            return key
+
+        question_text = question.casefold()
+        context_text = " ".join(
+            (fact_key, why_it_matters, affected_judgement)
+        ).casefold()
+
+        # Measurement asks are distinct from asking what outcome is desired.
+        if any(marker in question_text for marker in _TOPIC_MARKERS[0][1]):
+            return "success_measure"
+
+        # Prefer the question's explicit subject over incidental context words.
+        for topic, markers in _TOPIC_MARKERS[1:]:
+            if any(marker in question_text for marker in markers):
+                return topic
+
+        # Context is only a fallback. Require one unambiguous topic so a broad
+        # question is never merged with an unrelated topic by guesswork.
+        matches = [
+            topic
+            for topic, markers in _TOPIC_MARKERS
+            if any(marker in context_text for marker in markers)
+        ]
+        return matches[0] if len(matches) == 1 else None
+
     @staticmethod
     def _with_unique_question_keys(
         output: object,
@@ -891,27 +1063,55 @@ class DiscoveryInterviewService:
             DiscoveryInterviewService._normalize_question_text(question.question)
             for question in previous_questions
         }
+        previous_topics = {
+            topic
+            for question in previous_questions
+            if (
+                topic := DiscoveryInterviewService.canonical_question_topic(
+                    question.fact_key,
+                    question.question,
+                    question.why_it_matters,
+                    question.affected_judgement,
+                )
+            )
+        }
+        assigned_topics = {
+            topic
+            for fact in current_facts.values()
+            if fact.status in {FactStatus.CONFIRMED, FactStatus.ASSUMPTION}
+            and (
+                topic := DiscoveryInterviewService.canonical_question_topic(
+                    fact.fact_key, "", "", ""
+                )
+            )
+        }
+        assigned_topics.update(previous_topics)
         assigned = set(existing)
+        normalized_question_texts = set(previous_texts)
         questions: list[InterviewQuestionOutput] = []
         for question in output.questions:
             key = question.fact_key.strip().casefold()
             normalized_text = DiscoveryInterviewService._normalize_question_text(
                 question.question
             )
+            topic = DiscoveryInterviewService.canonical_question_topic(
+                question.fact_key,
+                question.question,
+                question.why_it_matters,
+                question.affected_judgement,
+            )
             if (
                 not key
                 or key.startswith("clarification_round_")
                 or key in assigned
-                or normalized_text in previous_texts
-                or normalized_text
-                in {
-                    DiscoveryInterviewService._normalize_question_text(item.question)
-                    for item in questions
-                }
+                or normalized_text in normalized_question_texts
+                or topic in assigned_topics
             ):
                 continue
             assigned.add(key)
-            previous_texts.add(normalized_text)
+            normalized_question_texts.add(normalized_text)
+            if topic is not None:
+                assigned_topics.add(topic)
             questions.append(question.model_copy(update={"fact_key": key}))
         return output.model_copy(
             update={
@@ -926,7 +1126,16 @@ class DiscoveryInterviewService:
         previous_questions: Sequence[InterviewQuestion],
     ) -> bool:
         asked = {
-            question.fact_key.strip().casefold() for question in previous_questions
+            topic
+            for question in previous_questions
+            if (
+                topic := DiscoveryInterviewService.canonical_question_topic(
+                    question.fact_key,
+                    question.question,
+                    question.why_it_matters,
+                    question.affected_judgement,
+                )
+            )
         }
         material_keys = {
             "desired_outcome",
@@ -951,7 +1160,16 @@ class DiscoveryInterviewService:
         if output.interview_complete or not output.questions:
             return False
         asked = {
-            question.fact_key.strip().casefold() for question in previous_questions
+            topic
+            for question in previous_questions
+            if (
+                topic := cls.canonical_question_topic(
+                    question.fact_key,
+                    question.question,
+                    question.why_it_matters,
+                    question.affected_judgement,
+                )
+            )
         }
         open_keys = {
             fact.fact_key.strip().casefold()
@@ -974,7 +1192,13 @@ class DiscoveryInterviewService:
             "human-review",
         )
         for question in output.questions:
-            if question.fact_key.strip().casefold() in open_keys:
+            topic = cls.canonical_question_topic(
+                question.fact_key,
+                question.question,
+                question.why_it_matters,
+                question.affected_judgement,
+            )
+            if topic in open_keys:
                 return True
             text = " ".join(
                 (

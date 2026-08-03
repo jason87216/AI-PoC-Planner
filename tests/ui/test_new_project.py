@@ -23,11 +23,13 @@ class FakeApi:
     def __init__(self, *, create_error: bool = False) -> None:
         self.create_error = create_error
         self.created_payloads: list[dict[str, object]] = []
+        self.events: list[str] = []
 
     def profile_status(self, _profile_id: str) -> dict[str, object]:
         return {"formal_analysis_allowed": True}
 
     def create_discovery_project(self, payload: dict[str, object]) -> dict[str, object]:
+        self.events.append("create_discovery_project")
         if self.create_error:
             raise ApiClientError(
                 "database_operation_failed",
@@ -40,6 +42,7 @@ class FakeApi:
         }
 
     def generate_understanding(self, _project_id: str, _version_number: int) -> None:
+        self.events.append("generate_understanding")
         return None
 
 
@@ -175,3 +178,20 @@ def test_new_project_api_failure_preserves_form_input(
     assert not app.exception
     assert app.session_state["new_project_name"] == "Keep this"
     assert app.session_state["new_project_current"] == "Keep this workflow"
+
+
+def test_new_project_success_exposes_action_progress_and_completes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeApi()
+    _prepare_page(monkeypatch, fake)
+    app = AppTest.from_file(PAGE).run(timeout=10)
+    app.text_input[0].set_value("Progress project")
+    app.text_area[0].set_value("A workflow to assess")
+    _submit(app)
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert fake.events == ["create_discovery_project", "generate_understanding"]
+    assert app.status
+    assert app.status[0].state == "complete"
