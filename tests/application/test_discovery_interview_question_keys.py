@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from ai_poc_planner.application.discovery_interview import DiscoveryInterviewService
 from ai_poc_planner.domain.discovery import (
+    InterviewQuestion,
     InterviewQuestionOutput,
     InterviewRoundOutput,
 )
@@ -36,7 +37,75 @@ def test_interview_questions_reuse_stable_new_keys_for_current_facts() -> None:
     )
 
     normalized = DiscoveryInterviewService._with_unique_question_keys(
-        output, [existing], 2
+        output, [existing]
     )
 
-    assert normalized.questions[0].fact_key == "clarification_round_2_question_1"
+    assert normalized.interview_complete is True
+    assert normalized.questions == []
+
+
+def test_duplicate_question_text_is_dropped_without_renaming() -> None:
+    output = InterviewRoundOutput(
+        interview_complete=False,
+        questions=[
+            InterviewQuestionOutput(
+                fact_key="new_key",
+                question="How is the workflow approved?",
+                why_it_matters="It affects governance.",
+                affected_judgement="hard gate",
+                example="A short answer is enough.",
+            )
+        ],
+    )
+    previous = InterviewQuestion(
+        id=uuid4(),
+        session_id=uuid4(),
+        version_id=uuid4(),
+        round_number=1,
+        position=1,
+        visible_message_id=uuid4(),
+        fact_key="approval_flow",
+        question="How is the workflow approved?",
+        why_it_matters="It affects governance.",
+        affected_judgement="hard gate",
+        example="A short answer is enough.",
+        created_at=datetime.now(UTC),
+    )
+
+    normalized = DiscoveryInterviewService._with_unique_question_keys(
+        output, [], [previous]
+    )
+
+    assert normalized.interview_complete is True
+    assert normalized.questions == []
+
+
+def test_only_confirmed_material_judgement_can_open_second_round() -> None:
+    question = InterviewQuestion(
+        id=uuid4(),
+        session_id=uuid4(),
+        version_id=uuid4(),
+        round_number=1,
+        position=1,
+        visible_message_id=uuid4(),
+        fact_key="available_data",
+        question="有哪些資料可供整理？",
+        why_it_matters="資料缺口會影響後續判斷。",
+        affected_judgement="資料盤點",
+        example="可提供大致類型即可。",
+        created_at=datetime.now(UTC),
+    )
+    material_question = question.model_copy(
+        update={"affected_judgement": "hard gate 與人工核准"}
+    )
+
+    assert (
+        DiscoveryInterviewService._question_requires_material_follow_up(question)
+        is False
+    )
+    assert (
+        DiscoveryInterviewService._question_requires_material_follow_up(
+            material_question
+        )
+        is True
+    )

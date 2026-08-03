@@ -199,6 +199,13 @@ Acceptance checkpoint：
 
 P8.1b overall remains Pending until P8.1b-2 is accepted。
 
+### Renewed manual UAT follow-up — Pending
+
+- Stop re-asking unknown/missing interview topics and keep the second round only for confirmed material decision gaps。
+- Combine the explicit frontend action into analysis followed by report, while preserving separate persisted analysis/report states and retry behavior。
+- Keep implementation references solution-scoped, omit empty reviewed-case sections, and distinguish the pre-scale roadmap review。
+- P8.1b-2 remains Pending; P7.2b remains Pending and P7.2 overall remains incomplete。
+
 ## Deferred
 
 - Consumer installer and release packaging.

@@ -43,6 +43,12 @@
 - 新增 temporary SQLite analysis failure integration test：invalid domain assembly 不產生 partial row、訪談資料保留、版本維持 `ready_for_assessment`，修正 fake output 後可再次提交成功；UI 錯誤文案改為中立的「評估結果格式無法驗證」。
 - P8.1b-2 仍待重新人工驗收；P8.1b overall、P7.2b 與完整 P7.2 仍未完成。
 
+### P8.1b-2 renewed manual UAT follow-up — Pending
+
+- The next bounded follow-up stops re-asking unknown/missing interview topics, combines analysis and report generation into one explicit user action, and keeps analysis/report persistence transitions separate.
+- Report references are now solution-scoped; empty reviewed-case sections are omitted with a safe explanatory message, and the generic roadmap distinguishes pre-scale review from the PoC phase.
+- This remains offline implementation work pending renewed manual acceptance; P7.2b remains pending and P7.2 overall remains incomplete.
+
 ### Historical diagnosis
 
 The earlier readiness, analysis-budget, report-contract, and persistence-compatibility investigations are retained below as historical context; the closeout above is the current status.

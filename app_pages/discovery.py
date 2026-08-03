@@ -440,8 +440,17 @@ def _complete(project_id: str, number: int) -> None:
     for item in summary["unresolved"]:
         st.write(f"• {item}")
     with st.container(horizontal=True):
-        if st.button("查看評估結果", icon=":material/insights:"):
-            st.switch_page("app_pages/results.py")
+        if st.button("生成評估報告", type="primary", icon=":material/insights:"):
+            try:
+                with st.spinner("正在分析需求並評估方案……"):
+                    get_api_client().create_analysis(project_id, number)
+                with st.spinner("正在整理完整規劃報告……"):
+                    get_api_client().create_report(project_id, number)
+            except ApiClientError as error:
+                show_api_error(error)
+            else:
+                refresh_api_data()
+                st.switch_page("app_pages/results.py")
         if st.button("返回首頁", icon=":material/home:"):
             st.switch_page("app_pages/home.py")
         if st.button("查看歷史", icon=":material/history:"):

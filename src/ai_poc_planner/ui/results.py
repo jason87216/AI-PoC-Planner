@@ -133,6 +133,7 @@ def _readable_text(value: object) -> str:
     text = re.sub(r"\s*\(?F\d{3}\)?", "", str(value)).strip()
     for source, target in _TEXT_REPLACEMENTS.items():
         text = text.replace(source, target)
+    text = re.sub(r"若{2,}", "若", text)
     return text
 
 

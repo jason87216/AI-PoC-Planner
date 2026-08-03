@@ -263,6 +263,8 @@ def _natural_text(value: object, *, fallback: str) -> str:
         text = text.replace(source, target)
     for term in _BANNED_VISIBLE_TERMS:
         text = text.replace(term, "")
+    # Normalize accidental repeated conditional wording without changing facts.
+    text = re.sub(r"若{2,}", "若", text)
     text = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", "", text)
     return fallback if not text or _has_english_sentence(text) else text
 
@@ -945,11 +947,30 @@ def _phase_defaults(
     }[category]
     if index == 0:
         return common
+    if index == 1:
+        return (
+            ["在有限範圍內執行 PoC", "記錄人工修改、例外與驗證結果"],
+            ["可檢視的 PoC 結果與改善清單"],
+            common[2],
+            ["結果可回溯到資料、人工確認與驗證紀錄。"],
+        )
     return (
-        ["在有限範圍內執行 PoC", "記錄人工修改、例外與驗證結果"],
-        ["可檢視的 PoC 結果與改善清單"],
-        common[2],
-        ["結果可回溯到資料、人工確認與驗證紀錄。"],
+        [
+            "檢查 PoC 驗收結果、資料品質、人工修改與例外",
+            "確認責任、治理、部署與監控條件",
+            "決定停止、補強或擴大，不把未確認條件當成通過",
+        ],
+        [
+            "PoC 驗收結論與未解決缺口",
+            "擴大、補強或停止決策",
+            "下一階段的必要條件",
+        ],
+        "領域負責人與工程負責人共同確認；系統不得自行決定進入部署。",
+        [
+            "PoC 驗收通過",
+            "hard gates 已解除或具備核准控制",
+            "資料、責任、部署與監控條件明確",
+        ],
     )
 
 
@@ -1015,15 +1036,15 @@ def _roadmap(analysis: ValidatedAnalysisResult, category: str) -> list[RoadmapPh
             ),
         ]
     phases = analysis.case_centered.phased_path if analysis.case_centered else ()
-    count = max(2, len(phases))
-    names = ["準備階段（立即行動）", "第一階段 PoC"]
+    count = max(3, len(phases))
+    names = ["準備階段（立即行動）", "第一階段 PoC", "擴大前檢視"]
     rows: list[RoadmapPhase] = []
     for index in range(count):
         actions, outputs, boundary, acceptance = _phase_defaults(category, index)
         phase = phases[index] if index < len(phases) else None
         rows.append(
             RoadmapPhase(
-                phase=names[index] if index < len(names) else "擴大前檢視",
+                phase=names[index] if index < len(names) else "後續檢視",
                 description="以有限範圍完成可驗證的準備與試行。",
                 actions=actions,
                 inputs=["已確認需求與核准資料"],
@@ -1179,6 +1200,9 @@ def _recommendation_narrative(
         if reviewed_cases
         else "本次沒有匹配的已審核成熟案例，因此不把其他領域案例當成直接證據。"
     )
+    not_suitable_condition = solution.not_suitable_when_zh.strip()
+    if not_suitable_condition.startswith("若"):
+        not_suitable_condition = not_suitable_condition[1:].lstrip()
     return "\n\n".join(
         [
             f"專案問題在於{_phrase(_fact(fact_by_key, 'current_workflow_problem'))}；期待達成的成果是{_phrase(_fact(fact_by_key, 'desired_outcome'))}。目前可用資料為{_phrase(_fact(fact_by_key, 'available_data'))}，因此第一階段不應從抽象的技術選型開始，而應先把可驗證的資料、流程與責任範圍固定下來。",
@@ -1186,7 +1210,7 @@ def _recommendation_narrative(
             f"生成式 AI 不是第一階段核心；先完成資料、流程與責任的可驗證定義，再評估 AI 是否能降低整理成本。{case_conclusion}",
             f"人工責任必須維持清楚：{solution.human_boundary_zh}系統只在受控範圍內提供輔助，不把未確認條件寫成既有能力。",
             f"第一階段範圍為{solution.typical_scope_zh}，PoC 驗收聚焦於{solution.acceptance_focus_zh}預期交付成果是{solution.expected_outputs_zh}，並以人工覆核與可追溯紀錄確認結果。",
-            f"未來若資料、流程與驗收條件穩定，再評估生成式 AI 或系統串接；若{solution.not_suitable_when_zh}，就不應擴大自動化。",
+            f"未來若資料、流程與驗收條件穩定，再評估生成式 AI 或系統串接；若{not_suitable_condition}，就不應擴大自動化。",
         ]
     )
 
@@ -1417,38 +1441,42 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
         + " |"
         for item in synthesis.option_comparison
     )
-    lines.extend(["", "### 成熟案例介紹", ""])
-    for case in synthesis.reviewed_cases:
+    if synthesis.reviewed_cases:
+        lines.extend(["", "### 成熟案例介紹", ""])
+        for case in synthesis.reviewed_cases:
+            lines.extend(
+                [
+                    f"### {case.display_title_zh}",
+                    "",
+                    f"- 背景：{case.problem_context_zh}",
+                    f"- 實際做法：{case.implemented_approach_zh}",
+                    f"- 已記錄成果：{case.documented_outcomes_zh}",
+                    f"- 可借鑑做法：{case.transferable_practices_zh}",
+                    f"- 不直接複製部分：{case.limitations_zh}",
+                    f"- 可點擊來源：[{case.source_name}]({case.source_url})",
+                    "",
+                ]
+            )
+    else:
+        lines.extend(["", "本次沒有匹配的已審核成熟案例。", ""])
+    if synthesis.case_support_summaries:
         lines.extend(
             [
-                f"### {case.display_title_zh}",
+                "### 案例支持關係摘要",
                 "",
-                f"- 背景：{case.problem_context_zh}",
-                f"- 實際做法：{case.implemented_approach_zh}",
-                f"- 已記錄成果：{case.documented_outcomes_zh}",
-                f"- 可借鑑做法：{case.transferable_practices_zh}",
-                f"- 不直接複製部分：{case.limitations_zh}",
-                f"- 可點擊來源：[{case.source_name}]({case.source_url})",
-                "",
+                "| 案例 | 主要支持做法 | 本專案採用方式 |",
+                "|---|---|---|",
             ]
         )
-    lines.extend(
-        [
-            "### 案例支持關係摘要",
-            "",
-            "| 案例 | 主要支持做法 | 本專案採用方式 |",
-            "|---|---|---|",
-        ]
-    )
-    lines.extend(
-        "| "
-        + " | ".join(
-            _cell(getattr(item, field))
-            for field in ("case_title", "supported_practices", "project_adoption")
+        lines.extend(
+            "| "
+            + " | ".join(
+                _cell(getattr(item, field))
+                for field in ("case_title", "supported_practices", "project_adoption")
+            )
+            + " |"
+            for item in synthesis.case_support_summaries
         )
-        + " |"
-        for item in synthesis.case_support_summaries
-    )
     lines.extend(["", "### 官方實施參考", ""])
     if synthesis.implementation_references:
         lines.extend(["| 主題 | 參考文件 | 用途 |", "|---|---|---|"])

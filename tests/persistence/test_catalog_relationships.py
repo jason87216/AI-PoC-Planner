@@ -39,6 +39,33 @@ def test_permission_catalog_has_many_to_many_links_and_coverage(tmp_path) -> Non
         connection.close()
 
 
+def test_implementation_references_are_isolated_by_solution(tmp_path) -> None:
+    connection = database_connection(tmp_path / "catalog.sqlite3")
+    try:
+        initialize_database(connection)
+        catalog = SQLiteSolutionCatalogRepository(connection)
+
+        governed = catalog.list_approved_implementation_references(
+            "permission_request_rules_and_human_approval"
+        )
+        data = catalog.list_approved_implementation_references(
+            "data_readiness_validation"
+        )
+
+        assert governed
+        assert data == ()
+        assert all(
+            any(
+                marker in reference.reference_key
+                for marker in ("entra", "okta", "sailpoint", "servicenow")
+            )
+            for reference in governed
+        )
+        assert catalog.list_approved_implementation_references("unknown") == ()
+    finally:
+        connection.close()
+
+
 def test_catalog_coverage_fails_closed_when_required_evidence_is_missing(
     tmp_path,
 ) -> None:

@@ -155,6 +155,8 @@ P8.1a portfolio baseline 可基於已完成的 P7.2a 代表情境證據先行整
 
 P8.1b overall remains Pending until P8.1b-2 acceptance is complete.
 
+Renewed manual UAT follow-up remains bounded and Pending: prevent repeated unknown/missing interview questions, provide one explicit analysis-to-report action with persisted recovery, isolate implementation references by solution, and omit empty reviewed-case sections. No provider, deterministic assessment, scoring, hard-gate, or SQLite schema behavior changes are included.
+
 ## Testing policy
 
 | Layer | Purpose |

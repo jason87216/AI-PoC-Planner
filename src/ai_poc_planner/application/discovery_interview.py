@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
@@ -20,6 +21,7 @@ from ai_poc_planner.domain.discovery import (
     InitialBrief,
     InterviewAnswerStatus,
     InterviewQuestion,
+    InterviewQuestionOutput,
     InterviewRoundAnswerSubmission,
     InterviewRoundOutput,
     NaturalLanguageFeedback,
@@ -454,19 +456,19 @@ class DiscoveryInterviewService:
             raise InvalidInterviewTransitionError(
                 "interview round is not available in this state"
             )
-        if session.current_round >= 3:
+        if session.current_round >= 2:
             raise InterviewRoundLimitReachedError(
                 "the interview has reached its round limit"
             )
         facts = self._history.list_current_facts(project_id, version_number)
-        messages = self._history.list_messages(project_id, version_number)
+        previous_questions = self._sessions.list_questions(session.id)
         next_round = session.current_round + 1
         output = self._call_structured(
             version,
-            self._round_messages(facts, messages, 3 - session.current_round),
+            self._round_messages(facts, previous_questions, 2 - session.current_round),
             InterviewRoundOutput,
         )
-        output = self._with_unique_question_keys(output, facts, next_round)
+        output = self._with_unique_question_keys(output, facts, previous_questions)
         with self._history._repository.transaction():
             timestamp = self._clock()
             if output.interview_complete:
@@ -626,7 +628,13 @@ class DiscoveryInterviewService:
                     reference_message_ids=[note_message.id],
                 )
             timestamp = self._clock()
-            final = session.current_round >= 2
+            confirmed_material_gap = any(
+                answer.answer_status is InterviewAnswerStatus.ANSWERED
+                and self._question_requires_material_follow_up(question)
+                for question in questions
+                for answer in [supplied[question.id]]
+            )
+            final = session.current_round >= 2 or not confirmed_material_gap
             session = DiscoverySession(
                 **{
                     **session.model_dump(),
@@ -834,20 +842,82 @@ class DiscoveryInterviewService:
 
     @staticmethod
     def _with_unique_question_keys(
-        output: object, facts: Sequence[FactRevision], round_number: int
+        output: object,
+        facts: Sequence[FactRevision],
+        previous_questions: Sequence[InterviewQuestion] = (),
     ) -> InterviewRoundOutput:
         if not isinstance(output, InterviewRoundOutput):
             raise DiscoveryError("provider_output_invalid")
         existing = {fact.fact_key.strip().casefold() for fact in facts}
+        existing.update(
+            question.fact_key.strip().casefold() for question in previous_questions
+        )
+        previous_texts = {
+            DiscoveryInterviewService._normalize_question_text(question.question)
+            for question in previous_questions
+        }
         assigned = set(existing)
-        questions = []
-        for position, question in enumerate(output.questions, start=1):
+        questions: list[InterviewQuestionOutput] = []
+        for question in output.questions:
             key = question.fact_key.strip().casefold()
-            if key in assigned:
-                key = f"clarification_round_{round_number}_question_{position}"
+            normalized_text = DiscoveryInterviewService._normalize_question_text(
+                question.question
+            )
+            if (
+                not key
+                or key.startswith("clarification_round_")
+                or key in assigned
+                or normalized_text in previous_texts
+                or normalized_text
+                in {
+                    DiscoveryInterviewService._normalize_question_text(item.question)
+                    for item in questions
+                }
+            ):
+                continue
             assigned.add(key)
+            previous_texts.add(normalized_text)
             questions.append(question.model_copy(update={"fact_key": key}))
-        return output.model_copy(update={"questions": questions})
+        return output.model_copy(
+            update={
+                "interview_complete": output.interview_complete or not questions,
+                "questions": questions,
+            }
+        )
+
+    @staticmethod
+    def _normalize_question_text(value: str) -> str:
+        return "".join(
+            character
+            for character in re.sub(r"\s+", "", value).casefold()
+            if character.isalnum() or "\u4e00" <= character <= "\u9fff"
+        )
+
+    @staticmethod
+    def _question_requires_material_follow_up(question: InterviewQuestion) -> bool:
+        material_terms = (
+            "ai/non-ai",
+            "hard gate",
+            "gate",
+            "deployment",
+            "scope",
+            "human-review",
+            "human review",
+            "boundary",
+            "治理",
+            "部署",
+            "範圍",
+            "人工",
+            "核准",
+            "責任",
+        )
+        text = (
+            f"{question.fact_key} {question.affected_judgement} "
+            f"{question.why_it_matters}"
+        ).casefold()
+        return bool(re.search(r"\bai\b", text)) or any(
+            term in text for term in material_terms
+        )
 
     @staticmethod
     def _brief_visible_content(brief: NormalizedInitialBrief) -> str:
@@ -935,6 +1005,28 @@ class DiscoveryInterviewService:
             {"key": f.fact_key, "value": f.value, "status": f.status.value}
             for f in facts
         ]
+        facts_by_key = {f.fact_key.strip().casefold(): f for f in facts}
+        safe_history = []
+        for item in messages:
+            if not isinstance(item, InterviewQuestion):
+                continue
+            fact = facts_by_key.get(item.fact_key.strip().casefold())
+            answer_status = fact.status.value if fact is not None else "unanswered"
+            safe_history.append(
+                {
+                    "question_id": str(item.id),
+                    "fact_key": item.fact_key,
+                    "question": item.question,
+                    "round_number": item.round_number,
+                    "answer_status": answer_status,
+                    "answer": (
+                        fact.value
+                        if fact is not None and fact.status is FactStatus.CONFIRMED
+                        else None
+                    ),
+                    "affected_judgement": item.affected_judgement,
+                }
+            )
         return [
             {
                 "role": "system",
@@ -956,7 +1048,10 @@ class DiscoveryInterviewService:
                     "facts. Ask only questions that could change the AI/non-AI direction, "
                     "a hard gate, PoC scope, deployment posture, or human-review boundary. Default to one round;"
                     " a second round is allowed only when one of those decisions remains"
-                    " materially uncertain. Accept qualitative answers and do not require"
+                    " materially uncertain after a confirmed answer. Unknown or missing"
+                    " answers close the topic for this version; never re-ask, rephrase,"
+                    " or rename its fact_key. Do not emit clarification_round_* keys."
+                    " Accept qualitative answers and do not require"
                     " precise percentages or budgets unless they change the direction. All"
                     " user-visible JSON values must be concise Traditional Chinese; do not"
                     " translate JSON keys."
@@ -965,7 +1060,11 @@ class DiscoveryInterviewService:
             {
                 "role": "user",
                 "content": json.dumps(
-                    {"facts": safe_facts, "remaining_rounds": remaining_rounds},
+                    {
+                        "facts": safe_facts,
+                        "previous_questions": safe_history,
+                        "remaining_rounds": remaining_rounds,
+                    },
                     ensure_ascii=False,
                 ),
             },

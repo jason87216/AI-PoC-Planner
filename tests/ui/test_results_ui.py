@@ -211,6 +211,30 @@ def test_results_ui_does_not_expose_internal_details_or_forbidden_layers() -> No
     assert "source_url" in source
 
 
+def test_report_generation_is_one_primary_frontend_action() -> None:
+    root = Path(__file__).parents[2]
+    discovery = (root / "app_pages/discovery.py").read_text(encoding="utf-8")
+    results = (root / "app_pages/results.py").read_text(encoding="utf-8")
+
+    assert 'st.button("生成評估報告"' in discovery
+    assert 'st.button("生成評估報告"' in results
+    assert "get_api_client().create_analysis(project_id, number)" in discovery
+    assert "get_api_client().create_report(project_id, number)" in discovery
+    assert "get_api_client().create_analysis(project_id, version_number)" in results
+    assert "get_api_client().create_report(project_id, version_number)" in results
+    assert results.index(
+        "get_api_client().create_analysis(project_id, version_number)"
+    ) < results.index("get_api_client().create_report(project_id, version_number)")
+    assert discovery.index(
+        "get_api_client().create_analysis(project_id, number)"
+    ) < discovery.index("get_api_client().create_report(project_id, number)")
+    assert 'st.button("開始方案評估"' not in results
+    assert 'st.button("查看評估結果"' not in discovery
+    assert 'st.button("繼續生成報告"' in results
+    assert 'if view["reviewed_cases"]:' in results
+    assert 'if view["case_support_summaries"]:' in results
+
+
 def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> None:
     view = report_synthesis_view(
         {
