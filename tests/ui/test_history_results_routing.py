@@ -143,3 +143,10 @@ def test_discovery_report_destinations_keep_explicit_project_query_target() -> N
 
     assert source.count("open_results(project_id, number)") == 2
     assert 'switch_page("app_pages/results.py")' not in source
+
+
+def test_results_workspace_destination_keeps_explicit_project_query_target() -> None:
+    source = Path("app_pages/results.py").read_text(encoding="utf-8")
+
+    assert "open_workspace(project_id, version_number)" in source
+    assert 'switch_page("app_pages/discovery.py")' not in source

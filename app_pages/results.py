@@ -8,6 +8,7 @@ import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
 from ai_poc_planner.ui.navigation import (
+    open_workspace,
     switch_page,
     workspace_route_key,
     workspace_target_from_query,
@@ -96,7 +97,7 @@ def _render_header(
     )
     with st.container(horizontal=True):
         if st.button("返回專案工作區", icon=":material/arrow_back:"):
-            switch_page("app_pages/discovery.py")
+            open_workspace(project_id, version_number)
         if st.button("返回專案歷史", icon=":material/history:"):
             switch_page("app_pages/history.py")
 
