@@ -33,7 +33,8 @@
 ### P8.1b-2 product-owner and release acceptance — Pending
 
 - 人工驗收發現兩項 blocking defects：舊版 SQLite schema 仍可能讓 runtime 宣稱 running，以及模型設定頁把目前設定、新增、編輯與技術欄位塞在同一個長頁面。
-- 本修正拆分模型設定首頁、新增頁與編輯頁，將 capability 技術值收進「相容性設定（技術人員）」，並保留既有 API／provider contract。
+- 本修正拆分模型設定首頁、新增頁與編輯頁，將 capability 技術值收進「相容性設定（技術人員）」；既有 API field names 與完整 payload 仍相容，但 InitialBrief requiredness 已放寬，四個補充欄位可為 null／missing，名稱與目前流程仍必填。
+- provider wire contract 與 deterministic result contract 未變。
 - 本修正讓 runtime 在 ready 前完成 SQLite initialization、migration 與 schema validation；migration 失敗時 fail closed，公開錯誤只提供可行動的本機資料庫指引。
 - 新建專案現在只要求專案名稱與目前流程與問題；其他四項 brief 欄位可留白並正規化為 missing facts，交由後續訪談補齊。
 - P8.1b-2 仍待重新人工驗收；P8.1b overall、P7.2b 與完整 P7.2 仍未完成。

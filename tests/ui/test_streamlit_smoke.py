@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -100,6 +102,34 @@ def test_new_project_marks_only_name_and_workflow_as_required() -> None:
     assert "後續訪談會協助整理期望成果與驗收方式" in source
     assert "可填寫預算、時程、" in source
     assert "個資、法規、部署環境或人工核准要求" in source
+
+
+def test_new_project_optional_guidance_is_rendered_as_visible_captions() -> None:
+    source = open("app_pages/new_project.py", encoding="utf-8").read()
+    tree = ast.parse(source)
+    visible_text: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if not isinstance(node.func.value, ast.Name) or node.func.value.id != "st":
+            continue
+        if node.func.attr not in {"caption", "markdown"} or not node.args:
+            continue
+        try:
+            value = ast.literal_eval(node.args[0])
+        except (ValueError, TypeError, SyntaxError):
+            continue
+        if isinstance(value, str):
+            visible_text.append(value)
+
+    expected = (
+        "尚未確定可先留白，後續訪談會協助整理期望成果與驗收方式。",
+        "可列出表單、規範、紀錄或系統資料；不確定可先留白。",
+        "可填寫實際使用者、審核者、流程負責人與維運角色；不確定可先留白。",
+        "不確定可先留白，後續訪談會協助補充。可填寫預算、時程、"
+        "個資、法規、部署環境或人工核准要求。",
+    )
+    assert all(text in visible_text for text in expected)
 
 
 def test_global_navigation_contains_only_project_entry_points() -> None:

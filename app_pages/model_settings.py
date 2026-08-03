@@ -31,6 +31,11 @@ st.caption(
     "管理目前使用的模型服務；新增與編輯會在獨立頁面完成。"
     "已保存的 API key 不會再次顯示。"
 )
+st.warning(
+    "API key 保存後不會再次顯示。此 MVP 目前會將 key 明文保存在本機 "
+    "private model_profiles.json；請勿在共用電腦使用，也不要在截圖、日誌或版本控制中"
+    "暴露。"
+)
 
 with st.container(horizontal=True):
     if st.button("新增模型設定", icon=":material/add:", type="primary"):

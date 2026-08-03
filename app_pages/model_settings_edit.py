@@ -71,6 +71,7 @@ with st.form("update_model_profile"):
         "新的 API key（留白則保留；清除請勾選下方選項）",
         type="password",
     )
+    st.caption("API key 不會回顯；此欄留白會保留原值。現行保存方式仍是本機明文設定檔。")
     enabled = st.checkbox("啟用此設定", value=bool(selected_profile["is_enabled"]))
 
     with st.expander("相容性設定（技術人員）"):

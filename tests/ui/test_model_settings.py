@@ -91,3 +91,19 @@ def test_create_form_has_one_preferred_mode_and_keeps_wire_values() -> None:
     assert "api_key" not in _payload(api_key="")
     assert _payload(api_key="new-key")["api_key"] == "new-key"
     assert _payload(clear_api_key=True)["api_key"] is None
+
+
+def test_model_settings_shows_plaintext_storage_limit_without_echoing_keys() -> None:
+    overview = open("app_pages/model_settings.py", encoding="utf-8").read()
+    create_page = open("app_pages/model_settings_new.py", encoding="utf-8").read()
+    edit_page = open("app_pages/model_settings_edit.py", encoding="utf-8").read()
+
+    assert "明文" in overview
+    assert "model_profiles.json" in overview
+    assert "目前會明文保存在本機私人設定檔" in create_page
+    assert "API key 不會回顯" in edit_page
+    assert "留白會保留原值" in edit_page
+    assert "本機明文設定檔" in edit_page
+    for source in (overview, create_page, edit_page):
+        assert '.get("api_key")' not in source
+        assert 'selected_profile["api_key"]' not in source

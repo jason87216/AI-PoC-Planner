@@ -52,6 +52,7 @@ with st.form("create_model_profile", clear_on_submit=True):
         type="password",
         help="請依端點文件選擇認證方式；保存後不會在 UI 顯示。",
     )
+    st.caption("目前會明文保存在本機私人設定檔。")
     is_enabled = st.checkbox("建立後啟用", value=True)
 
     with st.expander("相容性設定（技術人員）"):

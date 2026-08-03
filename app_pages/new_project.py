@@ -89,17 +89,20 @@ with st.form("new_project_form"):
         key="new_project_outcome",
         height=120,
     )
+    st.caption("尚未確定可先留白，後續訪談會協助整理期望成果與驗收方式。")
     data = st.text_area(
         "現有資料與文件（選填）",
         help="可列出表單、規範、紀錄或系統資料；不確定可先留白。",
         key="new_project_data",
         height=120,
     )
+    st.caption("可列出表單、規範、紀錄或系統資料；不確定可先留白。")
     owners = st.text_area(
         "使用者與負責人（選填）",
         help="可填寫實際使用者、審核者、流程負責人與維運角色；不確定可先留白。",
         key="new_project_owners",
     )
+    st.caption("可填寫實際使用者、審核者、流程負責人與維運角色；不確定可先留白。")
     constraints = st.text_area(
         "已知限制（選填）",
         help=(
@@ -107,6 +110,10 @@ with st.form("new_project_form"):
             "個資、法規、部署環境或人工核准要求。"
         ),
         key="new_project_constraints",
+    )
+    st.caption(
+        "不確定可先留白，後續訪談會協助補充。可填寫預算、時程、"
+        "個資、法規、部署環境或人工核准要求。"
     )
     submitted = st.form_submit_button(
         "建立專案並整理需求",

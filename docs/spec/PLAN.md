@@ -141,7 +141,7 @@ P8.1a portfolio baseline 可基於已完成的 P7.2a 代表情境證據先行整
 - 對無可用模型、連線失敗與可重試錯誤提供 fail-closed、可行動的使用者引導；
 - 明確說明 AI 協助理解與整理，正式推薦、分數與硬性限制由程式規則負責；
 - UI 顯示安全能力標籤與端點文件提示，不根據品牌或模型名稱猜測能力；
-- 未修改 API 契約、provider、deterministic logic、SQLite schema、依賴或 runtime；本輪只完成 offline validation。
+- 既有 API field names 與完整 payload 仍相容；InitialBrief 的 requiredness 已放寬，`desired_outcome`、`available_data`、`users_and_owners`、`known_constraints` 可為 `null`／missing，而 `project_name` 與 `current_workflow_problem` 仍必填。Provider wire contract、deterministic result contract、SQLite schema、依賴與 runtime 邊界未改；本輪只完成 offline validation。
 
 ### P8.1b-2 — Product-owner and release acceptance — Pending
 
