@@ -3,7 +3,7 @@
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
-from ai_poc_planner.ui.navigation import open_history, open_new_project
+from ai_poc_planner.ui.navigation import open_history, open_new_project, switch_page
 from ai_poc_planner.ui.presentation import (
     connection_label,
     show_api_error,
@@ -60,7 +60,7 @@ model_unavailable = (
 )
 if model_unavailable:
     if st.button("前往模型設定", icon=":material/tune:"):
-        st.switch_page("app_pages/model_settings.py")
+        switch_page("app_pages/model_settings.py")
 
 st.subheader("最近專案")
 if not projects:

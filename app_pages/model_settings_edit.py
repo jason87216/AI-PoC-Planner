@@ -10,6 +10,7 @@ from ai_poc_planner.ui.model_profile_form import (
     capability_label,
     profile_payload,
 )
+from ai_poc_planner.ui.navigation import switch_page
 from ai_poc_planner.ui.presentation import profile_label, show_api_error
 from ai_poc_planner.ui.runtime import get_api_client, load_profiles, refresh_api_data
 
@@ -35,7 +36,7 @@ def _capability_error(
 st.title("編輯模型設定")
 st.caption("只修改已存在的設定；已保存的 API key 不會回顯。")
 if st.button("返回模型設定", icon=":material/arrow_back:"):
-    st.switch_page("app_pages/model_settings.py")
+    switch_page("app_pages/model_settings.py")
 
 profile_id = st.query_params.get("profile_id")
 try:

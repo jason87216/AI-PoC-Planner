@@ -447,12 +447,14 @@ def build_interview_findings(
     facts: Sequence[FactRevision],
     recommendation_category: str | None = None,
 ) -> list[InterviewFinding]:
-    """Summarise persisted interview content into product-level themes."""
+    """Summarise only current, persisted confirmed facts into report findings.
 
-    answers = {str(message.id): message.content for message in messages}
-    ordered_questions = sorted(
-        questions, key=lambda item: (item.round_number, item.position)
-    )
+    Visible interview messages are presentation history, not a fact-status
+    authority.  In particular, an old answer or an ``unknown``/``missing``
+    sentinel must never become confirmed content merely because it is non-empty.
+    """
+
+    del questions, messages
     grouped_content: dict[str, list[str]] = {
         topic: [] for topic in _INTERVIEW_GROUP_ORDER
     }
@@ -465,12 +467,10 @@ def build_interview_findings(
         if content and content not in grouped_content[group]:
             grouped_content[group].append(content)
 
-    for question in ordered_questions:
-        key = question.fact_key.strip().casefold()
-        answer = answers.get(str(question.answer_message_id), "").strip()
-        if answer:
-            add_content(key, answer)
-    for fact in facts:
+    # The repository normally supplies current facts only.  Collapsing by key
+    # here also prevents a superseded revision from leaking into the report if
+    # a caller provides an audit-history sequence.
+    for fact in _fact_map(facts).values():
         key = fact.fact_key.strip().casefold()
         if fact.status is FactStatus.CONFIRMED:
             add_content(key, fact.value)
@@ -731,7 +731,7 @@ def _comparison_narrative(
             ]
         )
     unknowns = [
-        _FACT_LABELS.get(fact.fact_key, "重要資訊")
+        _FACT_LABELS.get(fact.fact_key.strip().casefold(), "重要資訊")
         for fact in facts
         if fact.status in {FactStatus.UNKNOWN, FactStatus.MISSING}
     ]
@@ -1335,6 +1335,14 @@ def _cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ").strip()
 
 
+def _is_unresolved_sentinel(value: object) -> bool:
+    return str(value).strip().casefold() in {
+        "unknown",
+        "currently unavailable",
+        "unknown / currently unavailable",
+    }
+
+
 def validate_report_quality(synthesis: ReportSynthesis, markdown: str) -> None:
     """Fail closed before persistence when reader-facing content regresses."""
 
@@ -1396,7 +1404,12 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
         "## 3. 需求與訪談發現",
         "",
     ]
-    if synthesis.interview_findings:
+    confirmed_findings = [
+        item
+        for item in synthesis.interview_findings
+        if not _is_unresolved_sentinel(item.confirmed_content)
+    ]
+    if confirmed_findings:
         lines.extend(["| 主題 | 已確認內容 | 對方案的影響 |", "|---|---|---|"])
         lines.extend(
             "| "
@@ -1405,7 +1418,7 @@ def render_synthesis_markdown(synthesis: ReportSynthesis) -> str:
                 for field in ("topic", "confirmed_content", "assessment_impact")
             )
             + " |"
-            for item in synthesis.interview_findings
+            for item in confirmed_findings
         )
     else:
         lines.append("目前沒有已確認的訪談結論。")

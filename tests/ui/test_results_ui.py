@@ -376,3 +376,30 @@ def test_report_synthesis_view_keeps_only_the_redesigned_article_fields() -> Non
     assert "hidden-case-id" not in repr(view)
     assert "safe_interview_qa" not in repr(view)
     assert "evidence_basis" not in repr(view)
+
+
+def test_report_view_filters_unresolved_sentinels() -> None:
+    view = report_synthesis_view(
+        {
+            "synthesis": {
+                "schema_version": "2.2",
+                "recommended_solution": {"display_name_zh": "方案"},
+                "interview_findings": [
+                    {
+                        "topic": "資料條件",
+                        "confirmed_content": "Currently unavailable",
+                        "assessment_impact": "待確認",
+                    },
+                    {
+                        "topic": "流程問題",
+                        "confirmed_content": "已確認的流程問題",
+                        "assessment_impact": "影響範圍",
+                    },
+                ],
+            }
+        }
+    )
+
+    assert [item["topic"] for item in view["interview_findings"]] == ["流程問題"]
+    assert "Currently unavailable" not in repr(view)
+    assert "Unknown" not in repr(view)

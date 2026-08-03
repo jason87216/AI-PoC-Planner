@@ -171,6 +171,17 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
         for value in values:
             if not isinstance(value, dict):
                 continue
+            if key == "interview_findings" and str(
+                value.get("confirmed_content", "")
+            ).strip().casefold() in {
+                "unknown",
+                "currently unavailable",
+                "unknown / currently unavailable",
+            }:
+                # Historical persisted reports may contain a visible answer
+                # sentinel. It is not a persisted FactStatus and must not be
+                # presented under the confirmed-findings heading.
+                continue
             result.append(
                 {
                     field: (

@@ -87,7 +87,15 @@ def test_home_offers_model_settings_action() -> None:
     source = open("app_pages/home.py", encoding="utf-8").read()
 
     assert 'st.button("前往模型設定"' in source
-    assert 'st.switch_page("app_pages/model_settings.py")' in source
+    assert 'switch_page("app_pages/model_settings.py")' in source
+
+
+def test_streamlit_entrypoint_wraps_page_run_with_transition_policy() -> None:
+    source = open("streamlit_app.py", encoding="utf-8").read()
+
+    assert "transition_for_page(page_key)" in source
+    assert "with st.spinner(transition_label)" in source
+    assert "finish_page_render(page_key)" in source
 
 
 def test_new_project_marks_only_name_and_workflow_as_required() -> None:

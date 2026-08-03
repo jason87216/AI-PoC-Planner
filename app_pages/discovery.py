@@ -20,6 +20,7 @@ from ai_poc_planner.ui.discovery import (
 from ai_poc_planner.ui.navigation import (
     open_history,
     open_new_project,
+    switch_page,
     workspace_route_key,
     workspace_target_from_query,
 )
@@ -121,7 +122,7 @@ def _model_binding(
         if st.button(
             "前往模型設定", key=f"model_settings_{project_id}_{version_number}"
         ):
-            st.switch_page("app_pages/model_settings.py")
+            switch_page("app_pages/model_settings.py")
         return
 
     default_index = next(
@@ -459,14 +460,14 @@ def _complete(project_id: str, number: int) -> None:
             except ApiClientError as error:
                 refresh_api_data()
                 show_api_error(error)
-                st.switch_page("app_pages/results.py")
+                switch_page("app_pages/results.py")
             else:
                 refresh_api_data()
-                st.switch_page("app_pages/results.py")
+                switch_page("app_pages/results.py")
         if st.button("返回首頁", icon=":material/home:"):
-            st.switch_page("app_pages/home.py")
+            switch_page("app_pages/home.py")
         if st.button("查看歷史", icon=":material/history:"):
-            st.switch_page("app_pages/history.py")
+            switch_page("app_pages/history.py")
 
 
 target = _target()

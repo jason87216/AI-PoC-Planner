@@ -11,6 +11,7 @@ from ai_poc_planner.ui.model_profile_form import (
     create_profile_authentication_error,
     profile_payload,
 )
+from ai_poc_planner.ui.navigation import switch_page
 from ai_poc_planner.ui.presentation import show_api_error
 from ai_poc_planner.ui.runtime import get_api_client, refresh_api_data
 
@@ -36,7 +37,7 @@ def _capability_error(
 st.title("新增模型設定")
 st.caption("先填寫端點基本資料；技術人員可在相容性設定中確認能力。")
 if st.button("返回模型設定", icon=":material/arrow_back:"):
-    st.switch_page("app_pages/model_settings.py")
+    switch_page("app_pages/model_settings.py")
 
 with st.form("create_model_profile", clear_on_submit=True):
     profile_name = st.text_input("設定名稱")

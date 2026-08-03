@@ -7,6 +7,7 @@ from typing import Any
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.navigation import switch_page
 from ai_poc_planner.ui.presentation import show_api_error, status_label
 from ai_poc_planner.ui.results import (
     analysis_overview,
@@ -84,9 +85,9 @@ def _render_header(
     )
     with st.container(horizontal=True):
         if st.button("返回專案工作區", icon=":material/arrow_back:"):
-            st.switch_page("app_pages/discovery.py")
+            switch_page("app_pages/discovery.py")
         if st.button("返回專案歷史", icon=":material/history:"):
-            st.switch_page("app_pages/history.py")
+            switch_page("app_pages/history.py")
 
 
 def _table(rows: list[dict[str, Any]], fields: tuple[tuple[str, str], ...]) -> None:
@@ -366,7 +367,7 @@ if target is None:
             "請先從專案歷史選擇一個已完成訪談的專案；重新進入只會讀取已保存結果，不會重新呼叫模型服務。"
         )
         if st.button("前往專案歷史", icon=":material/history:"):
-            st.switch_page("app_pages/history.py")
+            switch_page("app_pages/history.py")
         st.stop()
 
 project_id, version_number = target

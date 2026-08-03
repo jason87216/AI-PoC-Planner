@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
-from ai_poc_planner.ui.navigation import open_workspace
+from ai_poc_planner.ui.navigation import open_workspace, switch_page
 from ai_poc_planner.ui.presentation import profile_label, show_api_error
 from ai_poc_planner.ui.runtime import get_api_client, load_profiles, refresh_api_data
 
@@ -36,7 +36,7 @@ except ApiClientError as error:
 if not profiles:
     st.warning("尚未建立可用的模型設定。請先到「模型設定」建立並完成模型可用性測試。")
     if st.button("前往模型設定", icon=":material/tune:"):
-        st.switch_page("app_pages/model_settings.py")
+        switch_page("app_pages/model_settings.py")
     st.stop()
 
 default_profile_index = next(
