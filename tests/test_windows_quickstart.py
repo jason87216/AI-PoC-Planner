@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -185,8 +187,7 @@ def test_install_entrypoint_shows_success_and_failure_results() -> None:
 
     assert "ExecutionPolicy Bypass" in source
     assert "pause" in source.lower()
-    assert "安装完成" in source
-    assert "安装未完成" in source
+    assert "powershell.exe" in source
 
 
 def test_status_and_stop_entrypoints_pause_after_every_run() -> None:
@@ -212,3 +213,105 @@ def test_quickstart_artifacts_are_covered_by_existing_ignore_rules() -> None:
     assert ".venv/" in source
     assert "*.sqlite3" in source
     assert "logs/" in source
+
+
+def test_all_cmd_wrappers_are_crlf_and_ascii_only() -> None:
+    wrappers = sorted(PROJECT_ROOT.glob("*.cmd"))
+    assert {path.name for path in wrappers} == {
+        "\u5b89\u88c5 AI PoC Planner.cmd",
+        "\u542f\u52a8 AI PoC Planner.cmd",
+        "\u67e5\u770b\u8fd0\u884c\u72b6\u6001.cmd",
+        "\u5173\u95ed AI PoC Planner.cmd",
+        "\u6e05\u9664\u6d4b\u8bd5\u8d44\u6599.cmd",
+    }
+
+    for path in wrappers:
+        data = path.read_bytes()
+        assert b"\r\n" in data
+        assert b"\n" not in data.replace(b"\r\n", b"")
+        data.decode("ascii")
+
+
+def test_all_cmd_wrappers_have_safe_delegation_contract() -> None:
+    expected_scripts = {
+        "\u5b89\u88c5 AI PoC Planner.cmd": "setup.ps1",
+        "\u542f\u52a8 AI PoC Planner.cmd": "scripts\\start-local.ps1",
+        "\u67e5\u770b\u8fd0\u884c\u72b6\u6001.cmd": "scripts\\status-local.ps1",
+        "\u5173\u95ed AI PoC Planner.cmd": "scripts\\stop-local.ps1",
+        "\u6e05\u9664\u6d4b\u8bd5\u8d44\u6599.cmd": "scripts\\reset-uat-data.ps1",
+    }
+    runtime_markers = (
+        "uvicorn",
+        "python -m",
+        "local_runtime",
+        "venv",
+        "localhost",
+    )
+
+    for filename, delegated_script in expected_scripts.items():
+        source = (PROJECT_ROOT / filename).read_text(encoding="ascii")
+        assert "%~dp0" in source
+        assert "powershell.exe" in source
+        assert delegated_script in source
+        assert not any(marker in source.lower() for marker in runtime_markers)
+
+
+def test_cmd_wrappers_parse_with_cmd_exe_in_temporary_copy(tmp_path: Path) -> None:
+    cmd_exe = shutil.which("cmd.exe")
+    powershell_exe = shutil.which("powershell.exe")
+    if not cmd_exe or not powershell_exe:
+        pytest.skip("Windows cmd.exe and powershell.exe are required")
+
+    project_copy = tmp_path / "portfolio copy \u4e2d\u6587"
+    scripts_copy = project_copy / "scripts"
+    scripts_copy.mkdir(parents=True)
+
+    (project_copy / "setup.ps1").write_text("exit 0\r\n", encoding="ascii")
+    (scripts_copy / "start-local.ps1").write_text("exit 0\r\n", encoding="ascii")
+    (scripts_copy / "status-local.ps1").write_text("exit 7\r\n", encoding="ascii")
+    (scripts_copy / "stop-local.ps1").write_text("exit 8\r\n", encoding="ascii")
+    (scripts_copy / "reset-uat-data.ps1").write_text("exit 9\r\n", encoding="ascii")
+
+    wrappers = sorted(PROJECT_ROOT.glob("*.cmd"))
+    for wrapper in wrappers:
+        (project_copy / wrapper.name).write_bytes(wrapper.read_bytes())
+
+    expected_codes = {
+        "\u5b89\u88c5 AI PoC Planner.cmd": 0,
+        "\u542f\u52a8 AI PoC Planner.cmd": 0,
+        "\u67e5\u770b\u8fd0\u884c\u72b6\u6001.cmd": 7,
+        "\u5173\u95ed AI PoC Planner.cmd": 8,
+        "\u6e05\u9664\u6d4b\u8bd5\u8d44\u6599.cmd": 9,
+    }
+
+    for filename, expected_code in expected_codes.items():
+        result = subprocess.run(
+            [cmd_exe, "/d", "/c", "call", str(project_copy / filename)],
+            cwd=project_copy,
+            input=b"\r\n",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=20,
+            check=False,
+        )
+        assert result.returncode == expected_code, result.stdout.decode(
+            errors="replace"
+        )
+
+    (scripts_copy / "start-local.ps1").write_text("exit 11\r\n", encoding="ascii")
+    failed_start = subprocess.run(
+        [
+            cmd_exe,
+            "/d",
+            "/c",
+            "call",
+            str(project_copy / "\u542f\u52a8 AI PoC Planner.cmd"),
+        ],
+        cwd=project_copy,
+        input=b"\r\n",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=20,
+        check=False,
+    )
+    assert failed_start.returncode == 11, failed_start.stdout.decode(errors="replace")

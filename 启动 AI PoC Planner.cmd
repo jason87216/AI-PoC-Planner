@@ -4,7 +4,7 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\st
 set "exitCode=%ERRORLEVEL%"
 if not "%exitCode%"=="0" (
     echo.
-    echo 启动未完成，请查看上方提示。
+    echo Startup failed. Review the message above.
     pause
 )
 endlocal & exit /b %exitCode%
