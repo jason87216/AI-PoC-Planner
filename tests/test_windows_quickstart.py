@@ -32,6 +32,7 @@ def test_setup_installs_only_project_runtime_dependencies_into_venv() -> None:
 
 def test_cmd_entrypoints_delegate_to_existing_runtime_scripts() -> None:
     expectations = {
+        "安装 AI PoC Planner.cmd": "setup.ps1",
         "启动 AI PoC Planner.cmd": "scripts\\start-local.ps1",
         "关闭 AI PoC Planner.cmd": "scripts\\stop-local.ps1",
         "查看运行状态.cmd": "scripts\\status-local.ps1",
@@ -41,8 +42,34 @@ def test_cmd_entrypoints_delegate_to_existing_runtime_scripts() -> None:
         source = read_project_file(filename)
         assert "powershell.exe" in source
         assert delegated_script in source
-        assert "-Mode Uat" in source
+        assert "%~dp0" in source
         assert "local_runtime" not in source
+
+
+def test_install_entrypoint_shows_success_and_failure_results() -> None:
+    source = read_project_file("安装 AI PoC Planner.cmd")
+
+    assert "ExecutionPolicy Bypass" in source
+    assert "pause" in source.lower()
+    assert "安装完成" in source
+    assert "安装未完成" in source
+
+
+def test_status_and_stop_entrypoints_pause_after_every_run() -> None:
+    for filename in ("查看运行状态.cmd", "关闭 AI PoC Planner.cmd"):
+        source = read_project_file(filename)
+        assert "pause" in source.lower()
+        assert "exit /b %exitCode%" in source
+
+
+def test_start_entrypoint_pauses_only_when_start_fails() -> None:
+    source = read_project_file("启动 AI PoC Planner.cmd")
+    normalized = source.lower()
+
+    assert "pause" in normalized
+    assert "if not" in normalized
+    assert "exitcode" in normalized
+    assert "scripts\\start-local.ps1" in source
 
 
 def test_quickstart_artifacts_are_covered_by_existing_ignore_rules() -> None:
