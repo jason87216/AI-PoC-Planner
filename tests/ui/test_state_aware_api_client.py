@@ -43,13 +43,12 @@ def _client(handler: Callable[[httpx.Request], httpx.Response]) -> StateAwareApi
 def test_recovery_action_uses_only_persisted_status(
     operation: str, status: str, expected: RecoveryAction
 ) -> None:
-    assert (
-        recovery_action_for_status(RecoveryOperation(operation), status) is expected
-    )
+    assert recovery_action_for_status(RecoveryOperation(operation), status) is expected
 
 
-def test_analysis_timeout_after_commit_continues_report_without_replaying_analysis(
-) -> None:
+def test_analysis_timeout_after_commit_continues_report_without_replaying_analysis() -> (
+    None
+):
     status = "ready_for_assessment"
     requests: list[tuple[str, str]] = []
     analysis_posts = 0
@@ -78,9 +77,9 @@ def test_analysis_timeout_after_commit_continues_report_without_replaying_analys
     assert api.create_report(PROJECT_ID, 1) == {"id": "report-1"}
     assert analysis_posts == 1
     assert report_posts == 1
-    assert requests.count(
-        ("POST", f"/v1/projects/{PROJECT_ID}/versions/1/analysis")
-    ) == 1
+    assert (
+        requests.count(("POST", f"/v1/projects/{PROJECT_ID}/versions/1/analysis")) == 1
+    )
 
 
 def test_analysis_timeout_without_commit_is_retryable_and_never_calls_report() -> None:
