@@ -2,7 +2,7 @@
 
 ## Current status
 
-### P8.2a portfolio distribution quickstart — Implemented
+### P8.2a portfolio distribution quickstart — Complete
 
 - 新增 Windows portfolio quickstart：`setup.ps1` 會檢查 Python 3.12、建立或重用專案 `.venv`，並在隔離環境安裝產品 runtime dependencies。
 + 新增繁體中文根目錄安裝與啟動入口：安裝入口委託 `setup.ps1`，啟動入口委託既有 `scripts/start-local.ps1`；內部 status／stop 腳本保留給開發者使用，使用者在啟動視窗按 Ctrl+C 停止。
