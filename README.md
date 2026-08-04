@@ -124,7 +124,41 @@ P7.1 提供專案自有的 Windows 本機 runtime，使用安全埠範圍：
 
 Runtime 只負責驗證專案 `.venv`、選擇安全埠、啟動／監督 FastAPI 與 Streamlit、開啟瀏覽器及可靠停止。它不會安裝 provider、下載模型或建立雲端帳號。
 
-第一次啟動：
+## Windows portfolio quickstart（P8.2a）
+
+這是作品集用的 Windows quickstart，不是正式 consumer installer。從 GitHub 下載並解壓縮專案 ZIP 後：
+
+1. 第一次雙擊「安裝 AI PoC Planner.cmd」。
+2. 雙擊「啟動 AI PoC Planner.cmd」。
+3. 使用期間保持啟動視窗開啟。
+4. 完成後在啟動視窗按 Ctrl+C 安全停止。
+
+安裝入口會保持視窗可見，顯示成功或失敗結果後等待使用者確認；啟動入口只在啟動失敗時暫停，成功時讓瀏覽器開啟產品。若入口無法執行，也可在專案根目錄使用 PowerShell troubleshooting／進階方式：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+`setup.ps1` 會：
+
+1. 檢查可用的 Python 3.12；找不到時顯示 Python for Windows 的安裝指引，不會自動安裝系統 Python；
+2. 只在專案目錄建立 `.venv`，已存在且版本相容時直接重用，不會每次刪除或重建；
+3. 使用 `.venv` 內的 Python 執行 `pip install -e .`，只安裝產品 runtime dependencies；
+4. 安裝失敗時保留現有 `.venv`，顯示可依 pip 輸出與網路／寫入權限檢查的錯誤指引。
+
+完成後可直接雙擊根目錄入口：
+
+| 入口 | 用途 |
+| --- | --- |
+| `安裝 AI PoC Planner.cmd` | 委託 `setup.ps1` 建立／重用 `.venv` 並安裝 runtime dependencies |
+| `啟動 AI PoC Planner.cmd` | 以 UAT 模式啟動既有 FastAPI／Streamlit runtime 並開啟瀏覽器 |
+
+
+兩個入口只是委託 `setup.ps1` 或既有 `scripts/start-local.ps1`，不建立第二套 process、port 或 state 管理。啟動視窗會保持開啟，完成後可在該視窗按 Ctrl+C 安全停止。可從包含空格或非 ASCII 字元的專案路徑執行，不需要系統管理員權限，也不會寫入全域 PATH、修改系統 Python、安裝 CUDA／GPU driver／Docker、provider、模型或讀取／輸出 API key。
+
+若專案內已有但不是 Python 3.12 建立的 `.venv`，setup 會停止並要求使用者自行處理該環境，不會覆蓋它。Python 3.12 是本 quickstart 的唯一系統前置條件；模型、provider 與真實 profile 仍由使用者依產品流程明確設定。
+
+PowerShell troubleshooting／進階方式：
 
 ```powershell
 py -3.12 -m venv .venv

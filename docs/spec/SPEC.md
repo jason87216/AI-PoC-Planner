@@ -232,15 +232,14 @@ disclaimers. Portfolio context and technical limitations belong in the README.
 
 ## Installation and startup requirements
 
-Phase-seven deliverables are `安装 AI PoC Planner.bat`, `启动 AI PoC Planner.bat`,
-and `停止 AI PoC Planner.bat`.
+P8.2a portfolio quickstart provides `安裝 AI PoC Planner.cmd` and `啟動 AI PoC Planner.cmd`.
 
 - Install checks Python 3.12, creates `.venv`, installs dependencies,
   initialises local storage/data directories, creates Streamlit configuration,
   and disables first-run email collection and usage telemetry.
 - Start launches FastAPI, waits for health, launches Streamlit, opens a browser,
   and does not require two manual PowerShell windows.
-- Stop reliably terminates the two local processes.
++ The visible start window remains open; the user presses Ctrl+C to stop the existing local processes safely.
 
 ## Data model direction
 

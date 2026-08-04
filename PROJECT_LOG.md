@@ -2,6 +2,13 @@
 
 ## Current status
 
+### P8.2a portfolio distribution quickstart — Complete
+
+- 新增 Windows portfolio quickstart：`setup.ps1` 會檢查 Python 3.12、建立或重用專案 `.venv`，並在隔離環境安裝產品 runtime dependencies。
++ 新增繁體中文根目錄安裝與啟動入口：安裝入口委託 `setup.ps1`，啟動入口委託既有 `scripts/start-local.ps1`；內部 status／stop 腳本保留給開發者使用，使用者在啟動視窗按 Ctrl+C 停止。
+- setup 可重複執行；不自動安裝系統 Python、不改全域 PATH、不要求管理員權限、不安裝 provider／模型／CUDA／GPU driver／Docker，也不讀取或輸出 API key。
+- 這是作品集 quickstart，不是 PyInstaller、嵌入式 Python、MSI／Inno Setup／NSIS、正式 consumer installer、uninstall 或 GitHub Release packaging。
+
 ### P7.2a closeout — passed
 
 - Final dual-endpoint `governed_access` UAT was executed exactly once, without retry, in the cost-safe order `llama_cpp → remote NVIDIA endpoint`.
