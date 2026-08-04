@@ -62,7 +62,15 @@
 - A small number of non-fatal browser network-console warnings were observed during single-tab UAT; no user-visible failure or data-integrity issue resulted.
 - Previously recorded P2 audit items remain follow-up work and are not part of PR #29.
 
-P8.1b-2 and P8.1b overall are complete after the single-tab real-provider acceptance. P7.2b remains Pending and the overall P7.2 initiative remains incomplete.
+The earlier single-tab real-provider acceptance record remains preserved above; the current owner acceptance follow-up reopens P8.1b-2 and P8.1b overall. P7.2b remains Pending and the overall P7.2 initiative remains incomplete.
+
+### P8.1b-2 owner acceptance follow-up — Pending
+
+- Single-tab product UAT: Failed — project history actions incomplete.
+- The history page routes completed projects directly to persisted Results, but copy-as-new remains reachable only from Discovery/workspace; completed projects therefore have no convenient copy entry, and history cards still lack explicit edit/continue and delete actions.
+- The required history action split is now: unfinished projects expose 繼續修改、複製為新專案、刪除專案；completed projects expose 查看報告、複製並修改、刪除專案. Completed versions remain immutable; changes must use copy/new-version flows.
+- Audit found no project-delete API, application service, or repository method. SQLite has no aggregate delete path: completed-version, analysis, and report delete triggers reject deletion, and dependent tables are not consistently `ON DELETE CASCADE`. Safe deletion therefore requires an explicit schema/immutability design change and is not implemented as a partial UI-only workaround.
+- P8.1b-2 is Pending; P8.1b overall is Pending; P7.2b remains Pending; P7.2 overall remains incomplete.
 
 ### Historical diagnosis
 

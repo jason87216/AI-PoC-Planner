@@ -28,7 +28,7 @@ AI PoC Planner 已完成從 real-provider foundation、durable project history�
 | Phase 6 | Complete | FastAPI／Streamlit 產品流程、history re-entry、Results 與 download |
 | P7.1 | Complete | 本機啟動／狀態／停止與 UAT runtime |
 | P7.2 | In progress | P7.2a Complete；P7.2b Pending；overall incomplete |
-| Phase 8 | Complete | P8.1a Complete；P8.1b-1 Complete；P8.1b-2 Complete |
+| Phase 8 | In progress | P8.1a Complete；P8.1b-1 Complete；P8.1b-2 Pending |
 
 ## Phase 7 — Local runtime and provider compatibility
 
@@ -153,7 +153,15 @@ P8.1a portfolio baseline 可基於已完成的 P7.2a 代表情境證據先行整
 - 後續人工 UAT 又揭露跨輪訪談 widget state leakage 與 assessment validation 未包裝成 generic `internal_error`；修正以 project/version/round/question-scoped keys、互斥回答狀態與 fail-closed `analysis_result_invalid` 邊界處理，維持 provider 與正式 deterministic 結果契約不變。
 - 最終獨立審查確認 Streamlit form callbacks 不合規；訪談表單改用單一互斥 radio 與 scoped text area，並以實際 AppTest render 驗證 round/project state isolation。Analysis failure integration test 也覆蓋 no-partial-persistence 與有效 fake output retry；此項修正已納入完成的 P8.1b-2 驗收基線。
 
-P8.1b overall is Complete after the single-tab real-provider acceptance. P7.2b remains Pending and the overall P7.2 initiative remains incomplete.
+The earlier single-tab real-provider acceptance record remains preserved; the current owner acceptance follow-up reopens P8.1b-2 and P8.1b overall. P7.2b remains Pending and the overall P7.2 initiative remains incomplete.
+
+#### Owner acceptance follow-up — Pending
+
+- Single-tab product UAT: Failed — project history actions incomplete.
+- Completed projects now route correctly to Results, but copy-as-new is only exposed in Discovery/workspace and history cards lack explicit continue/edit and delete actions.
+- The intended action split is unfinished: 繼續修改、複製為新專案、刪除專案；completed: 查看報告、複製並修改、刪除專案. Completed versions remain immutable.
+- Audit found no project-delete API/service/repository support. Existing SQLite delete triggers protect completed versions, analysis, and reports, while dependent tables lack a complete aggregate cascade; safe deletion requires an explicit schema/immutability design change, so no partial delete implementation is attempted.
+- P8.1b-2 and P8.1b overall are Pending until this owner acceptance follow-up is complete.
 
 Renewed manual UAT follow-up is complete: prevent repeated unknown/missing interview questions while allowing initial unasked gaps once, preserve append-only fact revisions with visible answer references, require a deterministic first-round material-gap policy, and keep confirmation-to-interview failures retryable from persisted `READY_FOR_INTERVIEW`. The prior one-click analysis-to-report flow, solution-scoped references, and empty reviewed-case guidance remain in force. Nullable new-project copy state is normalized before rendering, successful submits clear UI-only state while failed submits preserve it, and UAT uses public Streamlit `showErrorDetails=none`／`showErrorLinks=false` flags while development keeps full details in local logs. The latest bounded follow-up additionally classifies semantically equivalent interview topics deterministically, closes unknown/missing topics without re-asking, and shows status progress for create-project and feedback actions. No provider, deterministic assessment, scoring, hard-gate, or SQLite schema behavior changes are included. Single-tab real-provider acceptance passed; timeout recovery was not exercised because no natural timeout occurred.
 

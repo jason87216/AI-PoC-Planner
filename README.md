@@ -22,7 +22,7 @@ AI PoC Planner 是一個本機優先、連接真實 OpenAI-compatible provider �
 - **P7.2b Full golden-scenario compatibility matrix：Pending**
 - **P7.2 overall：Incomplete**；四個 golden scenarios 的完整雙端點矩陣尚未宣告完成。
 - **P8.1a Portfolio baseline：Complete**
-- **P8.1b Product-owner and release acceptance：Complete**
+- **P8.1b Product-owner and release acceptance：Pending**
 
 P7.2a 的完成只代表 `governed_access` 代表情境通過雙端點驗證，不代表所有情境或所有模型／runtime 都已認證。
 

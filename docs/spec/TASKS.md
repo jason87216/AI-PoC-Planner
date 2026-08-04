@@ -198,7 +198,15 @@ Acceptance checkpoint：
 - Independent review additionally found illegal callbacks on widgets inside the Streamlit form. The follow-up uses one mutually exclusive answer-status radio plus a scoped text area, with no input-widget callbacks; AppTest covers real rendering and round/project isolation. A temporary-SQLite API test covers safe failure, no partial analysis, preserved interview data, and successful retry after valid fake output.
 - Single-tab real-provider UAT passed project creation, copy-as-new, requirements feedback, interview duplicate-topic protection, analysis/report generation, persisted report refresh, and history reopen/refresh. Timeout recovery was not exercised because no natural timeout occurred; this is non-blocking.
 
-P8.1b overall is Complete after the single-tab real-provider acceptance. P7.2b remains Pending and the overall P7.2 initiative remains incomplete。
+The earlier single-tab real-provider acceptance record remains preserved；the current owner acceptance follow-up reopens P8.1b-2 and P8.1b overall。P7.2b remains Pending and the overall P7.2 initiative remains incomplete。
+
+#### Owner acceptance follow-up — Pending
+
+- Single-tab product UAT: Failed — project history actions incomplete。
+- Completed projects route to Results, but copy-as-new is only available in Discovery/workspace; history cards lack explicit continue/edit and delete actions。
+- Required actions: unfinished projects show 繼續修改、複製為新專案、刪除專案；completed projects show 查看報告、複製並修改、刪除專案。 Completed versions remain immutable。
+- Audit found no project-delete API/service/repository method. Completed-version, analysis, and report delete triggers plus non-cascading dependencies mean safe aggregate deletion requires a schema/immutability design change; no partial UI-only delete is implemented。
+- P8.1b-2 and P8.1b overall are Pending until the owner acceptance follow-up passes；P7.2b remains Pending and P7.2 overall remains incomplete。
 
 ### Renewed manual UAT follow-up — Complete
 
