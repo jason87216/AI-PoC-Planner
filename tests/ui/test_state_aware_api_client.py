@@ -46,9 +46,7 @@ def test_recovery_action_uses_only_persisted_status(
     assert recovery_action_for_status(RecoveryOperation(operation), status) is expected
 
 
-def test_analysis_timeout_after_commit_continues_report_without_replaying_analysis() -> (
-    None
-):
+def test_analysis_timeout_after_commit_does_not_replay_analysis() -> None:
     status = "ready_for_assessment"
     requests: list[tuple[str, str]] = []
     analysis_posts = 0
