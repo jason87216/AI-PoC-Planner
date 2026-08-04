@@ -198,15 +198,15 @@ Acceptance checkpoint：
 - Independent review additionally found illegal callbacks on widgets inside the Streamlit form. The follow-up uses one mutually exclusive answer-status radio plus a scoped text area, with no input-widget callbacks; AppTest covers real rendering and round/project isolation. A temporary-SQLite API test covers safe failure, no partial analysis, preserved interview data, and successful retry after valid fake output.
 - Single-tab real-provider UAT passed project creation, copy-as-new, requirements feedback, interview duplicate-topic protection, analysis/report generation, persisted report refresh, and history reopen/refresh. Timeout recovery was not exercised because no natural timeout occurred; this is non-blocking.
 
-The earlier single-tab real-provider acceptance record remains preserved；the current owner acceptance follow-up reopens P8.1b-2 and P8.1b overall。P7.2b remains Pending and the overall P7.2 initiative remains incomplete。
+The earlier single-tab real-provider acceptance record remains preserved；the later archive-backed history owner acceptance closed P8.1b-2 and P8.1b overall。P7.2b remains Pending and the overall P7.2 initiative remains incomplete。
 
-#### Owner acceptance follow-up — Pending
+#### Owner acceptance follow-up — Complete
 
 - Single-tab product UAT: Failed — project history actions incomplete。
 - Completed projects route to Results, but copy-as-new is only available in Discovery/workspace; history cards lack explicit continue/edit and delete actions。
 - Required actions: unfinished projects show 繼續修改、複製為新專案、刪除專案；completed projects show 查看報告、複製並修改、刪除專案。 Completed versions remain immutable。
 - Audit found no project-delete API/service/repository method. Completed-version, analysis, and report delete triggers plus non-cascading dependencies mean safe aggregate deletion requires a schema/immutability design change; no partial UI-only delete is implemented。
-- P8.1b-2 and P8.1b overall are Pending until the owner acceptance follow-up passes；P7.2b remains Pending and P7.2 overall remains incomplete。
+- Archive-backed history owner acceptance passed；P8.1b-2 and P8.1b overall are Complete。The stricter questioning behavior remains a non-blocking P2 follow-up；P7.2b remains Pending and P7.2 overall remains incomplete。
 
 ### Renewed manual UAT follow-up — Complete
 
@@ -238,10 +238,12 @@ The earlier single-tab real-provider acceptance record remains preserved；the c
 - Production-grade credential encryption.
 - PDF／DOCX export.
 
-### Archive-backed project history actions — Pending owner UAT
+### Archive-backed project history actions — Complete
 
 - [x] 將 planning schema 由 v8 additive upgrade 至 v9，新增 nullable `archived_at`。
 - [x] active-project repository guard、service archive boundary 與 `DELETE /v1/projects/{project_id}`。
 - [x] History 主操作、confirmed-only copy、二次確認刪除與 stale URL 安全提示。
 - [x] Offline schema／repository／API／Streamlit regression tests。
-- [ ] 進行新的 owner UAT；在通過前不標記 P8.1b-2 或 P8.1b overall 完成。
+- [x] 完成 archive-backed history owner UAT：繼續／查看、confirmed-only 複製、二次確認刪除、schema v9 與 stale URL fail-closed 行為均通過。
+- 追問策略可能偏嚴格，列為 P2 非阻擋 follow-up，不在 PR #29 繼續修改。
+- P8.1b-2：Complete；P8.1b overall：Complete；P7.2b：Pending；P7.2 overall：Incomplete。
