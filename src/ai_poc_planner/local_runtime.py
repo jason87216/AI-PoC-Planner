@@ -168,6 +168,28 @@ def _terminate(process: subprocess.Popen[object], timeout: float = 8) -> None:
         process.wait(timeout=timeout)
 
 
+def streamlit_command(python: Path, ui_port: int, mode: Mode) -> list[str]:
+    """Build the public Streamlit CLI command for the selected runtime mode."""
+
+    error_details = "none" if mode == "uat" else "full"
+    error_links = "false" if mode == "uat" else "true"
+    return [
+        str(python),
+        "-m",
+        "streamlit",
+        "run",
+        "streamlit_app.py",
+        "--server.address",
+        "127.0.0.1",
+        "--server.port",
+        str(ui_port),
+        "--browser.gatherUsageStats",
+        "false",
+        f"--client.showErrorDetails={error_details}",
+        f"--client.showErrorLinks={error_links}",
+    ]
+
+
 def start(mode: Mode) -> int:
     root = data_root(mode)
     clear_stale_state(root)
@@ -209,23 +231,15 @@ def start(mode: Mode) -> int:
     )
     try:
         if not _wait_for_identity(api_port, instance_id):
+            if api.poll() is not None:
+                raise RuntimeError(
+                    "FastAPI 啟動失敗：本機資料庫無法初始化或升級；請查看本機啟動日誌。"
+                )
             raise RuntimeError("FastAPI 未通过本次启动的身份验证")
         print("FastAPI 已通過身份驗證。正在啟動 Streamlit…")
         api_url = f"http://127.0.0.1:{api_port}"
         ui = subprocess.Popen(
-            [
-                str(python),
-                "-m",
-                "streamlit",
-                "run",
-                "streamlit_app.py",
-                "--server.address",
-                "127.0.0.1",
-                "--server.port",
-                str(ui_port),
-                "--browser.gatherUsageStats",
-                "false",
-            ],
+            streamlit_command(python, ui_port, mode),
             cwd=Path(__file__).resolve().parents[2],
             stdout=ui_log,
             stderr=subprocess.STDOUT,

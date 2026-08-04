@@ -28,7 +28,7 @@ AI PoC Planner 已完成從 real-provider foundation、durable project history�
 | Phase 6 | Complete | FastAPI／Streamlit 產品流程、history re-entry、Results 與 download |
 | P7.1 | Complete | 本機啟動／狀態／停止與 UAT runtime |
 | P7.2 | In progress | P7.2a Complete；P7.2b Pending；overall incomplete |
-| Phase 8 | In progress | P8.1a Complete；P8.1b-1 Complete；P8.1b-2 release acceptance Pending |
+| Phase 8 | In progress | P8.1a Complete；P8.1b-1 Complete；P8.1b-2 Complete；P8.1b overall Complete |
 
 ## Phase 7 — Local runtime and provider compatibility
 
@@ -141,15 +141,35 @@ P8.1a portfolio baseline 可基於已完成的 P7.2a 代表情境證據先行整
 - 對無可用模型、連線失敗與可重試錯誤提供 fail-closed、可行動的使用者引導；
 - 明確說明 AI 協助理解與整理，正式推薦、分數與硬性限制由程式規則負責；
 - UI 顯示安全能力標籤與端點文件提示，不根據品牌或模型名稱猜測能力；
-- 未修改 API 契約、provider、deterministic logic、SQLite schema、依賴或 runtime；本輪只完成 offline validation。
+- 既有 API field names 與完整 payload 仍相容；InitialBrief 的 requiredness 已放寬，`desired_outcome`、`available_data`、`users_and_owners`、`known_constraints` 可為 `null`／missing，而 `project_name` 與 `current_workflow_problem` 仍必填。Provider wire contract、deterministic result contract、SQLite schema、依賴與 runtime 邊界未改；本輪只完成 offline validation。
 
-### P8.1b-2 — Product-owner and release acceptance — Pending
+### P8.1b-2 — Product-owner and release acceptance — Complete
 
 - 審查繁體中文文案與 business usefulness；
 - 驗證 blocked-no-provider、Discovery、Assessment、Results、history re-entry 與 download；
 - 完成 release-readiness acceptance，再決定是否啟動 P7.2b。
+- 人工驗收已揭露 runtime database preflight 與 model settings information architecture blocking defects；本修正以 bounded application/UI changes 修復，並重新建立乾淨 UAT schema v8。
+- 本修正不改變 provider、deterministic assessment、scoring、hard gates 或正式結果邏輯；單分頁真實模型人工驗收已完成。
+- 後續人工 UAT 又揭露跨輪訪談 widget state leakage 與 assessment validation 未包裝成 generic `internal_error`；修正以 project/version/round/question-scoped keys、互斥回答狀態與 fail-closed `analysis_result_invalid` 邊界處理，維持 provider 與正式 deterministic 結果契約不變。
+- 最終獨立審查確認 Streamlit form callbacks 不合規；訪談表單改用單一互斥 radio 與 scoped text area，並以實際 AppTest render 驗證 round/project state isolation。Analysis failure integration test 也覆蓋 no-partial-persistence 與有效 fake output retry；此項修正已納入完成的 P8.1b-2 驗收基線。
 
-P8.1b overall remains Pending until P8.1b-2 acceptance is complete.
+The earlier single-tab real-provider acceptance record remains preserved. The later archive-backed history owner acceptance closed P8.1b-2 and P8.1b overall; P7.2b remains Pending and the overall P7.2 initiative remains incomplete.
+
+#### Owner acceptance follow-up — Complete
+
+- Single-tab product UAT: Failed — project history actions incomplete.
+- Completed projects now route correctly to Results, but copy-as-new is only exposed in Discovery/workspace and history cards lack explicit continue/edit and delete actions.
+- The intended action split is unfinished: 繼續修改、複製為新專案、刪除專案；completed: 查看報告、複製並修改、刪除專案. Completed versions remain immutable.
+- Audit found no project-delete API/service/repository support. Existing SQLite delete triggers protect completed versions, analysis, and reports, while dependent tables lack a complete aggregate cascade; safe deletion requires an explicit schema/immutability design change, so no partial delete implementation is attempted.
+- Archive-backed history owner acceptance passed; P8.1b-2 and P8.1b overall are Complete. The stricter questioning behavior is retained as a non-blocking P2 follow-up, and P7.2b remains Pending.
+
+Renewed manual UAT follow-up is complete: prevent repeated unknown/missing interview questions while allowing initial unasked gaps once, preserve append-only fact revisions with visible answer references, require a deterministic first-round material-gap policy, and keep confirmation-to-interview failures retryable from persisted `READY_FOR_INTERVIEW`. The prior one-click analysis-to-report flow, solution-scoped references, and empty reviewed-case guidance remain in force. Nullable new-project copy state is normalized before rendering, successful submits clear UI-only state while failed submits preserve it, and UAT uses public Streamlit `showErrorDetails=none`／`showErrorLinks=false` flags while development keeps full details in local logs. The latest bounded follow-up additionally classifies semantically equivalent interview topics deterministically, closes unknown/missing topics without re-asking, and shows status progress for create-project and feedback actions. No provider, deterministic assessment, scoring, hard-gate, or SQLite schema behavior changes are included. Single-tab real-provider acceptance passed; timeout recovery was not exercised because no natural timeout occurred.
+
+#### Non-blocking release follow-up backlog
+
+- Full tracked-repository Ruff format checking differs from the CI-scoped check for three pre-existing files; leave them unchanged in this PR.
+- A small number of non-fatal browser network-console warnings remain for follow-up.
+- Previously recorded P2 audit items remain follow-up work.
 
 ## Testing policy
 
@@ -175,3 +195,12 @@ P7.2 只有在以下條件全部成立時才完成：
 - reload、history、download 不重新呼叫 provider；
 - errors 安全且可行動；
 - 產品與技術 checkpoint 均通過。
+
+### P8.1b-2 archive-backed history follow-up — Complete
+
+- 使用 `planning_projects.archived_at` 實作不暴露封存術語的資料層隱藏；普通歷史與 project-scoped API 只讀取 active aggregate。
+- 歷史頁提供繼續修改、查看報告、confirmed-only 複製與二次確認刪除；完成版本不可原地修改。
+- v8→v9 migration 保留所有 evidence 與 immutable triggers；不提供 archive UI、restore 或永久刪除。
+- Archive-backed history owner UAT 已通過：繼續／查看、confirmed-only 複製、二次確認刪除、schema v9 與 stale URL fail-closed 行為均完成驗收。
+- 追問策略可能偏嚴格，列為 P2 非阻擋 follow-up，不在 PR #29 繼續修改。
+- P8.1b-2 與 P8.1b overall 已 Complete；P7.2b 仍 Pending；P7.2 overall 仍 Incomplete。

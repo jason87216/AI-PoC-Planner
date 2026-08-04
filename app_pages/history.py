@@ -3,9 +3,19 @@
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
-from ai_poc_planner.ui.navigation import open_workspace
+from ai_poc_planner.ui.navigation import (
+    open_new_project,
+    open_results,
+    open_workspace,
+)
 from ai_poc_planner.ui.presentation import show_api_error, status_label
-from ai_poc_planner.ui.runtime import load_projects, refresh_api_data
+from ai_poc_planner.ui.project_copy import build_project_copy_prefill
+from ai_poc_planner.ui.runtime import (
+    get_api_client,
+    load_current_facts,
+    load_projects,
+    refresh_api_data,
+)
 
 st.title("專案歷史")
 st.caption(
@@ -17,17 +27,55 @@ def _selection_label(project: dict[str, object]) -> str:
     return f"{project.get('project_name')} · 第 {project.get('version_number')} 版"
 
 
-def _action_label(status: object) -> str:
+def _primary_action(status: object) -> tuple[str, str]:
     return {
-        "draft": "繼續處理",
-        "interviewing": "繼續處理",
-        "clarification_required": "繼續處理",
-        "ready_for_assessment": "繼續評估",
-        "assessed": "查看專案",
-        "proposal_generated": "查看專案",
-        "complete": "查看專案",
-        "failed": "查看問題",
-    }.get(str(status), "查看專案")
+        "assessed": ("繼續生成報告", "results"),
+        "proposal_generated": ("查看報告", "results"),
+        "complete": ("查看報告", "results"),
+    }.get(str(status), ("繼續修改", "workspace"))
+
+
+def _copy_project(project: dict[str, object]) -> None:
+    project_id = str(project.get("project_id"))
+    version_number = int(project.get("version_number"))
+    try:
+        facts = load_current_facts(project_id, version_number)
+    except ApiClientError as error:
+        show_api_error(error)
+        return
+    st.session_state["new_project_prefill"] = build_project_copy_prefill(
+        str(project.get("project_name") or "未命名專案"), facts
+    )
+    open_new_project()
+
+
+def _delete_project(project: dict[str, object]) -> None:
+    project_id = str(project.get("project_id"))
+    project_name = str(project.get("project_name") or "未命名專案")
+    delete_key = f"confirm_delete_{project_id}"
+    with st.expander("刪除專案", expanded=False):
+        st.warning("刪除後，這個專案將不再顯示於專案歷史，也無法從目前介面重新開啟。")
+        confirmed = st.checkbox(f"我確認要刪除「{project_name}」", key=delete_key)
+        if st.button(
+            "確認刪除專案",
+            key=f"delete_project_{project_id}",
+            type="secondary",
+            disabled=not confirmed,
+        ):
+            try:
+                get_api_client().delete_project(project_id)
+            except ApiClientError as error:
+                show_api_error(error)
+            else:
+                selected = st.session_state.get("selected_project")
+                if (
+                    isinstance(selected, dict)
+                    and selected.get("project_id") == project_id
+                ):
+                    st.session_state.pop("selected_project", None)
+                st.session_state.pop(delete_key, None)
+                refresh_api_data()
+                st.rerun()
 
 
 if st.button("重新整理歷史", icon=":material/refresh:"):
@@ -55,15 +103,28 @@ else:
                 f"{status_label(project.get('status'))}｜最近更新：{project.get('updated_at')}"
             )
             st.write("可回看需求、訪談與評估進度；查看結果不會重新呼叫模型服務。")
+            status = str(project.get("status"))
+            action_label, destination = _primary_action(status)
             if st.button(
-                _action_label(project.get("status")),
+                action_label,
                 key=f"open_project_{project.get('project_id')}",
                 icon=":material/folder_open:",
             ):
-                st.session_state["selected_project"] = {
-                    "project_id": project.get("project_id"),
-                    "version_number": project.get("version_number"),
-                }
-                open_workspace(
-                    str(project.get("project_id")), int(project.get("version_number"))
-                )
+                project_id = str(project.get("project_id"))
+                version_number = int(project.get("version_number"))
+                if destination == "results":
+                    open_results(project_id, version_number)
+                else:
+                    open_workspace(project_id, version_number)
+            copy_label = (
+                "複製並修改"
+                if status in {"complete", "proposal_generated"}
+                else "複製為新專案"
+            )
+            if st.button(
+                copy_label,
+                key=f"copy_project_{project.get('project_id')}",
+                icon=":material/content_copy:",
+            ):
+                _copy_project(project)
+            _delete_project(project)

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
@@ -20,6 +21,7 @@ from ai_poc_planner.domain.discovery import (
     InitialBrief,
     InterviewAnswerStatus,
     InterviewQuestion,
+    InterviewQuestionOutput,
     InterviewRoundAnswerSubmission,
     InterviewRoundOutput,
     NaturalLanguageFeedback,
@@ -39,7 +41,6 @@ from ai_poc_planner.domain.project_history import FactRevision, ProjectVersion
 from ai_poc_planner.persistence.discovery import SQLiteDiscoveryRepository
 from ai_poc_planner.persistence.errors import (
     CurrentVersionRequiredError,
-    FactConflictError,
     FactCorrectionRequiredError,
     InterviewAnswersIncompleteError,
     InterviewQuestionAlreadyAnsweredError,
@@ -74,13 +75,138 @@ class InterviewCompletionAdapter(Protocol):
     def complete(self, **kwargs: object) -> str: ...
 
 
+_CANONICAL_INTERVIEW_TOPICS = frozenset(
+    {
+        "desired_outcome",
+        "available_data",
+        "users_and_owners",
+        "known_constraints",
+        "first_phase_scope",
+        "success_measure",
+        "human_decision_boundary",
+        "deployment_boundary",
+    }
+)
+
+
+_TOPIC_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "success_measure",
+        (
+            "量測",
+            "衡量",
+            "指標",
+            "kpi",
+            "metric",
+            "measure",
+            "metrics",
+            "驗收方式",
+            "如何量化",
+        ),
+    ),
+    (
+        "desired_outcome",
+        (
+            "成果",
+            "目標",
+            "改善",
+            "達成",
+            "outcome",
+            "goal",
+            "objective",
+            "improve",
+            "成功",
+            "success",
+            "succeed",
+        ),
+    ),
+    (
+        "first_phase_scope",
+        (
+            "第一階段",
+            "第一期",
+            "poc範圍",
+            "試點範圍",
+            "pilot scope",
+            "first phase",
+            "phase 1",
+        ),
+    ),
+    (
+        "human_decision_boundary",
+        (
+            "人工核准",
+            "人工決策",
+            "誰核准",
+            "最終決定",
+            "human decision",
+            "human review",
+            "approval",
+            "approver",
+        ),
+    ),
+    (
+        "deployment_boundary",
+        (
+            "部署",
+            "上線",
+            "執行環境",
+            "部署姿態",
+            "deployment",
+            "runtime",
+            "processing boundary",
+            "private endpoint",
+        ),
+    ),
+    (
+        "available_data",
+        (
+            "資料來源",
+            "資料格式",
+            "資料結構",
+            "資料可用",
+            "dataset",
+            "data source",
+            "data availability",
+        ),
+    ),
+    (
+        "users_and_owners",
+        (
+            "使用者",
+            "負責人",
+            "角色",
+            "維運",
+            "owner",
+            "responsib",
+            "who uses",
+        ),
+    ),
+    (
+        "known_constraints",
+        (
+            "限制",
+            "約束",
+            "預算",
+            "時程",
+            "法規",
+            "合規",
+            "constraint",
+            "resource limit",
+        ),
+    ),
+)
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def normalize_available_data(value: str) -> AvailableDataStatus:
+def normalize_available_data(value: str | None) -> AvailableDataStatus:
     """Recognize only exact intentional unknown/missing tokens."""
 
+    if value is None:
+        return AvailableDataStatus.MISSING
     normalized = value.strip().casefold()
     if normalized in {"不知道", "不清楚", "unknown", "don't know", "do not know"}:
         return AvailableDataStatus.UNKNOWN
@@ -146,13 +272,22 @@ class DiscoveryInterviewService:
                 value=brief.current_workflow_problem,
                 reference_message_ids=[message.id],
             )
-            self._history.record_user_confirmed_fact(
-                project.id,
-                version.version_number,
-                fact_key="desired_outcome",
-                value=brief.desired_outcome,
-                reference_message_ids=[message.id],
-            )
+            if brief.desired_outcome is not None:
+                self._history.record_user_confirmed_fact(
+                    project.id,
+                    version.version_number,
+                    fact_key="desired_outcome",
+                    value=brief.desired_outcome,
+                    reference_message_ids=[message.id],
+                )
+            else:
+                self._history.record_unknown_or_missing(
+                    project.id,
+                    version.version_number,
+                    fact_key="desired_outcome",
+                    status=FactStatus.MISSING,
+                    reference_message_ids=[message.id],
+                )
             if available_status is AvailableDataStatus.KNOWN:
                 self._history.record_user_confirmed_fact(
                     project.id,
@@ -183,6 +318,14 @@ class DiscoveryInterviewService:
                         version.version_number,
                         fact_key=key,
                         value=value,
+                        reference_message_ids=[message.id],
+                    )
+                else:
+                    self._history.record_unknown_or_missing(
+                        project.id,
+                        version.version_number,
+                        fact_key=key,
+                        status=FactStatus.MISSING,
                         reference_message_ids=[message.id],
                     )
             timestamp = self._clock()
@@ -435,19 +578,56 @@ class DiscoveryInterviewService:
             raise InvalidInterviewTransitionError(
                 "interview round is not available in this state"
             )
-        if session.current_round >= 3:
+        if session.current_round >= 2:
             raise InterviewRoundLimitReachedError(
                 "the interview has reached its round limit"
             )
         facts = self._history.list_current_facts(project_id, version_number)
-        messages = self._history.list_messages(project_id, version_number)
+        previous_questions = self._sessions.list_questions(session.id)
         next_round = session.current_round + 1
+        require_material_questions = (
+            next_round == 1
+            and self._has_unresolved_material_topics(facts, previous_questions)
+        )
         output = self._call_structured(
             version,
-            self._round_messages(facts, messages, 3 - session.current_round),
+            self._round_messages(
+                facts,
+                previous_questions,
+                2 - session.current_round,
+                require_material_questions=require_material_questions,
+            ),
             InterviewRoundOutput,
         )
-        output = self._with_unique_question_keys(output, facts, next_round)
+        raw_question_count = len(output.questions)
+        output = self._with_unique_question_keys(output, facts, previous_questions)
+        if (
+            require_material_questions
+            and output.questions
+            and not self._covers_material_topic(output, facts, previous_questions)
+        ):
+            repaired_output = self._call_structured(
+                version,
+                self._round_messages(
+                    facts,
+                    previous_questions,
+                    2 - session.current_round,
+                    require_material_questions=True,
+                ),
+                InterviewRoundOutput,
+            )
+            repaired_question_count = len(repaired_output.questions)
+            output = self._with_unique_question_keys(
+                repaired_output, facts, previous_questions
+            )
+            if output.questions and not self._covers_material_topic(
+                output, facts, previous_questions
+            ):
+                raise DiscoveryError("interview_questions_unavailable")
+            if repaired_question_count == 0:
+                raise DiscoveryError("interview_questions_unavailable")
+        elif require_material_questions and raw_question_count == 0:
+            raise DiscoveryError("interview_questions_unavailable")
         with self._history._repository.transaction():
             timestamp = self._clock()
             if output.interview_complete:
@@ -607,7 +787,13 @@ class DiscoveryInterviewService:
                     reference_message_ids=[note_message.id],
                 )
             timestamp = self._clock()
-            final = session.current_round >= 2
+            confirmed_material_gap = any(
+                answer.answer_status is InterviewAnswerStatus.ANSWERED
+                and self._question_requires_material_follow_up(question)
+                for question in questions
+                for answer in [supplied[question.id]]
+            )
+            final = session.current_round >= 2 or not confirmed_material_gap
             session = DiscoverySession(
                 **{
                     **session.model_dump(),
@@ -665,13 +851,19 @@ class DiscoveryInterviewService:
             )
         )
         if existing is not None:
-            if existing.value == value and existing.status is status:
-                return
             if existing.status is FactStatus.CONFIRMED:
                 raise FactCorrectionRequiredError(
                     "confirmed facts require an explicit correction"
                 )
-            raise FactConflictError("a current fact already uses this key")
+            self._history.resolve_open_fact_from_interview(
+                project_id,
+                version_number,
+                existing.id,
+                status=status,
+                value=value,
+                reference_message_ids=[message_id],
+            )
+            return
         if status is FactStatus.CONFIRMED:
             self._history.record_user_confirmed_fact(
                 project_id,
@@ -813,22 +1005,245 @@ class DiscoveryInterviewService:
             if assumption.fact_key.strip().casefold() not in existing
         ]
 
+    @classmethod
+    def canonical_question_topic(
+        cls,
+        fact_key: str,
+        question: str,
+        why_it_matters: str,
+        affected_judgement: str,
+    ) -> str | None:
+        """Map an interview question to a bounded semantic topic when reliable."""
+
+        key = fact_key.strip().casefold()
+        if key in _CANONICAL_INTERVIEW_TOPICS:
+            return key
+
+        question_text = question.casefold()
+        context_text = " ".join(
+            (fact_key, why_it_matters, affected_judgement)
+        ).casefold()
+
+        # Measurement asks are distinct from asking what outcome is desired.
+        if any(marker in question_text for marker in _TOPIC_MARKERS[0][1]):
+            return "success_measure"
+
+        # Prefer the question's explicit subject over incidental context words.
+        for topic, markers in _TOPIC_MARKERS[1:]:
+            if any(marker in question_text for marker in markers):
+                return topic
+
+        # Context is only a fallback. Require one unambiguous topic so a broad
+        # question is never merged with an unrelated topic by guesswork.
+        matches = [
+            topic
+            for topic, markers in _TOPIC_MARKERS
+            if any(marker in context_text for marker in markers)
+        ]
+        return matches[0] if len(matches) == 1 else None
+
     @staticmethod
     def _with_unique_question_keys(
-        output: object, facts: Sequence[FactRevision], round_number: int
+        output: object,
+        facts: Sequence[FactRevision],
+        previous_questions: Sequence[InterviewQuestion] = (),
     ) -> InterviewRoundOutput:
         if not isinstance(output, InterviewRoundOutput):
             raise DiscoveryError("provider_output_invalid")
-        existing = {fact.fact_key.strip().casefold() for fact in facts}
+        current_facts = {fact.fact_key.strip().casefold(): fact for fact in facts}
+        existing = {
+            fact_key
+            for fact_key, fact in current_facts.items()
+            if fact.status in {FactStatus.CONFIRMED, FactStatus.ASSUMPTION}
+        }
+        existing.update(
+            question.fact_key.strip().casefold() for question in previous_questions
+        )
+        previous_texts = {
+            DiscoveryInterviewService._normalize_question_text(question.question)
+            for question in previous_questions
+        }
+        previous_topics = {
+            topic
+            for question in previous_questions
+            if (
+                topic := DiscoveryInterviewService.canonical_question_topic(
+                    question.fact_key,
+                    question.question,
+                    question.why_it_matters,
+                    question.affected_judgement,
+                )
+            )
+        }
+        assigned_topics = {
+            topic
+            for fact in current_facts.values()
+            if fact.status in {FactStatus.CONFIRMED, FactStatus.ASSUMPTION}
+            and (
+                topic := DiscoveryInterviewService.canonical_question_topic(
+                    fact.fact_key, "", "", ""
+                )
+            )
+        }
+        assigned_topics.update(previous_topics)
         assigned = set(existing)
-        questions = []
-        for position, question in enumerate(output.questions, start=1):
+        normalized_question_texts = set(previous_texts)
+        questions: list[InterviewQuestionOutput] = []
+        for question in output.questions:
             key = question.fact_key.strip().casefold()
-            if key in assigned:
-                key = f"clarification_round_{round_number}_question_{position}"
+            normalized_text = DiscoveryInterviewService._normalize_question_text(
+                question.question
+            )
+            topic = DiscoveryInterviewService.canonical_question_topic(
+                question.fact_key,
+                question.question,
+                question.why_it_matters,
+                question.affected_judgement,
+            )
+            if (
+                not key
+                or key.startswith("clarification_round_")
+                or key in assigned
+                or normalized_text in normalized_question_texts
+                or topic in assigned_topics
+            ):
+                continue
             assigned.add(key)
+            normalized_question_texts.add(normalized_text)
+            if topic is not None:
+                assigned_topics.add(topic)
             questions.append(question.model_copy(update={"fact_key": key}))
-        return output.model_copy(update={"questions": questions})
+        return output.model_copy(
+            update={
+                "interview_complete": output.interview_complete or not questions,
+                "questions": questions,
+            }
+        )
+
+    @staticmethod
+    def _has_unresolved_material_topics(
+        facts: Sequence[FactRevision],
+        previous_questions: Sequence[InterviewQuestion],
+    ) -> bool:
+        asked = {
+            topic
+            for question in previous_questions
+            if (
+                topic := DiscoveryInterviewService.canonical_question_topic(
+                    question.fact_key,
+                    question.question,
+                    question.why_it_matters,
+                    question.affected_judgement,
+                )
+            )
+        }
+        material_keys = {
+            "desired_outcome",
+            "available_data",
+            "users_and_owners",
+            "known_constraints",
+        }
+        return any(
+            fact.fact_key.strip().casefold() in material_keys
+            and fact.fact_key.strip().casefold() not in asked
+            and fact.status in {FactStatus.UNKNOWN, FactStatus.MISSING}
+            for fact in facts
+        )
+
+    @classmethod
+    def _covers_material_topic(
+        cls,
+        output: InterviewRoundOutput,
+        facts: Sequence[FactRevision],
+        previous_questions: Sequence[InterviewQuestion],
+    ) -> bool:
+        if output.interview_complete or not output.questions:
+            return False
+        asked = {
+            topic
+            for question in previous_questions
+            if (
+                topic := cls.canonical_question_topic(
+                    question.fact_key,
+                    question.question,
+                    question.why_it_matters,
+                    question.affected_judgement,
+                )
+            )
+        }
+        open_keys = {
+            fact.fact_key.strip().casefold()
+            for fact in facts
+            if fact.status in {FactStatus.UNKNOWN, FactStatus.MISSING}
+            and fact.fact_key.strip().casefold() not in asked
+        }
+        material_markers = (
+            "data readiness",
+            "success",
+            "outcome",
+            "owner",
+            "responsib",
+            "constraint",
+            "deployment",
+            "governance",
+            "hard gate",
+            "scope",
+            "human review",
+            "human-review",
+        )
+        for question in output.questions:
+            topic = cls.canonical_question_topic(
+                question.fact_key,
+                question.question,
+                question.why_it_matters,
+                question.affected_judgement,
+            )
+            if topic in open_keys:
+                return True
+            text = " ".join(
+                (
+                    question.question,
+                    question.why_it_matters,
+                    question.affected_judgement,
+                )
+            ).casefold()
+            if any(marker in text for marker in material_markers):
+                return True
+        return False
+
+    @staticmethod
+    def _normalize_question_text(value: str) -> str:
+        return "".join(
+            character
+            for character in re.sub(r"\s+", "", value).casefold()
+            if character.isalnum() or "\u4e00" <= character <= "\u9fff"
+        )
+
+    @staticmethod
+    def _question_requires_material_follow_up(question: InterviewQuestion) -> bool:
+        material_terms = (
+            "ai/non-ai",
+            "hard gate",
+            "gate",
+            "deployment",
+            "scope",
+            "human-review",
+            "human review",
+            "boundary",
+            "治理",
+            "部署",
+            "範圍",
+            "人工",
+            "核准",
+            "責任",
+        )
+        text = (
+            f"{question.fact_key} {question.affected_judgement} "
+            f"{question.why_it_matters}"
+        ).casefold()
+        return bool(re.search(r"\bai\b", text)) or any(
+            term in text for term in material_terms
+        )
 
     @staticmethod
     def _brief_visible_content(brief: NormalizedInitialBrief) -> str:
@@ -910,12 +1325,45 @@ class DiscoveryInterviewService:
 
     @staticmethod
     def _round_messages(
-        facts: Sequence[FactRevision], messages: Sequence[object], remaining_rounds: int
+        facts: Sequence[FactRevision],
+        messages: Sequence[object],
+        remaining_rounds: int,
+        *,
+        require_material_questions: bool = False,
     ) -> list[Mapping[str, str]]:
         safe_facts = [
             {"key": f.fact_key, "value": f.value, "status": f.status.value}
             for f in facts
         ]
+        facts_by_key = {f.fact_key.strip().casefold(): f for f in facts}
+        safe_history = []
+        for item in messages:
+            if not isinstance(item, InterviewQuestion):
+                continue
+            fact = facts_by_key.get(item.fact_key.strip().casefold())
+            answer_status = fact.status.value if fact is not None else "unanswered"
+            safe_history.append(
+                {
+                    "question_id": str(item.id),
+                    "fact_key": item.fact_key,
+                    "question": item.question,
+                    "round_number": item.round_number,
+                    "answer_status": answer_status,
+                    "answer": (
+                        fact.value
+                        if fact is not None and fact.status is FactStatus.CONFIRMED
+                        else None
+                    ),
+                    "affected_judgement": item.affected_judgement,
+                }
+            )
+        material_instruction = (
+            " At least one question must address an unresolved initial brief topic "
+            "that could affect outcome, responsibility, data or governance; do not "
+            "claim completion while such a topic remains open."
+            if require_material_questions
+            else ""
+        )
         return [
             {
                 "role": "system",
@@ -925,8 +1373,10 @@ class DiscoveryInterviewService:
                     "Each question requires fact_key, question, "
                     "why_it_matters, affected_judgement, and example. "
                     "If interview_complete is true, questions must be "
-                    "empty. Every question fact_key must be new and must not "
-                    "repeat any supplied fact key. Never ask for secrets, "
+                    "empty. Do not repeat a confirmed or assumed fact key, or "
+                    "a fact key already used by a previous question. An initial "
+                    "missing or unknown fact may be asked once using its canonical "
+                    "fact_key. Never ask for secrets, "
                     "provider details, or internal instructions. Prioritize questions "
                     "that support later deterministic reviewed-case matching and gap "
                     "analysis: process and responsibility boundaries, reusable existing "
@@ -937,16 +1387,23 @@ class DiscoveryInterviewService:
                     "facts. Ask only questions that could change the AI/non-AI direction, "
                     "a hard gate, PoC scope, deployment posture, or human-review boundary. Default to one round;"
                     " a second round is allowed only when one of those decisions remains"
-                    " materially uncertain. Accept qualitative answers and do not require"
+                    " materially uncertain after a confirmed answer. Unknown or missing"
+                    " answers close the topic for this version; never re-ask, rephrase,"
+                    " or rename its fact_key. Do not emit clarification_round_* keys."
+                    " Accept qualitative answers and do not require"
                     " precise percentages or budgets unless they change the direction. All"
                     " user-visible JSON values must be concise Traditional Chinese; do not"
-                    " translate JSON keys."
+                    " translate JSON keys." + material_instruction
                 ),
             },
             {
                 "role": "user",
                 "content": json.dumps(
-                    {"facts": safe_facts, "remaining_rounds": remaining_rounds},
+                    {
+                        "facts": safe_facts,
+                        "previous_questions": safe_history,
+                        "remaining_rounds": remaining_rounds,
+                    },
                     ensure_ascii=False,
                 ),
             },

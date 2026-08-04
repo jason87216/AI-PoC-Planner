@@ -935,7 +935,6 @@ def test_offline_governed_access_preserves_stage_specific_token_budgets(
         4096,
         4096,
         4096,
-        4096,
     ]
     analysis_budgets = [
         (item["schema_name"], item["max_tokens"])
@@ -1637,19 +1636,19 @@ def test_offline_governed_access_public_api_matches_across_capability_profiles(
             for operation in {"readiness", "discovery", "analysis", "report"}
         } == {
             "readiness": 1,
-            "discovery": 4,
+            "discovery": 3,
             "analysis": 3,
             "report": 2,
         }
         assert evidence.count_matrix == OperationCountMatrix(
             after_readiness=1,
-            after_discovery=5,
-            after_analysis=8,
-            after_duplicate_analysis=8,
-            after_report=10,
-            after_duplicate_report=10,
-            after_history=10,
-            after_markdown_download=10,
+            after_discovery=4,
+            after_analysis=7,
+            after_duplicate_analysis=7,
+            after_report=9,
+            after_duplicate_report=9,
+            after_history=9,
+            after_markdown_download=9,
             after_restart=0,
         )
 

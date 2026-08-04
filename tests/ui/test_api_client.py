@@ -157,6 +157,21 @@ def test_profile_actions_send_safe_public_requests() -> None:
     assert json.loads(requests[1].content)["api_key"] == "entered-only-for-request"
 
 
+def test_delete_project_uses_the_public_archive_boundary() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(204)
+
+    api = _client(handler)
+    api.delete_project("10000000-0000-0000-0000-000000000001")
+
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("DELETE", "/v1/projects/10000000-0000-0000-0000-000000000001")
+    ]
+
+
 def test_safe_error_never_exposes_api_error_payload_or_connection_address() -> None:
     api = _client(
         lambda _: httpx.Response(
@@ -234,6 +249,94 @@ def test_generic_provider_http_error_uses_safe_ui_mapping() -> None:
     assert caught.value.user_message != "服務暫時無法完成此操作，請稍後再試。"
     assert caught.value.user_action == "請檢查端點設定與請求能力後再試。"
     assert caught.value.retryable is False
+    assert raw_marker not in str(caught.value)
+    assert raw_marker not in repr(caught.value)
+
+
+def test_interview_questions_unavailable_keeps_safe_retry_guidance() -> None:
+    api = _client(
+        lambda _: httpx.Response(
+            502,
+            json={
+                "error": {
+                    "code": "interview_questions_unavailable",
+                    "message": "raw provider detail must not surface",
+                    "details": {
+                        "operation": "discovery",
+                        "retryable": True,
+                        "user_action": (
+                            "請重新產生訪談問題；若持續失敗，請重新測試模型設定並查看"
+                            "本機啟動日誌。"
+                        ),
+                    },
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.generate_interview_round("10000000-0000-0000-0000-000000000001", 1)
+
+    assert caught.value.code == "interview_questions_unavailable"
+    assert caught.value.retryable is True
+    assert caught.value.user_action == (
+        "請重新產生訪談問題；若持續失敗，請重新測試模型設定並查看本機啟動日誌。"
+    )
+    assert "raw provider detail" not in str(caught.value)
+
+
+def test_database_failure_has_actionable_safe_ui_guidance() -> None:
+    raw_marker = "C:\\private\\planner.sqlite3"
+    api = _client(
+        lambda _: httpx.Response(
+            500,
+            json={
+                "error": {
+                    "code": "database_operation_failed",
+                    "message": f"SQL traceback {raw_marker}",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.list_projects()
+
+    assert "本機資料庫無法初始化或升級" in caught.value.user_message
+    assert "重新啟動" in caught.value.user_message
+    assert raw_marker not in str(caught.value)
+
+
+def test_analysis_result_validation_has_actionable_safe_ui_guidance() -> None:
+    raw_marker = "raw-provider-analysis-marker"
+    api = _client(
+        lambda _: httpx.Response(
+            502,
+            json={
+                "error": {
+                    "code": "analysis_result_invalid",
+                    "message": raw_marker,
+                    "details": {
+                        "operation": "analysis",
+                        "retryable": False,
+                        "user_action": (
+                            "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。"
+                        ),
+                        "raw": raw_marker,
+                    },
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.list_projects()
+
+    assert "評估結果格式無法驗證" in caught.value.user_message
+    assert (
+        caught.value.user_action
+        == "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。"
+    )
     assert raw_marker not in str(caught.value)
     assert raw_marker not in repr(caught.value)
 

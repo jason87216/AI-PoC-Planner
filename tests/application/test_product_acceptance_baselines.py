@@ -474,6 +474,18 @@ def test_rules_first_signals_suppress_generic_ai_opportunity_matches() -> None:
     assert infer_opportunity_types(facts) == ()
 
 
+def test_high_risk_integration_signal_keeps_architecture_counts_valid() -> None:
+    facts = (_fact("current_workflow_problem", "流程包含系統自動寫入。"),)
+
+    assessed = build_deterministic_assessment_facts(facts)
+
+    assert assessed.architecture_controllability.high_risk_integration_count == 1
+    assert (
+        assessed.architecture_controllability.integration_count
+        >= assessed.architecture_controllability.high_risk_integration_count
+    )
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [

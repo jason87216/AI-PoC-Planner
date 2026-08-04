@@ -10,16 +10,23 @@ from ai_poc_planner.ui.api_client import ApiClientError
 from ai_poc_planner.ui.discovery import (
     discovery_view_for_status,
     facts_summary,
+    interview_form_key,
     interview_payload,
+    interview_widget_key,
     question_details,
+    resolve_interview_answer,
+    supplementary_note_key,
 )
 from ai_poc_planner.ui.navigation import (
     open_history,
     open_new_project,
+    open_results,
+    switch_page,
     workspace_route_key,
     workspace_target_from_query,
 )
 from ai_poc_planner.ui.presentation import show_api_error
+from ai_poc_planner.ui.project_copy import build_project_copy_prefill
 from ai_poc_planner.ui.runtime import (
     get_api_client,
     load_current_facts,
@@ -117,7 +124,7 @@ def _model_binding(
         if st.button(
             "前往模型設定", key=f"model_settings_{project_id}_{version_number}"
         ):
-            st.switch_page("app_pages/model_settings.py")
+            switch_page("app_pages/model_settings.py")
         return
 
     default_index = next(
@@ -219,15 +226,9 @@ def _project_heading(
         except ApiClientError as error:
             show_api_error(error)
         else:
-            values = {str(item.get("fact_key")): item.get("value") for item in facts}
-            st.session_state["new_project_prefill"] = {
-                "new_project_name": f"{project_name} 副本",
-                "new_project_current": values.get("current_workflow_problem", ""),
-                "new_project_outcome": values.get("desired_outcome", ""),
-                "new_project_data": values.get("available_data", ""),
-                "new_project_owners": values.get("users_and_owners", ""),
-                "new_project_constraints": values.get("known_constraints", ""),
-            }
+            st.session_state["new_project_prefill"] = build_project_copy_prefill(
+                project_name, facts
+            )
             open_new_project()
 
 
@@ -285,9 +286,12 @@ def _confirmation(session: dict[str, Any], project_id: str, number: int) -> None
             try:
                 with st.spinner("正在整理需要進一步確認的重點……"):
                     get_api_client().generate_interview_round(project_id, number)
-            except ApiClientError:
-                st.session_state["question_generation_pending"] = True
-            _refresh("feedback_text", "show_feedback")
+            except ApiClientError as error:
+                st.session_state["discovery_generation_error"] = error
+                refresh_api_data()
+                st.rerun()
+            else:
+                _refresh("feedback_text", "show_feedback")
     if modify:
         st.session_state["show_feedback"] = True
     if st.session_state.get("show_feedback"):
@@ -304,28 +308,32 @@ def _confirmation(session: dict[str, Any], project_id: str, number: int) -> None
             if not feedback.strip():
                 st.warning("請先輸入修改內容。")
             else:
+                progress = st.status("正在保存修改並重新整理需求理解……", expanded=True)
                 try:
                     get_api_client().submit_understanding_feedback(
                         project_id, number, feedback
                     )
                     get_api_client().generate_understanding(project_id, number)
                 except ApiClientError as error:
+                    progress.update(label="修改需求失敗", state="error")
                     show_api_error(error)
                 else:
+                    progress.update(label="需求理解已更新", state="complete")
                     st.session_state.pop("show_feedback", None)
                     _refresh("feedback_text", "show_feedback")
 
 
 def _next_round(project_id: str, number: int) -> None:
     st.warning("需求理解已確認，但問題尚未生成。")
-    if st.button("重新整理問題", type="primary", icon=":material/refresh:"):
+    if st.button("重新產生訪談問題", type="primary", icon=":material/refresh:"):
         try:
             with st.spinner("正在整理需要進一步確認的重點……"):
                 get_api_client().generate_interview_round(project_id, number)
         except ApiClientError as error:
-            show_api_error(error)
+            st.session_state["discovery_generation_error"] = error
+            refresh_api_data()
+            st.rerun()
         else:
-            st.session_state.pop("question_generation_pending", None)
             _refresh()
 
 
@@ -340,43 +348,46 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
     except ApiClientError as error:
         show_api_error(error)
         return
-    with st.form("key_questions"):
+    round_number = int(session.get("current_round") or 0)
+
+    with st.form(interview_form_key(project_id, number, round_number)):
         answers = []
-        for index, question in enumerate(questions):
+        for question in questions:
             detail = question_details(question)
+            question_id = str(question["id"])
+            answer_key = interview_widget_key(
+                "answer", project_id, number, round_number, question_id
+            )
+            status_key = interview_widget_key(
+                "status", project_id, number, round_number, question_id
+            )
             with st.container(border=True):
                 st.subheader(detail["question"])
                 st.caption(f"為什麼需要確認：{detail['why_it_matters']}")
+                answer_status = st.radio(
+                    "回答狀態",
+                    options=("提供回答", "目前不清楚", "目前沒有相關資料"),
+                    key=status_key,
+                )
                 answer = st.text_area(
                     "回答",
-                    key=f"question_{index}",
+                    key=answer_key,
                     placeholder="可提供粗略範圍或質性描述。",
                     height=100,
                 )
-                unknown, missing = st.columns(2)
-                unknown_choice = unknown.checkbox("目前不清楚", key=f"unknown_{index}")
-                missing_choice = missing.checkbox(
-                    "目前沒有相關資料", key=f"missing_{index}"
-                )
-                status = (
-                    "answered"
-                    if answer.strip()
-                    else (
-                        "unknown"
-                        if unknown_choice
-                        else ("missing" if missing_choice else "")
-                    )
+                status, normalized_answer = resolve_interview_answer(
+                    answer_status, answer
                 )
                 answers.append(
                     {
-                        "question_id": str(question["id"]),
+                        "question_id": question_id,
                         "answer_status": status,
-                        "answer": answer if answer.strip() else None,
+                        "answer": normalized_answer,
                     }
                 )
         note = st.text_area(
             "還有其他想補充或更正的內容嗎？（選填）",
-            key="supplementary_note",
+            key=supplementary_note_key(project_id, number, round_number),
             placeholder="例如：最終核准必須由部門主管完成；第一階段不能傳送個人資料到未核准的外部服務。",
             height=120,
         )
@@ -394,17 +405,21 @@ def _answers(session: dict[str, Any], project_id: str, number: int) -> None:
         except ApiClientError as error:
             show_api_error(error)
         else:
-            keys = ["supplementary_note"] + [
-                f"{part}_{i}"
-                for i in range(len(questions))
-                for part in ("question", "unknown", "missing")
+            keys = [supplementary_note_key(project_id, number, round_number)] + [
+                interview_widget_key(
+                    part, project_id, number, round_number, str(question["id"])
+                )
+                for question in questions
+                for part in ("answer", "status")
             ]
             if updated.get("status") == "ready_for_next_round":
                 try:
                     with st.spinner("正在整理需要進一步確認的重點……"):
                         get_api_client().generate_interview_round(project_id, number)
-                except ApiClientError:
-                    st.session_state["question_generation_pending"] = True
+                except ApiClientError as error:
+                    st.session_state["discovery_generation_error"] = error
+                    refresh_api_data()
+                    st.rerun()
             _refresh(*keys)
 
 
@@ -431,16 +446,42 @@ def _complete(project_id: str, number: int) -> None:
     for item in summary["unresolved"]:
         st.write(f"• {item}")
     with st.container(horizontal=True):
-        if st.button("查看評估結果", icon=":material/insights:"):
-            st.switch_page("app_pages/results.py")
+        if st.button("生成評估報告", type="primary", icon=":material/insights:"):
+            try:
+                with st.spinner("正在分析需求並評估方案……"):
+                    get_api_client().create_analysis(project_id, number)
+            except ApiClientError as error:
+                show_api_error(error)
+                return
+            try:
+                with st.spinner("正在整理完整規劃報告……"):
+                    get_api_client().create_report(project_id, number)
+            except ApiClientError as error:
+                refresh_api_data()
+                show_api_error(error)
+                open_results(project_id, number)
+            else:
+                refresh_api_data()
+                open_results(project_id, number)
         if st.button("返回首頁", icon=":material/home:"):
-            st.switch_page("app_pages/home.py")
+            switch_page("app_pages/home.py")
         if st.button("查看歷史", icon=":material/history:"):
-            st.switch_page("app_pages/history.py")
+            switch_page("app_pages/history.py")
+
+
+def _show_stale_target() -> None:
+    st.session_state.pop("selected_project", None)
+    st.query_params.clear()
+    st.error("找不到這個專案，或專案已經刪除。")
+    if st.button("返回專案歷史", icon=":material/history:"):
+        open_history()
 
 
 target = _target()
 if target is None:
+    if st.query_params.get("workspace"):
+        _show_stale_target()
+        st.stop()
     st.title("建立新專案")
     _brief()
     st.stop()
@@ -448,8 +489,14 @@ project_id, version_number = target
 try:
     session = load_discovery_session(project_id, version_number)
 except ApiClientError as error:
+    if error.code == "project_not_found":
+        _show_stale_target()
+        st.stop()
     show_api_error(error)
     st.stop()
+generation_error = st.session_state.pop("discovery_generation_error", None)
+if isinstance(generation_error, ApiClientError):
+    show_api_error(generation_error)
 _project_heading(project_id, version_number, session)
 view = discovery_view_for_status(session.get("status"))
 if view == "understanding_generation":

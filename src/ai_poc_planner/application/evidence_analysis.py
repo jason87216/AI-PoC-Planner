@@ -9,6 +9,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from pydantic import ValidationError
+
 from ai_poc_planner.application.assessment_policy import (
     derive_decision_authority,
     derive_processing_boundary,
@@ -143,23 +145,38 @@ class EvidenceAnalysisService:
         # is accepted as a formal assessment value.
         formal_decision_authority = derive_decision_authority(facts)
         formal_processing_boundary = derive_processing_boundary(facts)
-        draft = self._to_domain_draft(
-            stage_a,
-            option_details,
-            facts,
-            tokens,
-            formal_decision_authority=formal_decision_authority,
-            formal_processing_boundary=formal_processing_boundary,
-        )
-        self._validate_references(draft, facts, tokens)
-        result = self._validated_result(
-            version,
-            draft,
-            facts,
-            tokens,
-            formal_decision_authority=formal_decision_authority,
-            formal_processing_boundary=formal_processing_boundary,
-        )
+        try:
+            draft = self._to_domain_draft(
+                stage_a,
+                option_details,
+                facts,
+                tokens,
+                formal_decision_authority=formal_decision_authority,
+                formal_processing_boundary=formal_processing_boundary,
+            )
+            self._validate_references(draft, facts, tokens)
+            result = self._validated_result(
+                version,
+                draft,
+                facts,
+                tokens,
+                formal_decision_authority=formal_decision_authority,
+                formal_processing_boundary=formal_processing_boundary,
+            )
+        except EvidenceAnalysisError:
+            raise
+        except (
+            ValidationError,
+            ValueError,
+            IndexError,
+            KeyError,
+            TypeError,
+            StopIteration,
+        ) as error:
+            # Domain assembly and deterministic facts are a fail-closed
+            # application boundary.  Keep the public error stable and never
+            # expose provider content, validation input, or internal details.
+            raise EvidenceAnalysisError("analysis_result_invalid") from error
         with self._history._repository.transaction():
             current = sorted(
                 self._history.list_current_facts(project_id, version_number),

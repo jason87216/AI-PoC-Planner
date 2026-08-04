@@ -32,7 +32,24 @@ def test_initial_brief_trims_required_fields_and_rejects_extra_notes() -> None:
         )
 
 
+def test_initial_brief_allows_blank_optional_fields_as_missing() -> None:
+    brief = InitialBrief(
+        project_name="Minimal",
+        current_workflow_problem="Manual routing",
+        desired_outcome="   ",
+        available_data="",
+        users_and_owners=" ",
+        known_constraints=None,
+    )
+
+    assert brief.desired_outcome is None
+    assert brief.available_data is None
+    assert brief.users_and_owners is None
+    assert brief.known_constraints is None
+
+
 def test_available_data_normalization_uses_exact_tokens_only() -> None:
+    assert normalize_available_data(None) is AvailableDataStatus.MISSING
     assert normalize_available_data("不知道") is AvailableDataStatus.UNKNOWN
     assert normalize_available_data("目前没有") is AvailableDataStatus.MISSING
     assert normalize_available_data("不知道是否完整") is AvailableDataStatus.KNOWN

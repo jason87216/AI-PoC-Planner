@@ -5,7 +5,8 @@
 ## 狀態
 
 - P8.1a Portfolio baseline：Complete（本文件與 README 基線已整理）。
-- P8.1b Product-owner and release acceptance：Pending。
+- P8.1b Product-owner and release acceptance：Complete。
+- P8.1b overall：Complete（archive-backed history owner acceptance 已通過）。
 - P7.2a：Complete；P7.2b：Pending；P7.2 overall：Incomplete。
 
 ## 一分鐘定位

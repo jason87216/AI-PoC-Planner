@@ -7,6 +7,13 @@ from typing import Any
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.navigation import (
+    open_history,
+    open_workspace,
+    switch_page,
+    workspace_route_key,
+    workspace_target_from_query,
+)
 from ai_poc_planner.ui.presentation import show_api_error, status_label
 from ai_poc_planner.ui.results import (
     analysis_overview,
@@ -35,6 +42,28 @@ def _target_from_state() -> tuple[str, int] | None:
     return project_id, version_number
 
 
+def _target_from_query() -> tuple[str, int] | None:
+    query_target = workspace_target_from_query()
+    if query_target is None:
+        return None
+    route_key, version_number = query_target
+    try:
+        project = next(
+            project
+            for project in load_projects()
+            if workspace_route_key(str(project.get("project_id"))) == route_key
+            and project.get("version_number") == version_number
+        )
+    except (ApiClientError, StopIteration):
+        return None
+    project_id = str(project["project_id"])
+    st.session_state["selected_project"] = {
+        "project_id": project_id,
+        "version_number": version_number,
+    }
+    return project_id, version_number
+
+
 def _project_name(project_id: str, version_number: int) -> str:
     for project in load_projects():
         if (
@@ -43,21 +72,6 @@ def _project_name(project_id: str, version_number: int) -> str:
         ):
             return str(project.get("project_name") or "未命名專案")
     return "未命名專案"
-
-
-def _recover_latest_target() -> tuple[str, int] | None:
-    for project in load_projects():
-        project_id = project.get("project_id")
-        version_number = project.get("version_number")
-        if (
-            result_view_for_status(project.get("status")) != "unavailable"
-            and isinstance(project_id, str)
-            and isinstance(version_number, int)
-        ):
-            target = {"project_id": project_id, "version_number": version_number}
-            st.session_state["selected_project"] = target
-            return project_id, version_number
-    return None
 
 
 def _items(values: object, empty: str = "目前未記錄。") -> None:
@@ -84,9 +98,9 @@ def _render_header(
     )
     with st.container(horizontal=True):
         if st.button("返回專案工作區", icon=":material/arrow_back:"):
-            st.switch_page("app_pages/discovery.py")
+            open_workspace(project_id, version_number)
         if st.button("返回專案歷史", icon=":material/history:"):
-            st.switch_page("app_pages/history.py")
+            switch_page("app_pages/history.py")
 
 
 def _table(rows: list[dict[str, Any]], fields: tuple[tuple[str, str], ...]) -> None:
@@ -209,17 +223,21 @@ def _render_synthesis(
             ("conclusion", "判斷"),
         ),
     )
-    st.subheader("成熟案例介紹")
-    _render_reviewed_cases(view["reviewed_cases"])
-    st.subheader("案例支持關係摘要")
-    _table(
-        view["case_support_summaries"],
-        (
-            ("case_title", "案例"),
-            ("supported_practices", "主要支持做法"),
-            ("project_adoption", "本專案採用方式"),
-        ),
-    )
+    if view["reviewed_cases"]:
+        st.subheader("成熟案例介紹")
+        _render_reviewed_cases(view["reviewed_cases"])
+    else:
+        st.info("本次沒有匹配的已審核成熟案例。")
+    if view["case_support_summaries"]:
+        st.subheader("案例支持關係摘要")
+        _table(
+            view["case_support_summaries"],
+            (
+                ("case_title", "案例"),
+                ("supported_practices", "主要支持做法"),
+                ("project_adoption", "本專案採用方式"),
+            ),
+        )
     st.subheader("官方實施參考")
     reference_rows = [
         {
@@ -232,14 +250,17 @@ def _render_synthesis(
         }
         for reference in view["implementation_references"]
     ]
-    _markdown_table(
-        reference_rows,
-        (
-            ("topic", "主題"),
-            ("display_title_zh", "參考文件"),
-            ("purpose_zh", "用途"),
-        ),
-    )
+    if reference_rows:
+        _markdown_table(
+            reference_rows,
+            (
+                ("topic", "主題"),
+                ("display_title_zh", "參考文件"),
+                ("purpose_zh", "用途"),
+            ),
+        )
+    else:
+        st.caption("目前沒有適用的官方實施參考。")
     st.subheader("目前狀態、目標狀態與主要差距")
     _table(
         view["current_target_comparison"],
@@ -297,12 +318,16 @@ def _refresh_after_write() -> None:
 
 def _render_ready(project_id: str, version_number: int) -> None:
     st.info("需求訪談已完成。接下來會以已確認資訊建立案例與方案評估。")
-    if st.button("開始方案評估", type="primary", icon=":material/insights:"):
+    if st.button("生成評估報告", type="primary", icon=":material/insights:"):
         try:
-            with st.spinner("正在匹配成熟案例並建立評估結果…"):
+            with st.spinner("正在分析需求並評估方案……"):
                 get_api_client().create_analysis(project_id, version_number)
+            with st.spinner("正在整理完整規劃報告……"):
+                get_api_client().create_report(project_id, version_number)
         except ApiClientError as error:
             show_api_error(error)
+            refresh_api_data()
+            st.rerun()
         else:
             _refresh_after_write()
 
@@ -317,12 +342,14 @@ def _render_assessed(project_id: str, version_number: int) -> None:
     st.header("評估結果已保存")
     st.write(view["conclusion_rationale"])
     st.info("產生規劃報告後，頁面會呈現推薦理由、成熟案例比較、實施路線與硬性限制。")
-    if st.button("產生規劃報告", type="primary", icon=":material/article:"):
+    if st.button("繼續生成報告", type="primary", icon=":material/article:"):
         try:
             with st.spinner("正在整理正式報告…"):
                 get_api_client().create_report(project_id, version_number)
         except ApiClientError as error:
             show_api_error(error)
+            refresh_api_data()
+            st.rerun()
         else:
             _refresh_after_write()
 
@@ -336,31 +363,42 @@ def _render_complete(project_id: str, version_number: int, project_name: str) ->
     _render_synthesis(report, project_name, version_number)
 
 
+def _show_stale_target() -> None:
+    st.session_state.pop("selected_project", None)
+    st.query_params.clear()
+    st.title("評估與規劃報告")
+    st.error("找不到這個專案，或專案已經刪除。")
+    if st.button("返回專案歷史", icon=":material/history:"):
+        open_history()
+
+
 st.set_page_config(
     page_title="評估結果", page_icon=":material/article:", layout="centered"
 )
 
 target = _target_from_state()
 if target is None:
-    try:
-        target = _recover_latest_target()
-    except ApiClientError as error:
-        show_api_error(error)
-        target = None
-    if target is None:
-        st.title("評估與規劃報告")
-        st.info(
-            "請先從專案歷史選擇一個已完成訪談的專案；重新進入只會讀取已保存結果，不會重新呼叫模型服務。"
-        )
-        if st.button("前往專案歷史", icon=":material/history:"):
-            st.switch_page("app_pages/history.py")
+    target = _target_from_query()
+if target is None:
+    if st.query_params.get("workspace"):
+        _show_stale_target()
         st.stop()
+    st.title("評估與規劃報告")
+    st.info(
+        "請先從專案歷史選擇一個已完成訪談的專案；重新進入只會讀取已保存結果，不會重新呼叫模型服務。"
+    )
+    if st.button("前往專案歷史", icon=":material/history:"):
+        switch_page("app_pages/history.py")
+    st.stop()
 
 project_id, version_number = target
 try:
     version = load_project_version(project_id, version_number)
     project_name = _project_name(project_id, version_number)
 except ApiClientError as error:
+    if error.code == "project_not_found":
+        _show_stale_target()
+        st.stop()
     show_api_error(error)
     st.stop()
 

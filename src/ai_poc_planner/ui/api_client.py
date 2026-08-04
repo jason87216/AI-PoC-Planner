@@ -43,6 +43,7 @@ _USER_MESSAGES = {
     "provider_invalid_response": "端點回傳格式無效。",
     "provider_output_truncated": "端點輸出被截斷。",
     "provider_output_invalid": "結構化結果無法通過驗證。",
+    "interview_questions_unavailable": "目前無法產生合適的訪談問題，請稍後再試。",
     "provider_schema_invalid": "本機結構化輸出契約設定無效。",
     "model_profile_auth_required": "請輸入 API key，或改用不需要認證的端點。",
     "model_profile_auth_forbidden": "此認證模式不允許保存 API key，請清除後再試。",
@@ -53,6 +54,7 @@ _USER_MESSAGES = {
     "analysis_not_ready": "訪談尚未完成，暫時無法開始評估。",
     "analysis_not_found": "尚未找到這份規劃的評估結果。",
     "analysis_already_exists": "這份規劃已有評估結果，已保留原有內容。",
+    "analysis_result_invalid": "評估結果格式無法驗證，請重新嘗試。",
     "report_not_ready": "請先完成評估，再產生規劃報告。",
     "report_not_found": "尚未找到這份規劃的報告。",
     "report_already_exists": "這份規劃已有報告，已保留原有內容。",
@@ -69,6 +71,10 @@ _USER_MESSAGES = {
     "understanding_already_confirmed": "需求理解已確認。",
     "understanding_confirmation_required": "請先確認或修正目前的需求理解。",
     "internal_error": "服務暫時無法完成此操作，請稍後再試。",
+    "database_operation_failed": (
+        "本機資料庫無法初始化或升級。請重新啟動 AI PoC Planner；"
+        "若問題持續發生，請查看本機啟動日誌。"
+    ),
     "runtime_configuration_missing": "應用程式尚未透過本機啟動器啟動。",
     "local_service_unavailable": (
         "AI PoC Planner 本機服務目前未運行，請重新執行啟動器。"
@@ -84,6 +90,7 @@ _USER_MESSAGES = {
 }
 
 _SAFE_USER_ACTIONS = {
+    "analysis_result_invalid": "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。",
     "provider_auth_required": "請補充 API key 後再測試。",
     "provider_auth_failed": "請確認 API key 與端點權限後再試。",
     "provider_parameter_unsupported": "請檢查模型能力設定中的參數相容性。",
@@ -97,6 +104,7 @@ _SAFE_USER_ACTIONS = {
     "provider_invalid_response": "請確認端點回傳 OpenAI-compatible chat completion。",
     "provider_output_truncated": "請提高輸出預算後再試。",
     "provider_output_invalid": "請重試；若持續失敗，請檢查結構化輸出能力。",
+    "interview_questions_unavailable": "請重新產生訪談問題；若持續失敗，請重新測試模型設定並查看本機啟動日誌。",
     "provider_schema_invalid": "目前的結構化輸出契約無法送出，請檢查 profile 設定。",
     "model_profile_auth_required": "請輸入 API key，或改用不需要認證的端點。",
     "model_profile_auth_forbidden": "請清除已保存 API key 後再使用 none 認證模式。",
@@ -158,6 +166,9 @@ class ApiClient:
     def list_projects(self) -> list[dict[str, Any]]:
         payload = self._request("GET", "/v1/projects")
         return self._list_of_objects(payload)
+
+    def delete_project(self, project_id: str) -> None:
+        self._request("DELETE", f"/v1/projects/{project_id}", expected={204})
 
     def provider_status(self) -> dict[str, Any]:
         return self._object(self._request("GET", "/v1/provider-status"))

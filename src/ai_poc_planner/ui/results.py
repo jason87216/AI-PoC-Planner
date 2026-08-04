@@ -133,6 +133,7 @@ def _readable_text(value: object) -> str:
     text = re.sub(r"\s*\(?F\d{3}\)?", "", str(value)).strip()
     for source, target in _TEXT_REPLACEMENTS.items():
         text = text.replace(source, target)
+    text = re.sub(r"若{2,}", "若", text)
     return text
 
 
@@ -169,6 +170,17 @@ def report_synthesis_view(report: dict[str, Any]) -> dict[str, Any]:
         result: list[dict[str, Any]] = []
         for value in values:
             if not isinstance(value, dict):
+                continue
+            if key == "interview_findings" and str(
+                value.get("confirmed_content", "")
+            ).strip().casefold() in {
+                "unknown",
+                "currently unavailable",
+                "unknown / currently unavailable",
+            }:
+                # Historical persisted reports may contain a visible answer
+                # sentinel. It is not a persisted FactStatus and must not be
+                # presented under the confirmed-findings heading.
                 continue
             result.append(
                 {

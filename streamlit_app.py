@@ -3,6 +3,7 @@
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
+from ai_poc_planner.ui.navigation import finish_page_render, transition_for_page
 from ai_poc_planner.ui.runtime import validate_streamlit_runtime
 
 st.set_page_config(
@@ -28,6 +29,16 @@ page = st.navigation(
             icon=":material/tune:",
         ),
         st.Page(
+            "app_pages/model_settings_new.py",
+            title="新增模型設定",
+            visibility="hidden",
+        ),
+        st.Page(
+            "app_pages/model_settings_edit.py",
+            title="編輯模型設定",
+            visibility="hidden",
+        ),
+        st.Page(
             "app_pages/discovery.py",
             title="專案階段",
             url_path="project",
@@ -42,4 +53,21 @@ page = st.navigation(
     ],
     position="top",
 )
-page.run()
+
+# Streamlit reruns the entrypoint for both top-navigation changes and
+# ``st.switch_page``.  The public ``url_path`` identifies the selected page;
+# transition state is kept in session state so ordinary widget reruns stay
+# quiet while a real destination render gets one bounded feedback message.
+page_key = str(page.url_path or "home")
+show_transition, transition_label = transition_for_page(page_key)
+if show_transition:
+    with st.spinner(transition_label):
+        try:
+            page.run()
+        finally:
+            finish_page_render(page_key)
+else:
+    try:
+        page.run()
+    finally:
+        finish_page_render(page_key)

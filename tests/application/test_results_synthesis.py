@@ -16,6 +16,7 @@ from ai_poc_planner.application.report_synthesis import (
 )
 from ai_poc_planner.domain.discovery import InterviewQuestion
 from ai_poc_planner.domain.enums import FactStatus, InterviewRole, VisibleMessageKind
+from ai_poc_planner.domain.planning_report import InterviewFinding
 from ai_poc_planner.domain.project_history import (
     FactRevision,
     VisibleConversationMessage,
@@ -88,10 +89,43 @@ def test_interview_findings_are_compact_and_never_expose_raw_questions() -> None
         content="客服人員確認內容後才可回覆客戶。",
         created_at=now,
     )
+    confirmed_facts = [
+        *_facts(scenario),
+        FactRevision(
+            id=uuid4(),
+            version_id=result.version_id,
+            fact_key="human_final_decision",
+            value=answer.content,
+            status=FactStatus.CONFIRMED,
+            reference_message_ids=[answer_id],
+            created_at=now,
+        ),
+        FactRevision(
+            id=uuid4(),
+            version_id=result.version_id,
+            fact_key="process_scope",
+            value="已確認的流程範圍。",
+            status=FactStatus.CONFIRMED,
+            reference_message_ids=[answer_id],
+            created_at=now,
+        ),
+        *[
+            FactRevision(
+                id=uuid4(),
+                version_id=result.version_id,
+                fact_key=fact_key,
+                value=answer.content,
+                status=FactStatus.CONFIRMED,
+                reference_message_ids=[answer_id],
+                created_at=now,
+            )
+            for fact_key in ("approval_process_detail", "audit_trail_requirements")
+        ],
+    ]
 
     synthesis = build_report_synthesis(
         analysis=result,
-        facts=list(_facts(scenario)),
+        facts=confirmed_facts,
         solution=next(
             item
             for item in reviewed_solution_patterns()
@@ -124,7 +158,7 @@ def test_interview_findings_are_compact_and_never_expose_raw_questions() -> None
         for item in build_interview_findings(
             questions=[question.model_copy(update={"fact_key": "process_scope"})],
             messages=[answer],
-            facts=list(_facts(scenario)),
+            facts=confirmed_facts,
         )
         if item.topic == "第一階段範圍"
     )
@@ -140,7 +174,7 @@ def test_interview_findings_are_compact_and_never_expose_raw_questions() -> None
             for item in build_interview_findings(
                 questions=[question.model_copy(update={"fact_key": fact_key})],
                 messages=[answer],
-                facts=list(_facts(scenario)),
+                facts=confirmed_facts,
             )
             if item.topic == topic
         )
@@ -380,6 +414,35 @@ def test_synthesis_uses_reviewed_catalogue_content() -> None:
     assert "測試路線 o1" not in markdown
     assert "文件知識檢索與人工審核輔助" not in markdown
     assert "目前沒有足夠相關的已審核成熟案例" in markdown
+
+
+def test_empty_reviewed_cases_do_not_render_empty_case_sections() -> None:
+    synthesis = _synthesis("governed_access").model_copy(
+        update={
+            "reviewed_cases": (),
+            "case_support_summaries": (),
+            "implementation_references": (),
+        }
+    )
+
+    markdown = render_synthesis_markdown(synthesis)
+
+    assert "本次沒有匹配的已審核成熟案例。" in markdown
+    assert "### 成熟案例介紹" not in markdown
+    assert "### 案例支持關係摘要" not in markdown
+    assert "目前沒有適用的官方實施參考。" in markdown
+
+
+def test_generic_roadmap_has_distinct_pre_scale_review() -> None:
+    synthesis = _synthesis("knowledge_assist")
+    phases = synthesis.implementation_roadmap
+
+    assert len(phases) >= 3
+    assert phases[-1].phase == "擴大前檢視"
+    assert phases[-1].actions != phases[1].actions
+    assert any("停止" in item or "擴大" in item for item in phases[-1].outputs)
+    assert any("hard gates" in item for item in phases[-1].acceptance_criteria)
+    assert "若若" not in render_synthesis_markdown(synthesis)
 
 
 def test_synthesis_fails_closed_for_solution_mismatch() -> None:
@@ -674,3 +737,80 @@ def test_appendix_keeps_only_chinese_scores_and_hard_gate_details() -> None:
     assert "| 編號 |" not in appendix
     assert "安全化原始問答" not in appendix
     assert "證據依據" not in appendix
+
+
+def test_report_findings_use_persisted_fact_status_not_visible_sentinels() -> None:
+    now = datetime.now(UTC)
+    unknown = FactRevision(
+        id=uuid4(),
+        version_id=uuid4(),
+        fact_key="available_data",
+        value=None,
+        status=FactStatus.UNKNOWN,
+        reference_message_ids=[uuid4()],
+        created_at=now,
+    )
+    missing = FactRevision(
+        id=uuid4(),
+        version_id=uuid4(),
+        fact_key="desired_outcome",
+        value=None,
+        status=FactStatus.MISSING,
+        reference_message_ids=[uuid4()],
+        created_at=now,
+    )
+    question = InterviewQuestion(
+        id=uuid4(),
+        session_id=uuid4(),
+        version_id=uuid4(),
+        round_number=1,
+        position=1,
+        visible_message_id=uuid4(),
+        fact_key="available_data",
+        question="目前有哪些資料？",
+        why_it_matters="確認資料條件。",
+        affected_judgement="資料準備度。",
+        example="列出資料來源。",
+        answer_message_id=uuid4(),
+        created_at=now,
+        answered_at=now,
+    )
+    sentinel = VisibleConversationMessage(
+        id=question.answer_message_id,
+        version_id=question.version_id,
+        sequence=2,
+        role=InterviewRole.USER,
+        message_kind=VisibleMessageKind.ANSWER,
+        content="Currently unavailable / Unknown",
+        created_at=now,
+    )
+
+    findings = build_interview_findings(
+        questions=[question], messages=[sentinel], facts=[unknown, missing]
+    )
+    assert findings == []
+
+    synthesis = _synthesis("knowledge_assist", extra_facts=(unknown, missing))
+    markdown = render_synthesis_markdown(synthesis)
+    assert "Currently unavailable" not in markdown
+    assert "Unknown" not in markdown
+    assert "待確認" in markdown
+
+
+def test_markdown_renderer_filters_legacy_unresolved_sentinel() -> None:
+    synthesis = _synthesis("knowledge_assist").model_copy(
+        update={
+            "interview_findings": [
+                InterviewFinding(
+                    topic="資料條件",
+                    confirmed_content="Currently unavailable",
+                    assessment_impact="待確認",
+                )
+            ]
+        }
+    )
+
+    markdown = render_synthesis_markdown(synthesis)
+    assert "Currently unavailable" not in markdown
+    assert "Unknown" not in markdown
+    assert "目前沒有已確認的訪談結論。" in markdown

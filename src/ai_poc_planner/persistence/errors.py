@@ -47,6 +47,12 @@ class DatabaseOperationError(PersistenceError):
     code = "database_operation_failed"
 
 
+class DatabasePreflightError(PersistenceError):
+    """The local runtime could not validate the database before becoming ready."""
+
+    code = "database_preflight_failed"
+
+
 class SchemaMismatchError(PersistenceError):
     code = "schema_mismatch"
 

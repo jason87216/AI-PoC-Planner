@@ -312,6 +312,45 @@ def test_project_creation_keeps_only_safe_selected_model_snapshot(
     assert "base_url" not in created.text
 
 
+def test_delete_project_archives_without_exposing_or_deleting_history(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    created = client.post("/v1/projects", json={"project_name": "可封存專案"})
+    assert created.status_code == 201
+    project_id = created.json()["project_id"]
+
+    archived = client.delete(f"/v1/projects/{project_id}")
+    repeated = client.delete(f"/v1/projects/{project_id}")
+    assert archived.status_code == repeated.status_code == 204
+    assert all(
+        item["project_id"] != project_id for item in client.get("/v1/projects").json()
+    )
+    for path in (
+        f"/v1/projects/{project_id}",
+        f"/v1/projects/{project_id}/versions",
+        f"/v1/projects/{project_id}/versions/1",
+        f"/v1/projects/{project_id}/versions/1/messages",
+        f"/v1/projects/{project_id}/versions/1/facts",
+        f"/v1/projects/{project_id}/versions/1/analysis",
+        f"/v1/projects/{project_id}/versions/1/report",
+    ):
+        response = client.get(path)
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "project_not_found"
+        assert "archived_at" not in response.text
+    blocked_write = client.post(
+        f"/v1/projects/{project_id}/versions/1/messages",
+        json={"role": "user", "message_kind": "user_input", "content": "blocked"},
+    )
+    assert blocked_write.status_code == 404
+    assert blocked_write.json()["error"]["code"] == "project_not_found"
+    missing = client.delete("/v1/projects/10000000-0000-0000-0000-000000000099")
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "project_not_found"
+    client.close()
+
+
 def test_project_model_binding_requires_readiness_and_survives_global_selection_change(
     tmp_path: Path,
 ) -> None:

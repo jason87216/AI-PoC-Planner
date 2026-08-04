@@ -24,6 +24,47 @@ _FACT_LABELS = {
 }
 
 
+def interview_widget_key(
+    kind: str,
+    project_id: str,
+    version_number: int,
+    round_number: int,
+    question_id: str,
+) -> str:
+    """Build a stable, project/version/round/question-scoped widget key."""
+
+    return (
+        f"interview_{kind}_{project_id}_{version_number}_{round_number}_{question_id}"
+    )
+
+
+def interview_form_key(project_id: str, version_number: int, round_number: int) -> str:
+    """Keep a Streamlit form identity isolated to one interview round."""
+
+    return f"interview_answers_{project_id}_{version_number}_{round_number}"
+
+
+def supplementary_note_key(
+    project_id: str, version_number: int, round_number: int
+) -> str:
+    """Build the round-scoped key for the optional supplementary note."""
+
+    return f"interview_supplementary_note_{project_id}_{version_number}_{round_number}"
+
+
+def resolve_interview_answer(choice: str, answer: str) -> tuple[str, str | None]:
+    """Normalize the answer from the one authoritative interview choice."""
+
+    normalized = answer.strip()
+    if choice == "提供回答":
+        return ("answered", normalized) if normalized else ("", None)
+    if choice == "目前不清楚":
+        return "unknown", None
+    if choice == "目前沒有相關資料":
+        return "missing", None
+    raise ValueError("unknown interview answer choice")
+
+
 def select_active_project(
     state: MutableMapping[str, Any], project_id: str, version_number: int
 ) -> None:

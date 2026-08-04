@@ -13,7 +13,7 @@ from ai_poc_planner.persistence.errors import (
     UnsupportedSchemaVersionError,
 )
 
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9
 _PROJECT_COLUMNS = frozenset(
     {
         "id",
@@ -246,7 +246,7 @@ CREATE TABLE IF NOT EXISTS golden_scenario_coverage (
 )
 """
 _PLANNING_PROJECT_COLUMNS = frozenset(
-    {"id", "project_name", "created_at", "updated_at"}
+    {"id", "project_name", "created_at", "updated_at", "archived_at"}
 )
 _PROJECT_VERSION_COLUMNS = frozenset(
     {
@@ -396,7 +396,8 @@ CREATE TABLE IF NOT EXISTS planning_projects (
     id TEXT PRIMARY KEY NOT NULL,
     project_name TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    archived_at TEXT
 )
 """
 _CREATE_PROJECT_VERSIONS_TABLE = """
@@ -849,6 +850,16 @@ def _ensure_case_centered_column(connection: sqlite3.Connection) -> None:
         )
 
 
+def _ensure_archived_at_column(connection: sqlite3.Connection) -> None:
+    """Add the nullable project archive marker to an existing v8 database."""
+
+    columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(planning_projects)")
+    }
+    if columns and "archived_at" not in columns:
+        connection.execute("ALTER TABLE planning_projects ADD COLUMN archived_at TEXT")
+
+
 def _validate_columns(
     connection: sqlite3.Connection,
     table: str,
@@ -1191,9 +1202,9 @@ def _rollback_quietly(connection: sqlite3.Connection) -> None:
 
 
 def initialize_database(connection: sqlite3.Connection) -> None:
-    """Create schema v8 or additively upgrade supported legacy databases."""
+    """Create schema v9 or additively upgrade supported legacy databases."""
     version = read_schema_version(connection)
-    if version not in {0, 1, 2, 3, 4, 5, 6, 7, CURRENT_SCHEMA_VERSION}:
+    if version not in {0, 1, 2, 3, 4, 5, 6, 7, 8, CURRENT_SCHEMA_VERSION}:
         raise UnsupportedSchemaVersionError(
             "database schema version is not supported by this application"
         )
@@ -1201,6 +1212,7 @@ def initialize_database(connection: sqlite3.Connection) -> None:
     if version == CURRENT_SCHEMA_VERSION:
         try:
             _ensure_case_centered_column(connection)
+            _ensure_archived_at_column(connection)
             _create_catalog_schema(connection)
             _rebuild_solution_patterns_without_category_unique(connection)
             _seed_reviewed_catalogue(connection)
@@ -1223,8 +1235,10 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         connection.execute(_CREATE_PLANNING_RUNS_INDEX)
         _validate_planning_run_table(connection)
         if _phase_two_table_count(connection):
+            _ensure_archived_at_column(connection)
             _validate_phase_two_tables(connection)
         _create_phase_two_schema(connection)
+        _ensure_archived_at_column(connection)
         _validate_phase_two_tables(connection)
         _create_phase_three_schema(connection)
         _validate_phase_three_tables(connection)
@@ -1244,3 +1258,28 @@ def initialize_database(connection: sqlite3.Connection) -> None:
     except sqlite3.Error as error:
         _rollback_quietly(connection)
         raise DatabaseOperationError("unable to initialize database schema") from error
+
+
+def validate_database_schema(connection: sqlite3.Connection) -> None:
+    """Validate an already-initialized database without running migrations."""
+
+    version = read_schema_version(connection)
+    if version != CURRENT_SCHEMA_VERSION:
+        raise SchemaMismatchError(
+            "database schema must be initialized before repository operations"
+        )
+    try:
+        _validate_current_schema(connection)
+    except SchemaMismatchError:
+        raise
+    except sqlite3.Error as error:
+        raise DatabaseOperationError("unable to validate database schema") from error
+
+
+def ensure_database_schema(connection: sqlite3.Connection) -> None:
+    """Migrate legacy databases once, otherwise perform a lightweight validation."""
+
+    if read_schema_version(connection) != CURRENT_SCHEMA_VERSION:
+        initialize_database(connection)
+    else:
+        validate_database_schema(connection)

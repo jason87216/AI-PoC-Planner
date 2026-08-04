@@ -28,7 +28,56 @@
 - 無可用模型、連線失敗與可重試錯誤維持 fail-closed，並提供安全、可行動的下一步；
 - capability label 保留穩定 wire value，UI 不依品牌或模型名稱猜測端點能力；
 - 只完成 UI 文案、presentation helper、相關測試與 offline validation，未修改 API、provider、SQLite schema、deterministic logic 或 dependencies。
-- P8.1b-2 product-owner and release acceptance 仍 Pending；P8.1b overall 仍 Pending；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
+- P8.1b-2 product-owner and release acceptance 已 Complete；P8.1b overall 已 Complete；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
+
+### P8.1b-2 product-owner and release acceptance — Complete
+
+- 人工驗收發現兩項 blocking defects：舊版 SQLite schema 仍可能讓 runtime 宣稱 running，以及模型設定頁把目前設定、新增、編輯與技術欄位塞在同一個長頁面。
+- 本修正拆分模型設定首頁、新增頁與編輯頁，將 capability 技術值收進「相容性設定（技術人員）」；既有 API field names 與完整 payload 仍相容，但 InitialBrief requiredness 已放寬，四個補充欄位可為 null／missing，名稱與目前流程仍必填。
+- provider wire contract 與 deterministic result contract 未變。
+- 本修正讓 runtime 在 ready 前完成 SQLite initialization、migration 與 schema validation；migration 失敗時 fail closed，公開錯誤只提供可行動的本機資料庫指引。
+- 新建專案現在只要求專案名稱與目前流程與問題；其他四項 brief 欄位可留白並正規化為 missing facts，交由後續訪談補齊。
+- 人工 UAT 另發現兩項 blocking defects：訪談 widget key 未包含 project/version/round/question，造成跨輪答案殘留；assessment 的 deterministic facts 組裝 `ValidationError` 未在 `EvidenceAnalysisService` 邊界包裝，曾落成 generic `internal_error`。
+- 本修正以完整情境 key builder、互斥 answer/unknown/missing 狀態與 fail-closed `analysis_result_invalid` 安全錯誤處理；不保存 partial analysis，版本維持 `ready_for_assessment`，可安全重試且不重跑已完成訪談。
+- 最終獨立審查另發現 Streamlit `st.form` 內使用輸入 widget callbacks；本修正改用單一 radio（提供回答／目前不清楚／目前沒有相關資料）與 scoped text area，表單只保留 submit callback，並以 AppTest 驗證實際訪談頁可渲染、跨輪與跨專案狀態隔離。
+- 新增 temporary SQLite analysis failure integration test：invalid domain assembly 不產生 partial row、訪談資料保留、版本維持 `ready_for_assessment`，修正 fake output 後可再次提交成功；UI 錯誤文案改為中立的「評估結果格式無法驗證」。
+- P8.1b-2 已完成單分頁真實模型人工驗收；P8.1b overall 已完成；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
+
+### P8.1b-2 renewed manual UAT follow-up — Complete
+
+- Initial brief 的 missing／unknown facts 會以 canonical fact key 允許第一輪詢問一次；已詢問且回答 unknown／missing 的 topic 仍封存，不會改名重問。
+- 需求確認成功後若問題生成失敗，session 仍停在 `READY_FOR_INTERVIEW`，前台顯示安全錯誤與「重新產生訪談問題」，不回到確認頁。
+- Interview answer 會以 superseding fact revision 保留原始 gap、answer message reference 與 `supersedes_fact_id`；confirmed fact 仍只能走 explicit correction。
+- 第一輪由 deterministic material-gap policy 防止 provider 以 `interview_complete=true` 略過仍未確認的成果、責任、資料或治理議題；bounded retry 失敗時保持可重試狀態。
+
+- The next bounded follow-up stops re-asking unknown/missing interview topics, combines analysis and report generation into one explicit user action, and keeps analysis/report persistence transitions separate.
+- Report references are now solution-scoped; empty reviewed-case sections are omitted with a safe explanatory message, and the generic roadmap distinguishes pre-scale review from the PoC phase.
+- Renewed UAT also found nullable copy-prefill values reaching Streamlit text widgets and browser-level traceback exposure; the bounded fix normalizes all new-project widget state, preserves failed-submit input, clears successful-submit state, and uses public UAT error-detail suppression while retaining local logs.
+- Single-tab real-provider UAT passed: project creation, copy-as-new, requirements feedback, interview duplicate-topic protection, analysis/report generation, persisted report refresh, and history reopen/refresh all passed. Timeout recovery was not exercised because no natural timeout occurred; this is non-blocking.
+- The latest bounded UAT follow-up adds canonical interview-topic de-duplication (without renaming duplicate keys), closes unknown/missing topics, and exposes visible status progress for project creation and feedback submission. No provider, deterministic, persistence-schema, or P7.2b behavior changes are included.
+
+### P8.1b-2 release follow-up backlog — Non-blocking
+
+- The full tracked-repository Ruff format check still differs from the CI-scoped check for three pre-existing files; this PR does not reformat them.
+- A small number of non-fatal browser network-console warnings were observed during single-tab UAT; no user-visible failure or data-integrity issue resulted.
+- Previously recorded P2 audit items remain follow-up work and are not part of PR #29.
+
+The earlier single-tab real-provider acceptance record remains preserved above. The later archive-backed history owner acceptance closed P8.1b-2 and P8.1b overall; P7.2b remains Pending and the overall P7.2 initiative remains incomplete.
+
+### P8.1b-2 owner acceptance follow-up — Complete
+
+- Single-tab product UAT: Failed — project history actions incomplete.
+- The history page routes completed projects directly to persisted Results, but copy-as-new remains reachable only from Discovery/workspace; completed projects therefore have no convenient copy entry, and history cards still lack explicit edit/continue and delete actions.
+- The required history action split is now: unfinished projects expose 繼續修改、複製為新專案、刪除專案；completed projects expose 查看報告、複製並修改、刪除專案. Completed versions remain immutable; changes must use copy/new-version flows.
+- Audit found no project-delete API, application service, or repository method. SQLite has no aggregate delete path: completed-version, analysis, and report delete triggers reject deletion, and dependent tables are not consistently `ON DELETE CASCADE`. Safe deletion therefore requires an explicit schema/immutability design change and is not implemented as a partial UI-only workaround.
+- Archive-backed history owner acceptance 已通過：歷史頁繼續／查看、confirmed-only 複製與刪除操作均符合產品決策；schema v9 的資料層封存行為已驗收。
+- 追問策略可能偏嚴格，列為 P2 非阻擋 follow-up，不在 PR #29 繼續修改。
+- P8.1b-2 已 Complete；P8.1b overall 已 Complete；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
+
+### P8.1b-2 owner acceptance closeout — Complete
+
+- Archive-backed history owner UAT：Passed。
+- 不需要再次呼叫真實 provider；consumer installer／release packaging 尚未完成，交由 P8.2 規劃。
 
 ### Historical diagnosis
 
@@ -166,3 +215,10 @@ Start P8.1b-2 product-owner and release acceptance after the P8.1b-1 UI wording 
 - 自動安裝 llama.cpp 或模型。
 - 多 Agent、LangGraph、FAISS、Docker、雲端部署、帳號、online search 與 multi-tenancy。
 - Production-grade credential encryption 與 PDF／DOCX export。
+
+#### P8.1b-2 owner acceptance follow-up — archive-backed history actions (Complete)
+
+- 將歷史頁的「刪除專案」定義為資料層封存：只更新 `planning_projects.archived_at`，不刪除任何 version、fact、message、question、answer、analysis 或 report。
+- Schema 由 v8 以 additive migration 升至 v9；active project 讀取與所有 project-scoped workflow 均以 `archived_at IS NULL` fail closed。
+- 歷史頁分離主操作、confirmed-only 複製與二次確認刪除；完成版本仍 immutable，封存後舊 workspace／results URL 顯示安全找不到提示。
+- Provider wire contract、deterministic assessment、scoring、hard gates、model profile 與 P7.2b 未修改；archive-backed history owner UAT 已通過。

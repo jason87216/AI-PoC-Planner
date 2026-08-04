@@ -11,8 +11,12 @@ from ai_poc_planner.ui.api_client import ApiClient, ApiClientError
 from ai_poc_planner.ui.discovery import (
     discovery_view_for_status,
     facts_summary,
+    interview_form_key,
     interview_payload,
+    interview_widget_key,
     question_details,
+    resolve_interview_answer,
+    supplementary_note_key,
 )
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -114,6 +118,45 @@ def test_unknown_answer_and_supplementary_note_use_the_round_contract() -> None:
     assert payload["supplementary_note"] == "The finance lead retains approval."
     assert payload["additional_facts"] == []
     assert payload["corrections"] == []
+
+
+def test_interview_widget_keys_are_isolated_by_project_version_round_and_question() -> (
+    None
+):
+    first = interview_widget_key("answer", PROJECT_ID, 1, 1, QUESTION_ID)
+    second_round = interview_widget_key("answer", PROJECT_ID, 1, 2, QUESTION_ID)
+    other_question = interview_widget_key("answer", PROJECT_ID, 1, 1, FACT_ID)
+    other_project = interview_widget_key("answer", "other-project", 1, 1, QUESTION_ID)
+
+    assert first == f"interview_answer_{PROJECT_ID}_1_1_{QUESTION_ID}"
+    assert len({first, second_round, other_question, other_project}) == 4
+    assert interview_form_key(PROJECT_ID, 1, 1) != interview_form_key(PROJECT_ID, 1, 2)
+    assert supplementary_note_key(PROJECT_ID, 1, 1) != supplementary_note_key(
+        PROJECT_ID, 2, 1
+    )
+    assert interview_widget_key(
+        "status", PROJECT_ID, 1, 1, QUESTION_ID
+    ) != interview_widget_key("status", PROJECT_ID, 1, 2, QUESTION_ID)
+
+
+@pytest.mark.parametrize(
+    ("choice", "answer", "expected"),
+    [
+        ("提供回答", "  正常回答  ", ("answered", "正常回答")),
+        ("目前不清楚", "先前輸入的文字", ("unknown", None)),
+        ("目前沒有相關資料", "先前輸入的文字", ("missing", None)),
+        ("提供回答", "", ("", None)),
+    ],
+)
+def test_interview_choice_is_authoritative_for_answer_payload(
+    choice: str, answer: str, expected: tuple[str, str | None]
+) -> None:
+    assert resolve_interview_answer(choice, answer) == expected
+
+
+def test_interview_choice_rejects_unknown_values() -> None:
+    with pytest.raises(ValueError, match="unknown interview answer choice"):
+        resolve_interview_answer("invalid", "answer")
 
 
 def test_interview_answer_submission_uses_the_formal_round_endpoint() -> None:
@@ -276,7 +319,7 @@ def test_discovery_page_keeps_project_context_and_inline_question_generation() -
         "generate_interview_round"
     )
     assert "需求理解已確認，但問題尚未生成。" in source
-    assert "重新整理問題" in source
+    assert "重新產生訪談問題" in source
 
 
 def test_discovery_page_generates_the_next_round_after_answers() -> None:
@@ -293,12 +336,10 @@ def test_history_maps_project_statuses_to_safe_actions() -> None:
     root = Path(__file__).parents[2]
     source = (root / "app_pages" / "history.py").read_text(encoding="utf-8")
 
-    assert '"draft": "繼續處理"' in source
-    assert '"interviewing": "繼續處理"' in source
-    assert '"clarification_required": "繼續處理"' in source
-    assert '"ready_for_assessment": "繼續評估"' in source
-    assert '"assessed": "查看專案"' in source
-    assert '"proposal_generated": "查看專案"' in source
-    assert '"complete": "查看專案"' in source
-    assert '"failed": "查看問題"' in source
+    assert '"assessed": ("繼續生成報告", "results")' in source
+    assert '"complete": ("查看報告", "results")' in source
+    assert '"繼續修改", "workspace"' in source
+    assert '"複製並修改"' in source
+    assert '"複製為新專案"' in source
+    assert '"刪除專案"' in source
     assert "raw" not in source.lower()

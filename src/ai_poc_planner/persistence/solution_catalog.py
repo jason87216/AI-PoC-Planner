@@ -14,6 +14,19 @@ from ai_poc_planner.domain.catalog_relationships import (
 from ai_poc_planner.domain.reviewed_cases import ReviewedCase
 from ai_poc_planner.domain.solution_catalog import SolutionPattern
 
+_IMPLEMENTATION_REFERENCE_KEYS_BY_SOLUTION = {
+    "permission_request_rules_and_human_approval": frozenset(
+        {
+            "microsoft_entra_request_process",
+            "microsoft_entra_lifecycle_workflows",
+            "okta_access_requests",
+            "okta_access_certifications",
+            "sailpoint_access_requests",
+            "servicenow_access_management_automation",
+        }
+    ),
+}
+
 
 class ReviewedCatalogueError(RuntimeError):
     """Approved catalogue data is incomplete or cannot be used safely."""
@@ -126,13 +139,22 @@ class SQLiteSolutionCatalogRepository:
     def list_approved_implementation_references(
         self, solution_key: str | None = None
     ) -> tuple[ReviewedImplementationReference, ...]:
-        del solution_key  # references are filtered by approved practice coverage
+        if solution_key is None:
+            return ()
+        reference_keys = _IMPLEMENTATION_REFERENCE_KEYS_BY_SOLUTION.get(
+            solution_key, frozenset()
+        )
+        if not reference_keys:
+            return ()
+        placeholders = ", ".join("?" for _ in reference_keys)
         rows = self._connection.execute(
-            """
+            f"""
             SELECT * FROM reviewed_implementation_references
             WHERE review_status = 'approved'
+              AND reference_key IN ({placeholders})
             ORDER BY reference_key
-            """
+            """,
+            tuple(sorted(reference_keys)),
         ).fetchall()
         return tuple(self._reference_from_row(row) for row in rows)
 
