@@ -195,3 +195,10 @@ P7.2 只有在以下條件全部成立時才完成：
 - reload、history、download 不重新呼叫 provider；
 - errors 安全且可行動；
 - 產品與技術 checkpoint 均通過。
+
+### P8.1b-2 archive-backed history follow-up — Pending
+
+- 使用 `planning_projects.archived_at` 實作不暴露封存術語的資料層隱藏；普通歷史與 project-scoped API 只讀取 active aggregate。
+- 歷史頁提供繼續修改、查看報告、confirmed-only 複製與二次確認刪除；完成版本不可原地修改。
+- v8→v9 migration 保留所有 evidence 與 immutable triggers；不提供 archive UI、restore 或永久刪除。
+- 等待不呼叫 provider 的單分頁 owner UAT；P7.2b 仍 Pending，P7.2 overall 仍 Incomplete。

@@ -99,11 +99,30 @@ class SQLiteProjectHistoryRepository:
             self._insert_version(version)
         return self.get_project(project.id), self.get_version(project.id, 1)
 
+    def archive_project(self, project_id: UUID, archived_at: datetime) -> None:
+        """Hide a project aggregate without deleting its durable history."""
+
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT archived_at FROM planning_projects WHERE id = ?",
+                (str(project_id),),
+            ).fetchone()
+            if row is None:
+                raise ProjectNotFoundError("planning project was not found")
+            if row["archived_at"] is not None:
+                return
+            self._connection.execute(
+                "UPDATE planning_projects SET archived_at = ?, updated_at = ? "
+                "WHERE id = ? AND archived_at IS NULL",
+                (archived_at.isoformat(), archived_at.isoformat(), str(project_id)),
+            )
+
     def list_projects(self) -> list[PlanningProject]:
         try:
             rows = self._connection.execute(
                 "SELECT id, project_name, created_at, updated_at "
-                "FROM planning_projects ORDER BY updated_at DESC, id DESC"
+                "FROM planning_projects WHERE archived_at IS NULL "
+                "ORDER BY updated_at DESC, id DESC"
             ).fetchall()
         except sqlite3.Error as error:
             raise DatabaseOperationError("unable to list planning projects") from error
@@ -113,7 +132,7 @@ class SQLiteProjectHistoryRepository:
         try:
             row = self._connection.execute(
                 "SELECT id, project_name, created_at, updated_at "
-                "FROM planning_projects WHERE id = ?",
+                "FROM planning_projects WHERE id = ? AND archived_at IS NULL",
                 (str(project_id),),
             ).fetchone()
         except sqlite3.Error as error:
@@ -135,6 +154,7 @@ class SQLiteProjectHistoryRepository:
         return [self._version_from_row(row) for row in rows]
 
     def get_version(self, project_id: UUID, version_number: int) -> ProjectVersion:
+        self.get_project(project_id)
         try:
             row = self._connection.execute(
                 "SELECT * FROM planning_project_versions WHERE project_id = ? "
@@ -148,6 +168,7 @@ class SQLiteProjectHistoryRepository:
         return self._version_from_row(row)
 
     def get_latest_version(self, project_id: UUID) -> ProjectVersion:
+        self.get_project(project_id)
         try:
             row = self._connection.execute(
                 "SELECT * FROM planning_project_versions WHERE project_id = ? "
@@ -159,7 +180,6 @@ class SQLiteProjectHistoryRepository:
                 "unable to load latest project version"
             ) from error
         if row is None:
-            self.get_project(project_id)
             raise ProjectVersionNotFoundError("project version was not found")
         return self._version_from_row(row)
 
@@ -171,6 +191,7 @@ class SQLiteProjectHistoryRepository:
                 "v.profile_name, v.model_name "
                 "FROM planning_projects p JOIN planning_project_versions v "
                 "ON v.project_id = p.id "
+                "AND p.archived_at IS NULL "
                 "WHERE v.version_number = (SELECT MAX(v2.version_number) "
                 "FROM planning_project_versions v2 WHERE v2.project_id = p.id) "
                 "ORDER BY p.updated_at DESC, p.id DESC"
@@ -340,12 +361,20 @@ class SQLiteProjectHistoryRepository:
     def get_version_by_id(self, version_id: UUID) -> ProjectVersion:
         try:
             row = self._connection.execute(
-                "SELECT * FROM planning_project_versions WHERE id = ?",
+                "SELECT v.* FROM planning_project_versions v "
+                "JOIN planning_projects p ON p.id = v.project_id "
+                "WHERE v.id = ? AND p.archived_at IS NULL",
                 (str(version_id),),
             ).fetchone()
         except sqlite3.Error as error:
             raise DatabaseOperationError("unable to load project version") from error
         if row is None:
+            archived = self._connection.execute(
+                "SELECT project_id FROM planning_project_versions WHERE id = ?",
+                (str(version_id),),
+            ).fetchone()
+            if archived is not None:
+                self.get_project(UUID(str(archived["project_id"])))
             raise ProjectVersionNotFoundError("project version was not found")
         return self._version_from_row(row)
 
@@ -475,7 +504,8 @@ class SQLiteProjectHistoryRepository:
 
     def _touch_project(self, project_id: UUID, updated_at: datetime) -> None:
         self._connection.execute(
-            "UPDATE planning_projects SET updated_at = ? WHERE id = ?",
+            "UPDATE planning_projects SET updated_at = ? "
+            "WHERE id = ? AND archived_at IS NULL",
             (updated_at.isoformat(), str(project_id)),
         )
 

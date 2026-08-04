@@ -8,6 +8,7 @@ import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClientError
 from ai_poc_planner.ui.navigation import (
+    open_history,
     open_workspace,
     switch_page,
     workspace_route_key,
@@ -362,6 +363,15 @@ def _render_complete(project_id: str, version_number: int, project_name: str) ->
     _render_synthesis(report, project_name, version_number)
 
 
+def _show_stale_target() -> None:
+    st.session_state.pop("selected_project", None)
+    st.query_params.clear()
+    st.title("評估與規劃報告")
+    st.error("找不到這個專案，或專案已經刪除。")
+    if st.button("返回專案歷史", icon=":material/history:"):
+        open_history()
+
+
 st.set_page_config(
     page_title="評估結果", page_icon=":material/article:", layout="centered"
 )
@@ -370,6 +380,9 @@ target = _target_from_state()
 if target is None:
     target = _target_from_query()
 if target is None:
+    if st.query_params.get("workspace"):
+        _show_stale_target()
+        st.stop()
     st.title("評估與規劃報告")
     st.info(
         "請先從專案歷史選擇一個已完成訪談的專案；重新進入只會讀取已保存結果，不會重新呼叫模型服務。"
@@ -383,6 +396,9 @@ try:
     version = load_project_version(project_id, version_number)
     project_name = _project_name(project_id, version_number)
 except ApiClientError as error:
+    if error.code == "project_not_found":
+        _show_stale_target()
+        st.stop()
     show_api_error(error)
     st.stop()
 

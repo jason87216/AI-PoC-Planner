@@ -8,7 +8,10 @@ import pytest
 from ai_poc_planner.application.project_history import ProjectHistoryService
 from ai_poc_planner.domain.enums import ProjectStatus
 from ai_poc_planner.persistence.connection import database_connection
-from ai_poc_planner.persistence.errors import CompletedVersionImmutableError
+from ai_poc_planner.persistence.errors import (
+    CompletedVersionImmutableError,
+    ProjectNotFoundError,
+)
 from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.schema import (
     CURRENT_SCHEMA_VERSION,
@@ -38,7 +41,7 @@ def test_fresh_schema_contains_phase_two_tables_and_preserves_foreign_keys(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
-        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 8
+        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 9
         assert {
             "analysis_projects",
             "planning_runs",
@@ -142,12 +145,12 @@ def test_v1_and_v2_legacy_data_survive_additive_upgrade(tmp_path: Path) -> None:
                     ]
                     == 1
                 )
-            assert read_schema_version(connection) == 8
+            assert read_schema_version(connection) == 9
         finally:
             connection.close()
 
 
-def test_v3_schema_additively_upgrades_to_v8(tmp_path: Path) -> None:
+def test_v3_schema_additively_upgrades_to_v9(tmp_path: Path) -> None:
     connection = database_connection(tmp_path / "v3.sqlite3")
     try:
         initialize_database(connection)
@@ -158,11 +161,95 @@ def test_v3_schema_additively_upgrades_to_v8(tmp_path: Path) -> None:
 
         initialize_database(connection)
 
-        assert read_schema_version(connection) == 8
+        assert read_schema_version(connection) == 9
         assert connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' "
             "AND name='planning_interview_sessions'"
         ).fetchone()
+    finally:
+        connection.close()
+
+
+def test_v8_schema_adds_archive_marker_without_losing_projects(tmp_path: Path) -> None:
+    connection, repository, service = _service(tmp_path / "v8.sqlite3")
+    try:
+        project, version = service.create_project("保留的專案")
+        connection.execute("ALTER TABLE planning_projects DROP COLUMN archived_at")
+        connection.execute("PRAGMA user_version = 8")
+        connection.commit()
+
+        initialize_database(connection)
+
+        assert read_schema_version(connection) == 9
+        assert (
+            connection.execute(
+                "SELECT archived_at FROM planning_projects WHERE id = ?",
+                (str(project.id),),
+            ).fetchone()[0]
+            is None
+        )
+        assert (
+            repository.get_version(project.id, version.version_number).id == version.id
+        )
+    finally:
+        connection.close()
+
+
+def test_archive_hides_active_reads_but_preserves_project_history(
+    tmp_path: Path,
+) -> None:
+    connection, repository, service = _service(tmp_path / "archive.sqlite3")
+    try:
+        project, version = service.create_project("待封存專案")
+        message = repository.append_message(
+            version_id=version.id,
+            role="user",
+            message_kind="user_input",
+            content="保留證據",
+            created_at=datetime.now(UTC),
+            message_id=uuid4(),
+        )
+        service.record_unknown_or_missing(
+            project.id,
+            1,
+            fact_key="available_data",
+            status="missing",
+            reference_message_ids=[message.id],
+        )
+
+        service.archive_project(project.id)
+        service.archive_project(project.id)
+
+        assert repository.list_projects() == []
+        assert repository.list_summaries() == []
+        with pytest.raises(ProjectNotFoundError):
+            repository.get_project(project.id)
+        with pytest.raises(ProjectNotFoundError):
+            repository.get_version(project.id, 1)
+        with pytest.raises(ProjectNotFoundError):
+            repository.get_version_by_id(version.id)
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM planning_project_versions WHERE project_id = ?",
+                (str(project.id),),
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM visible_conversation_messages "
+                "WHERE version_id = ?",
+                (str(version.id),),
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM project_fact_revisions WHERE version_id = ?",
+                (str(version.id),),
+            ).fetchone()[0]
+            == 1
+        )
     finally:
         connection.close()
 
@@ -257,6 +344,9 @@ def test_failed_v2_upgrade_rolls_back_without_losing_legacy_project(
             ).fetchone()[0]
             == legacy_id
         )
+        assert "archived_at" not in {
+            row[1] for row in connection.execute("PRAGMA table_info(planning_projects)")
+        }
     finally:
         connection.close()
 

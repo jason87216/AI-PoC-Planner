@@ -23,7 +23,6 @@ _PAGE_LABELS = {
 }
 
 _RESULT_STATUSES = {
-    "ready_for_assessment",
     "assessed",
     "proposal_generated",
     "complete",

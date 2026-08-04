@@ -26,6 +26,7 @@ from ai_poc_planner.ui.navigation import (
     workspace_target_from_query,
 )
 from ai_poc_planner.ui.presentation import show_api_error
+from ai_poc_planner.ui.project_copy import build_project_copy_prefill
 from ai_poc_planner.ui.runtime import (
     get_api_client,
     load_current_facts,
@@ -225,20 +226,9 @@ def _project_heading(
         except ApiClientError as error:
             show_api_error(error)
         else:
-            values = {
-                str(item.get("fact_key")): item.get("value")
-                if item.get("status") == "confirmed"
-                else None
-                for item in facts
-            }
-            st.session_state["new_project_prefill"] = {
-                "new_project_name": f"{project_name} 副本",
-                "new_project_current": values.get("current_workflow_problem", ""),
-                "new_project_outcome": values.get("desired_outcome", ""),
-                "new_project_data": values.get("available_data", ""),
-                "new_project_owners": values.get("users_and_owners", ""),
-                "new_project_constraints": values.get("known_constraints", ""),
-            }
+            st.session_state["new_project_prefill"] = build_project_copy_prefill(
+                project_name, facts
+            )
             open_new_project()
 
 
@@ -479,8 +469,19 @@ def _complete(project_id: str, number: int) -> None:
             switch_page("app_pages/history.py")
 
 
+def _show_stale_target() -> None:
+    st.session_state.pop("selected_project", None)
+    st.query_params.clear()
+    st.error("找不到這個專案，或專案已經刪除。")
+    if st.button("返回專案歷史", icon=":material/history:"):
+        open_history()
+
+
 target = _target()
 if target is None:
+    if st.query_params.get("workspace"):
+        _show_stale_target()
+        st.stop()
     st.title("建立新專案")
     _brief()
     st.stop()
@@ -488,6 +489,9 @@ project_id, version_number = target
 try:
     session = load_discovery_session(project_id, version_number)
 except ApiClientError as error:
+    if error.code == "project_not_found":
+        _show_stale_target()
+        st.stop()
     show_api_error(error)
     st.stop()
 generation_error = st.session_state.pop("discovery_generation_error", None)

@@ -237,3 +237,11 @@ The earlier single-tab real-provider acceptance record remains preserved；the c
 - Cloud deployment, accounts, online search and multi-tenancy.
 - Production-grade credential encryption.
 - PDF／DOCX export.
+
+### Archive-backed project history actions — Pending owner UAT
+
+- [x] 將 planning schema 由 v8 additive upgrade 至 v9，新增 nullable `archived_at`。
+- [x] active-project repository guard、service archive boundary 與 `DELETE /v1/projects/{project_id}`。
+- [x] History 主操作、confirmed-only copy、二次確認刪除與 stale URL 安全提示。
+- [x] Offline schema／repository／API／Streamlit regression tests。
+- [ ] 進行新的 owner UAT；在通過前不標記 P8.1b-2 或 P8.1b overall 完成。

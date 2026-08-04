@@ -13,7 +13,7 @@ import ai_poc_planner.ui.navigation as navigation
         ("draft", "workspace"),
         ("interviewing", "workspace"),
         ("clarification_required", "workspace"),
-        ("ready_for_assessment", "results"),
+        ("ready_for_assessment", "workspace"),
         ("assessed", "results"),
         ("complete", "results"),
     ],

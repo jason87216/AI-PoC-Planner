@@ -232,7 +232,7 @@ def test_fresh_database_initializes_planning_run_schema_at_current_version(
             row["name"]
             for row in connection.execute("PRAGMA table_info(planning_runs)")
         }
-        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 8
+        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 9
         assert {
             "id",
             "project_id",
@@ -285,7 +285,7 @@ def test_version_one_database_upgrades_to_current_and_preserves_project(
 
         initialize_database(connection)
 
-        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 8
+        assert read_schema_version(connection) == CURRENT_SCHEMA_VERSION == 9
         assert SQLiteProjectRepository(connection).get(PROJECT_ID) == _project()
         assert (
             connection.execute(

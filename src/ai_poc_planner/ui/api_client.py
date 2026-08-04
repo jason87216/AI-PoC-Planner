@@ -167,6 +167,9 @@ class ApiClient:
         payload = self._request("GET", "/v1/projects")
         return self._list_of_objects(payload)
 
+    def delete_project(self, project_id: str) -> None:
+        self._request("DELETE", f"/v1/projects/{project_id}", expected={204})
+
     def provider_status(self) -> dict[str, Any]:
         return self._object(self._request("GET", "/v1/provider-status"))
 

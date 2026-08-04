@@ -916,6 +916,11 @@ def create_app(
         with project_history_flow() as history:
             return history.list_projects()
 
+    @app.delete("/v1/projects/{project_id}", status_code=204)
+    def archive_project(project_id: UUID) -> None:
+        with project_history_flow() as history:
+            history.archive_project(project_id)
+
     @app.get("/v1/projects/{project_id}", response_model=PlanningProject)
     def get_project(project_id: UUID) -> PlanningProject:
         with project_history_flow() as history:

@@ -18,8 +18,8 @@ def test_fresh_database_creates_v8_analysis_report_and_catalogue_tables() -> Non
     connection = sqlite3.connect(":memory:")
     initialize_database(connection)
 
-    assert CURRENT_SCHEMA_VERSION == 8
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+    assert CURRENT_SCHEMA_VERSION == 9
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
     tables = {
         row[0]
         for row in connection.execute(
@@ -50,7 +50,7 @@ def test_v4_database_additively_upgrades_to_v8() -> None:
 
     initialize_database(connection)
 
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
 
 
 def test_future_and_incomplete_schema_are_rejected() -> None:

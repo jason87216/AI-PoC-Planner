@@ -157,6 +157,21 @@ def test_profile_actions_send_safe_public_requests() -> None:
     assert json.loads(requests[1].content)["api_key"] == "entered-only-for-request"
 
 
+def test_delete_project_uses_the_public_archive_boundary() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(204)
+
+    api = _client(handler)
+    api.delete_project("10000000-0000-0000-0000-000000000001")
+
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("DELETE", "/v1/projects/10000000-0000-0000-0000-000000000001")
+    ]
+
+
 def test_safe_error_never_exposes_api_error_payload_or_connection_address() -> None:
     api = _client(
         lambda _: httpx.Response(

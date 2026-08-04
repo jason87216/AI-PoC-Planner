@@ -208,3 +208,10 @@ Start P8.1b-2 product-owner and release acceptance after the P8.1b-1 UI wording 
 - 自動安裝 llama.cpp 或模型。
 - 多 Agent、LangGraph、FAISS、Docker、雲端部署、帳號、online search 與 multi-tenancy。
 - Production-grade credential encryption 與 PDF／DOCX export。
+
+#### P8.1b-2 owner acceptance follow-up — archive-backed history actions (Pending)
+
+- 將歷史頁的「刪除專案」定義為資料層封存：只更新 `planning_projects.archived_at`，不刪除任何 version、fact、message、question、answer、analysis 或 report。
+- Schema 由 v8 以 additive migration 升至 v9；active project 讀取與所有 project-scoped workflow 均以 `archived_at IS NULL` fail closed。
+- 歷史頁分離主操作、confirmed-only 複製與二次確認刪除；完成版本仍 immutable，封存後舊 workspace／results URL 顯示安全找不到提示。
+- Provider wire contract、deterministic assessment、scoring、hard gates、model profile 與 P7.2b 未修改；本輪只完成 offline validation，等待新的 owner UAT。

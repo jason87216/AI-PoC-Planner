@@ -79,6 +79,11 @@ class ProjectHistoryService:
 
         return self._repository.list_summaries()
 
+    def archive_project(self, project_id: UUID) -> None:
+        """Hide an aggregate while preserving all versions and evidence."""
+
+        self._repository.archive_project(project_id, self._clock())
+
     def get_project(self, project_id: UUID) -> PlanningProject:
         return self._repository.get_project(project_id)
 

@@ -33,7 +33,7 @@ def test_database_preflight_creates_schema_before_runtime_identity(
 
     connection = sqlite3.connect(database_path)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     finally:
         connection.close()
@@ -52,7 +52,7 @@ def test_v7_database_is_migrated_before_runtime_identity(tmp_path: Path) -> None
 
     connection = sqlite3.connect(database_path)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
     finally:
         connection.close()
 
