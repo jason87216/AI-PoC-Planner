@@ -160,7 +160,7 @@ Acceptance checkpoint:
 - README 說明產品定位、使用者、AI／deterministic boundary、啟動方式與目前狀態；
 - 提供五分鐘 UAT runtime、model-profile readiness 與 synthetic `governed_access` Demo runbook；
 - 新增作品集 brief，包含架構圖、workflow 圖、P7.2a 脫敏 evidence、截圖清單、技術亮點與 limitations；
-- 明確保留 P7.2b Pending、P7.2 overall incomplete 與 P8.1b Pending；
+- 明確保留 P7.2b Pending、P7.2 overall incomplete；P8.1b-2 狀態由後續人工驗收記錄為 Complete；
 - 不修改 application behavior、provider implementation、deterministic logic、database schema 或 dependencies；本 checkpoint 的文件與 portfolio brief 已完成。
 
 Acceptance checkpoint：
@@ -185,7 +185,7 @@ Acceptance checkpoint：
 - capability wire values 與 API key preserve／clear payload 語意不變；
 - P7.2b 仍 Pending，P7.2 overall 仍 incomplete。
 
-### P8.1b-2 Product-owner and release acceptance — Pending
+### P8.1b-2 Product-owner and release acceptance — Complete
 
 - Review Traditional Chinese wording and business usefulness；
 - Verify blocked-no-provider behavior and project-bound model selection；
@@ -196,10 +196,11 @@ Acceptance checkpoint：
 - Re-acceptance must verify fresh schema v8, actionable database failure guidance, profile preservation, and the unchanged provider/deterministic boundaries.
 - Subsequent manual UAT also found cross-round interview widget-state leakage and an assessment validation exception escaping as generic `internal_error`; the bounded fix scopes widget keys by project/version/round/question, enforces mutually exclusive answer states, and returns safe fail-closed `analysis_result_invalid` without partial persistence.
 - Independent review additionally found illegal callbacks on widgets inside the Streamlit form. The follow-up uses one mutually exclusive answer-status radio plus a scoped text area, with no input-widget callbacks; AppTest covers real rendering and round/project isolation. A temporary-SQLite API test covers safe failure, no partial analysis, preserved interview data, and successful retry after valid fake output.
+- Single-tab real-provider UAT passed project creation, copy-as-new, requirements feedback, interview duplicate-topic protection, analysis/report generation, persisted report refresh, and history reopen/refresh. Timeout recovery was not exercised because no natural timeout occurred; this is non-blocking.
 
-P8.1b overall remains Pending until P8.1b-2 is accepted。
+P8.1b overall is Complete after the single-tab real-provider acceptance. P7.2b remains Pending and the overall P7.2 initiative remains incomplete。
 
-### Renewed manual UAT follow-up — Pending
+### Renewed manual UAT follow-up — Complete
 
 - Allow an initial missing/unknown brief fact to be asked once with its canonical key; an already-asked gap remains closed.
 - Preserve interview answers as superseding fact revisions with visible answer references; confirmed facts still require explicit correction.
@@ -209,10 +210,16 @@ P8.1b overall remains Pending until P8.1b-2 is accepted。
 - Stop re-asking unknown/missing interview topics and keep the second round only for confirmed material decision gaps。
 - Combine the explicit frontend action into analysis followed by report, while preserving separate persisted analysis/report states and retry behavior。
 - Keep implementation references solution-scoped, omit empty reviewed-case sections, and distinguish the pre-scale roadmap review。
-- P8.1b-2 remains Pending; P7.2b remains Pending and P7.2 overall remains incomplete。
+- P8.1b-2 and P8.1b overall are Complete; P7.2b remains Pending and P7.2 overall remains incomplete。
 - Renewed UAT follow-up also requires nullable new-project widget state to render safely and UAT browser errors to hide local traceback details without changing provider, deterministic, persistence, or schema behavior。
 
- - Latest bounded UAT follow-up adds deterministic canonical-topic de-duplication and visible create-project/feedback action progress; P8.1b-2 remains Pending and P7.2b remains Pending.
+ - Latest bounded UAT follow-up adds deterministic canonical-topic de-duplication and visible create-project/feedback action progress; single-tab real-provider acceptance passed.
+
+#### Non-blocking release follow-up backlog
+
+- Full tracked-repository Ruff format checking differs from the CI-scoped check for three pre-existing files; leave them unchanged in this PR。
+- A small number of non-fatal browser network-console warnings remain for follow-up。
+- Previously recorded P2 audit items remain follow-up work。
 
 ## Deferred
 

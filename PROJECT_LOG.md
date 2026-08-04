@@ -28,9 +28,9 @@
 - 無可用模型、連線失敗與可重試錯誤維持 fail-closed，並提供安全、可行動的下一步；
 - capability label 保留穩定 wire value，UI 不依品牌或模型名稱猜測端點能力；
 - 只完成 UI 文案、presentation helper、相關測試與 offline validation，未修改 API、provider、SQLite schema、deterministic logic 或 dependencies。
-- P8.1b-2 product-owner and release acceptance 仍 Pending；P8.1b overall 仍 Pending；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
+- P8.1b-2 product-owner and release acceptance 已 Complete；P8.1b overall 已 Complete；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
 
-### P8.1b-2 product-owner and release acceptance — Pending
+### P8.1b-2 product-owner and release acceptance — Complete
 
 - 人工驗收發現兩項 blocking defects：舊版 SQLite schema 仍可能讓 runtime 宣稱 running，以及模型設定頁把目前設定、新增、編輯與技術欄位塞在同一個長頁面。
 - 本修正拆分模型設定首頁、新增頁與編輯頁，將 capability 技術值收進「相容性設定（技術人員）」；既有 API field names 與完整 payload 仍相容，但 InitialBrief requiredness 已放寬，四個補充欄位可為 null／missing，名稱與目前流程仍必填。
@@ -41,9 +41,9 @@
 - 本修正以完整情境 key builder、互斥 answer/unknown/missing 狀態與 fail-closed `analysis_result_invalid` 安全錯誤處理；不保存 partial analysis，版本維持 `ready_for_assessment`，可安全重試且不重跑已完成訪談。
 - 最終獨立審查另發現 Streamlit `st.form` 內使用輸入 widget callbacks；本修正改用單一 radio（提供回答／目前不清楚／目前沒有相關資料）與 scoped text area，表單只保留 submit callback，並以 AppTest 驗證實際訪談頁可渲染、跨輪與跨專案狀態隔離。
 - 新增 temporary SQLite analysis failure integration test：invalid domain assembly 不產生 partial row、訪談資料保留、版本維持 `ready_for_assessment`，修正 fake output 後可再次提交成功；UI 錯誤文案改為中立的「評估結果格式無法驗證」。
-- P8.1b-2 仍待重新人工驗收；P8.1b overall、P7.2b 與完整 P7.2 仍未完成。
+- P8.1b-2 已完成單分頁真實模型人工驗收；P8.1b overall 已完成；P7.2b 仍 Pending；P7.2 overall 仍 incomplete。
 
-### P8.1b-2 renewed manual UAT follow-up — Pending
+### P8.1b-2 renewed manual UAT follow-up — Complete
 
 - Initial brief 的 missing／unknown facts 會以 canonical fact key 允許第一輪詢問一次；已詢問且回答 unknown／missing 的 topic 仍封存，不會改名重問。
 - 需求確認成功後若問題生成失敗，session 仍停在 `READY_FOR_INTERVIEW`，前台顯示安全錯誤與「重新產生訪談問題」，不回到確認頁。
@@ -53,8 +53,16 @@
 - The next bounded follow-up stops re-asking unknown/missing interview topics, combines analysis and report generation into one explicit user action, and keeps analysis/report persistence transitions separate.
 - Report references are now solution-scoped; empty reviewed-case sections are omitted with a safe explanatory message, and the generic roadmap distinguishes pre-scale review from the PoC phase.
 - Renewed UAT also found nullable copy-prefill values reaching Streamlit text widgets and browser-level traceback exposure; the bounded fix normalizes all new-project widget state, preserves failed-submit input, clears successful-submit state, and uses public UAT error-detail suppression while retaining local logs.
-- This remains offline implementation work pending renewed manual acceptance; P7.2b remains pending and P7.2 overall remains incomplete.
+- Single-tab real-provider UAT passed: project creation, copy-as-new, requirements feedback, interview duplicate-topic protection, analysis/report generation, persisted report refresh, and history reopen/refresh all passed. Timeout recovery was not exercised because no natural timeout occurred; this is non-blocking.
 - The latest bounded UAT follow-up adds canonical interview-topic de-duplication (without renaming duplicate keys), closes unknown/missing topics, and exposes visible status progress for project creation and feedback submission. No provider, deterministic, persistence-schema, or P7.2b behavior changes are included.
+
+### P8.1b-2 release follow-up backlog — Non-blocking
+
+- The full tracked-repository Ruff format check still differs from the CI-scoped check for three pre-existing files; this PR does not reformat them.
+- A small number of non-fatal browser network-console warnings were observed during single-tab UAT; no user-visible failure or data-integrity issue resulted.
+- Previously recorded P2 audit items remain follow-up work and are not part of PR #29.
+
+P8.1b-2 and P8.1b overall are complete after the single-tab real-provider acceptance. P7.2b remains Pending and the overall P7.2 initiative remains incomplete.
 
 ### Historical diagnosis
 
