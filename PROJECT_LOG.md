@@ -8,6 +8,8 @@
 - 新增根目錄啟動、狀態與停止 `.cmd` 入口；三者都委託既有 `scripts/start-local.ps1`、`scripts/status-local.ps1` 與 `scripts/stop-local.ps1`，沒有第二套 runtime 管理邏輯。
 - setup 可重複執行；不自動安裝系統 Python、不改全域 PATH、不要求管理員權限、不安裝 provider／模型／CUDA／GPU driver／Docker，也不讀取或輸出 API key。
 - 這是作品集 quickstart，不是 PyInstaller、嵌入式 Python、MSI／Inno Setup／NSIS、正式 consumer installer、uninstall 或 GitHub Release packaging。
+- 新增「清除测试资料.cmd」與 `scripts/reset-uat-data.ps1`：先委託既有 UAT stop script，再以明確 `RESET` 確認只清除 UAT 的三個 SQLite／WAL／SHM 檔案，保留 model profile 與 logs；下次啟動由 runtime preflight 建立 schema v9。
+- UAT reset 入口不接受 Local mode、不讀取或輸出 model profile/API key、不安裝 provider／模型，也不修改 production runtime 邏輯。
 
 ### P7.2a closeout — passed
 

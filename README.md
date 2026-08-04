@@ -134,6 +134,14 @@ Runtime 只負責驗證專案 `.venv`、選擇安全埠、啟動／監督 FastAP
 → 雙擊「啟動 AI PoC Planner.cmd」
 ```
 
+### 重新開始展示
+
+需要清除作品集展示建立的測試專案時，雙擊「清除测试资料.cmd」。
+
+這會移除 UAT 模式中的專案、訪談、評估與報告，但保留模型設定。此操作無法由目前 UI 復原。
+
+這個入口只清除 UAT 資料，不清除模型設定、不清除 Local mode 資料，也不等同正式 uninstall；下次啟動時會由既有 runtime preflight 建立乾淨的 schema v9 資料庫。
+
 安裝入口會保持視窗可見，顯示成功或失敗結果後等待使用者確認；啟動入口只在啟動失敗時暫停，成功時讓瀏覽器開啟產品。若入口無法執行，也可在專案根目錄使用 PowerShell troubleshooting／進階方式：
 
 ```powershell
