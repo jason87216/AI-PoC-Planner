@@ -8,6 +8,7 @@ from typing import Any
 import streamlit as st
 
 from ai_poc_planner.ui.api_client import ApiClient
+from ai_poc_planner.ui.recovery import StateAwareApiClient
 
 
 @st.cache_resource
@@ -15,7 +16,9 @@ def get_api_client(
     base_url: str | None = None, expected_instance_id: str | None = None
 ) -> ApiClient:
     del expected_instance_id
-    return ApiClient(base_url=base_url or os.environ.get("AI_POC_PLANNER_API_BASE_URL"))
+    return StateAwareApiClient(
+        base_url=base_url or os.environ.get("AI_POC_PLANNER_API_BASE_URL")
+    )
 
 
 def validate_streamlit_runtime() -> None:
