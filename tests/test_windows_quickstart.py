@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -38,10 +37,8 @@ def test_setup_installs_only_project_runtime_dependencies_into_venv() -> None:
 
 def test_cmd_entrypoints_delegate_to_existing_runtime_scripts() -> None:
     expectations = {
-        "安装 AI PoC Planner.cmd": "setup.ps1",
-        "启动 AI PoC Planner.cmd": "scripts\\start-local.ps1",
-        "关闭 AI PoC Planner.cmd": "scripts\\stop-local.ps1",
-        "查看运行状态.cmd": "scripts\\status-local.ps1",
+        "安裝 AI PoC Planner.cmd": "setup.ps1",
+        "啟動 AI PoC Planner.cmd": "scripts\\start-local.ps1",
     }
 
     for filename, delegated_script in expectations.items():
@@ -52,159 +49,94 @@ def test_cmd_entrypoints_delegate_to_existing_runtime_scripts() -> None:
         assert "local_runtime" not in source
 
 
-def test_reset_entrypoint_delegates_to_uat_script_and_always_pauses() -> None:
-    source = read_project_file("清除测试资料.cmd")
+def test_root_entrypoints_use_traditional_names_and_only_two_are_public() -> None:
+    root_entries = {path.name for path in PROJECT_ROOT.glob("*.cmd")}
 
-    assert "%~dp0" in source
-    assert "scripts\\reset-uat-data.ps1" in source
-    assert "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass" in source
-    assert "pause" in source.lower()
-    assert "exit /b %exitCode%" in source
-    assert "planner.sqlite3" not in source
-
-
-def test_reset_script_is_fixed_to_uat_and_delegates_stop_before_deleting() -> None:
-    source = read_project_file("scripts/reset-uat-data.ps1")
-    stop_position = source.index("stop-local.ps1")
-    delete_position = source.index("Remove-Item")
-
-    assert "AI-PoC-Planner-UAT" in source
-    assert "AI-PoC-Planner'" not in source
-    assert "-Mode Uat" in source
-    assert stop_position < delete_position
-    assert "model_profiles.json" not in source
-    assert "provider" not in source.lower()
-    assert ".venv" not in source
-    assert "PATH" not in source
-    assert "Remove-Item -Recurse" not in source
-    assert "planner.sqlite3" in source
-    assert "planner.sqlite3-wal" in source
-    assert "planner.sqlite3-shm" in source
+    assert root_entries == {
+        "安裝 AI PoC Planner.cmd",
+        "啟動 AI PoC Planner.cmd",
+    }
+    assert not root_entries & {
+        "安装 AI PoC Planner.cmd",
+        "启动 AI PoC Planner.cmd",
+        "查看运行状态.cmd",
+        "关闭 AI PoC Planner.cmd",
+        "清除测试资料.cmd",
+    }
 
 
-def test_reset_confirmation_requires_exact_reset_and_is_safe_for_non_reset() -> None:
-    source = read_project_file("scripts/reset-uat-data.ps1")
-
-    assert "-cne 'RESET'" in source
-    assert "已取消" in source
-    assert "未刪除任何檔案" in source
+def test_internal_status_and_stop_scripts_remain_available() -> None:
+    assert (PROJECT_ROOT / "scripts/status-local.ps1").is_file()
+    assert (PROJECT_ROOT / "scripts/stop-local.ps1").is_file()
 
 
-def test_reset_uat_data_smoke_uses_temporary_localappdata() -> None:
-    powershell = shutil.which("powershell.exe")
-    if powershell is None:
-        return
-
-    with tempfile.TemporaryDirectory() as temporary_root:
-        uat_root = Path(temporary_root) / "AI-PoC-Planner-UAT"
-        uat_root.mkdir()
-        for filename in (
-            "planner.sqlite3",
-            "planner.sqlite3-wal",
-            "planner.sqlite3-shm",
-        ):
-            (uat_root / filename).write_bytes(b"disposable")
-        profile = uat_root / "model_profiles.json"
-        profile_bytes = b"private-profile-marker"
-        profile.write_bytes(profile_bytes)
-        logs = uat_root / "logs"
-        logs.mkdir()
-        (logs / "api.log").write_text("safe log marker", encoding="utf-8")
-
-        environment = os.environ.copy()
-        environment["LOCALAPPDATA"] = temporary_root
-        command = [
-            powershell,
-            "-NoLogo",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(PROJECT_ROOT / "scripts" / "reset-uat-data.ps1"),
-            "-ConfirmText",
-            "RESET",
-        ]
-        cancel = subprocess.run(
-            [*command[:-1], "NO"],
-            cwd=PROJECT_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-        assert cancel.returncode == 2
-        assert all(
-            (uat_root / filename).exists()
-            for filename in (
-                "planner.sqlite3",
-                "planner.sqlite3-wal",
-                "planner.sqlite3-shm",
-            )
-        )
-
-        result = subprocess.run(
-            command,
-            cwd=PROJECT_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-
-        assert result.returncode == 0
-        assert "UAT 測試資料已清除，模型設定已保留。" in result.stdout
-        assert not any(
-            (uat_root / filename).exists()
-            for filename in (
-                "planner.sqlite3",
-                "planner.sqlite3-wal",
-                "planner.sqlite3-shm",
-            )
-        )
-        assert profile.read_bytes() == profile_bytes
-        assert logs.is_dir()
-
-        second = subprocess.run(
-            command,
-            cwd=PROJECT_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-        assert second.returncode == 0
-        assert profile.read_bytes() == profile_bytes
-
-
-def test_install_entrypoint_shows_success_and_failure_results() -> None:
-    source = read_project_file("安装 AI PoC Planner.cmd")
+def test_install_entrypoint_shows_visible_completion_result() -> None:
+    source = read_project_file("安裝 AI PoC Planner.cmd")
 
     assert "ExecutionPolicy Bypass" in source
     assert "pause" in source.lower()
     assert "powershell.exe" in source
 
 
-def test_status_and_stop_entrypoints_pause_after_every_run() -> None:
-    for filename in ("查看运行状态.cmd", "关闭 AI PoC Planner.cmd"):
-        source = read_project_file(filename)
-        assert "pause" in source.lower()
-        assert "exit /b %exitCode%" in source
-
-
 def test_start_entrypoint_pauses_only_when_start_fails() -> None:
-    source = read_project_file("启动 AI PoC Planner.cmd")
+    source = read_project_file("啟動 AI PoC Planner.cmd")
     normalized = source.lower()
 
     assert "pause" in normalized
     assert "if not" in normalized
     assert "exitcode" in normalized
     assert "scripts\\start-local.ps1" in source
+
+
+def test_setup_uses_traditional_success_guidance_and_no_removed_entries() -> None:
+    source = read_project_file("setup.ps1")
+
+    assert "安裝完成。" in source
+    assert "請雙擊「啟動 AI PoC Planner.cmd」開始使用。" in source
+    assert not any(
+        entry in source
+        for entry in (
+            "查看运行状态.cmd",
+            "关闭 AI PoC Planner.cmd",
+            "清除测试资料.cmd",
+            "reset-uat-data.ps1",
+        )
+    )
+
+
+def test_setup_is_utf8_bom_and_parses_with_windows_powershell() -> None:
+    setup_path = PROJECT_ROOT / "setup.ps1"
+    assert setup_path.read_bytes().startswith(b"\xef\xbb\xbf")
+
+    powershell = shutil.which("powershell.exe")
+    if powershell is None:
+        pytest.skip("Windows PowerShell is required")
+
+    environment = {"AI_POC_PLANNER_SETUP_PATH": str(setup_path)}
+    command = (
+        "$source = Get-Content -LiteralPath $env:AI_POC_PLANNER_SETUP_PATH -Raw; "
+        "[void][scriptblock]::Create($source); "
+        "if ($source.Contains([char]0x5B89) -and "
+        "$source.Contains([char]0x88DD) -and "
+        "$source.Contains([char]0x555F) -and "
+        "$source.Contains([char]0x52D5)) { exit 0 } else { exit 1 }"
+    )
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            command,
+        ],
+        cwd=PROJECT_ROOT,
+        env={**os.environ, **environment},
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
 
 
 def test_quickstart_artifacts_are_covered_by_existing_ignore_rules() -> None:
@@ -218,11 +150,8 @@ def test_quickstart_artifacts_are_covered_by_existing_ignore_rules() -> None:
 def test_all_cmd_wrappers_are_crlf_and_ascii_only() -> None:
     wrappers = sorted(PROJECT_ROOT.glob("*.cmd"))
     assert {path.name for path in wrappers} == {
-        "\u5b89\u88c5 AI PoC Planner.cmd",
-        "\u542f\u52a8 AI PoC Planner.cmd",
-        "\u67e5\u770b\u8fd0\u884c\u72b6\u6001.cmd",
-        "\u5173\u95ed AI PoC Planner.cmd",
-        "\u6e05\u9664\u6d4b\u8bd5\u8d44\u6599.cmd",
+        "\u5b89\u88dd AI PoC Planner.cmd",
+        "\u555f\u52d5 AI PoC Planner.cmd",
     }
 
     for path in wrappers:
@@ -234,11 +163,8 @@ def test_all_cmd_wrappers_are_crlf_and_ascii_only() -> None:
 
 def test_all_cmd_wrappers_have_safe_delegation_contract() -> None:
     expected_scripts = {
-        "\u5b89\u88c5 AI PoC Planner.cmd": "setup.ps1",
-        "\u542f\u52a8 AI PoC Planner.cmd": "scripts\\start-local.ps1",
-        "\u67e5\u770b\u8fd0\u884c\u72b6\u6001.cmd": "scripts\\status-local.ps1",
-        "\u5173\u95ed AI PoC Planner.cmd": "scripts\\stop-local.ps1",
-        "\u6e05\u9664\u6d4b\u8bd5\u8d44\u6599.cmd": "scripts\\reset-uat-data.ps1",
+        "\u5b89\u88dd AI PoC Planner.cmd": "setup.ps1",
+        "\u555f\u52d5 AI PoC Planner.cmd": "scripts\\start-local.ps1",
     }
     runtime_markers = (
         "uvicorn",
@@ -268,22 +194,15 @@ def test_cmd_wrappers_parse_with_cmd_exe_in_temporary_copy(tmp_path: Path) -> No
 
     (project_copy / "setup.ps1").write_text("exit 0\r\n", encoding="ascii")
     (scripts_copy / "start-local.ps1").write_text("exit 0\r\n", encoding="ascii")
-    (scripts_copy / "status-local.ps1").write_text("exit 7\r\n", encoding="ascii")
-    (scripts_copy / "stop-local.ps1").write_text("exit 8\r\n", encoding="ascii")
-    (scripts_copy / "reset-uat-data.ps1").write_text("exit 9\r\n", encoding="ascii")
 
     wrappers = sorted(PROJECT_ROOT.glob("*.cmd"))
     for wrapper in wrappers:
         (project_copy / wrapper.name).write_bytes(wrapper.read_bytes())
 
     expected_codes = {
-        "\u5b89\u88c5 AI PoC Planner.cmd": 0,
-        "\u542f\u52a8 AI PoC Planner.cmd": 0,
-        "\u67e5\u770b\u8fd0\u884c\u72b6\u6001.cmd": 7,
-        "\u5173\u95ed AI PoC Planner.cmd": 8,
-        "\u6e05\u9664\u6d4b\u8bd5\u8d44\u6599.cmd": 9,
+        "\u5b89\u88dd AI PoC Planner.cmd": 0,
+        "\u555f\u52d5 AI PoC Planner.cmd": 0,
     }
-
     for filename, expected_code in expected_codes.items():
         result = subprocess.run(
             [cmd_exe, "/d", "/c", "call", str(project_copy / filename)],
@@ -305,7 +224,7 @@ def test_cmd_wrappers_parse_with_cmd_exe_in_temporary_copy(tmp_path: Path) -> No
             "/d",
             "/c",
             "call",
-            str(project_copy / "\u542f\u52a8 AI PoC Planner.cmd"),
+            str(project_copy / "\u555f\u52d5 AI PoC Planner.cmd"),
         ],
         cwd=project_copy,
         input=b"\r\n",

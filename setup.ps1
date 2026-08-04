@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 Set-StrictMode -Version Latest
@@ -77,6 +77,5 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ''
 Write-Host 'Setup completed successfully.' -ForegroundColor Green
-Write-Host 'Start:  double-click "启动 AI PoC Planner.cmd"'
-Write-Host 'Status: double-click "查看运行状态.cmd"'
-Write-Host 'Stop:   double-click "关闭 AI PoC Planner.cmd"'
+Write-Host '安裝完成。' -ForegroundColor Green
+Write-Host '請雙擊「啟動 AI PoC Planner.cmd」開始使用。'
