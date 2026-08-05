@@ -524,6 +524,43 @@ def test_analysis_validation_failure_is_safe_and_not_generic_internal_error(
     )
 
 
+def test_analysis_category_mismatch_has_stable_safe_actionable_409(
+    tmp_path: Path, monkeypatch
+) -> None:
+    def fail_closed(
+        _: EvidenceAnalysisService, project_id: object, version_number: int
+    ) -> object:
+        del project_id, version_number
+        raise EvidenceAnalysisError("solution_category_mismatch")
+
+    monkeypatch.setattr(EvidenceAnalysisService, "create", fail_closed)
+    client = TestClient(
+        create_app(
+            chat_model=GenericFakeChatModel(messages=iter([])),
+            database_path=tmp_path / "analysis-category-mismatch.sqlite3",
+            model_profile_repository=LocalModelProfileRepository(
+                path=tmp_path / "analysis-category-mismatch.json"
+            ),
+        )
+    )
+
+    response = client.post(
+        "/v1/projects/10000000-0000-0000-0000-000000000001/versions/1/analysis"
+    )
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["error"]["code"] == "solution_category_mismatch"
+    assert payload["error"]["details"] == {
+        "operation": "analysis",
+        "retryable": False,
+        "user_action": (
+            "請檢查核准方案目錄與正式評估類別的設定；修正後可安全重試評估。"
+        ),
+    }
+    assert "raw" not in response.text
+
+
 def test_analysis_validation_failure_preserves_persistence_and_allows_retry(
     tmp_path: Path, monkeypatch
 ) -> None:

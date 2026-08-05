@@ -11,6 +11,7 @@ from ai_poc_planner.application.evidence_analysis import (
     EvidenceAnalysisService,
 )
 from ai_poc_planner.application.project_history import ProjectHistoryService
+from ai_poc_planner.domain.case_centered import RecommendationCategory
 from ai_poc_planner.domain.project_history import SelectedModelSnapshot
 from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.connection import database_connection
@@ -87,3 +88,25 @@ def test_domain_validation_failure_is_contained_before_persistence() -> None:
 
     assert caught.value.code == "analysis_result_invalid"
     assert service._analyses.get_by_version(version.id) is None
+
+
+def test_governed_assistive_accepts_reviewed_permission_solution_alias() -> None:
+    service = object.__new__(EvidenceAnalysisService)
+    solution = SimpleNamespace(
+        solution_key="permission_request_rules_and_human_approval",
+        recommendation_category="rules_first",
+    )
+
+    assert service._solution_matches_formal_category(
+        solution, RecommendationCategory.GOVERNED_ASSISTIVE
+    )
+    assert not service._solution_matches_formal_category(
+        SimpleNamespace(
+            solution_key="unreviewed-solution",
+            recommendation_category="rules_first",
+        ),
+        RecommendationCategory.GOVERNED_ASSISTIVE,
+    )
+    assert not service._solution_matches_formal_category(
+        solution, RecommendationCategory.AI_HYBRID
+    )

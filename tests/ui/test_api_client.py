@@ -341,6 +341,40 @@ def test_analysis_result_validation_has_actionable_safe_ui_guidance() -> None:
     assert raw_marker not in repr(caught.value)
 
 
+def test_analysis_category_mismatch_has_actionable_safe_ui_guidance() -> None:
+    raw_marker = "raw-provider-category-marker"
+    api = _client(
+        lambda _: httpx.Response(
+            409,
+            json={
+                "error": {
+                    "code": "solution_category_mismatch",
+                    "message": raw_marker,
+                    "details": {
+                        "operation": "analysis",
+                        "retryable": False,
+                        "user_action": (
+                            "請檢查核准方案目錄與正式評估類別的設定；"
+                            "修正後可安全重試評估。"
+                        ),
+                        "raw": raw_marker,
+                    },
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.list_projects()
+
+    assert "正式評估類別與核准方案目錄不一致" in caught.value.user_message
+    assert caught.value.user_action == (
+        "請檢查核准方案目錄與正式評估類別的設定；修正後可安全重試評估。"
+    )
+    assert raw_marker not in str(caught.value)
+    assert raw_marker not in repr(caught.value)
+
+
 def test_project_model_binding_sends_only_a_profile_reference() -> None:
     requests: list[httpx.Request] = []
 

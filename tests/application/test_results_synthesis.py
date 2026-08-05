@@ -14,6 +14,7 @@ from ai_poc_planner.application.report_synthesis import (
     ReportSynthesisError,
     build_interview_findings,
 )
+from ai_poc_planner.domain.case_centered import RecommendationCategory
 from ai_poc_planner.domain.discovery import InterviewQuestion
 from ai_poc_planner.domain.enums import FactStatus, InterviewRole, VisibleMessageKind
 from ai_poc_planner.domain.planning_report import InterviewFinding
@@ -460,6 +461,41 @@ def test_synthesis_fails_closed_for_solution_mismatch() -> None:
             solution=wrong_solution,
             reviewed_cases=(),
         )
+
+
+def test_synthesis_accepts_reviewed_permission_alias_for_governed_assistive() -> None:
+    scenario = _scenario("governed_access")
+    analysis = _formal_result(scenario)
+    assert analysis.case_centered is not None
+    analysis = analysis.model_copy(
+        update={
+            "case_centered": analysis.case_centered.model_copy(
+                update={
+                    "recommendation_category": RecommendationCategory.GOVERNED_ASSISTIVE
+                }
+            )
+        }
+    )
+    solution = next(
+        item
+        for item in reviewed_solution_patterns()
+        if item.solution_key == "permission_request_rules_and_human_approval"
+    )
+    matched_ids = {item.case.case_id for item in analysis.case_centered.matched_cases}
+
+    synthesis = build_report_synthesis(
+        analysis=analysis,
+        facts=list(_facts(scenario)),
+        solution=solution,
+        reviewed_cases=tuple(
+            item for item in reviewed_cases() if item.case_id in matched_ids
+        ),
+        candidate_solutions=reviewed_solution_patterns(),
+        implementation_references=implementation_references(),
+    )
+
+    assert synthesis.recommended_solution.display_name_zh == solution.display_name_zh
+    assert any(item.recommended for item in synthesis.option_comparison)
 
 
 def test_case_facts_and_source_links_are_verbatim_from_reviewed_catalogue() -> None:

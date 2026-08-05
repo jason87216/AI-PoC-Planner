@@ -331,6 +331,16 @@ _SAFE_ANALYSIS_CODES = {
     }
 }
 
+_SAFE_ANALYSIS_CONFLICT_CODES = {
+    "solution_category_mismatch": {
+        "operation": ProviderOperation.ANALYSIS.value,
+        "retryable": False,
+        "user_action": (
+            "請檢查核准方案目錄與正式評估類別的設定；修正後可安全重試評估。"
+        ),
+    },
+}
+
 _SAFE_DISCOVERY_CODES = {
     "interview_questions_unavailable": {
         "operation": ProviderOperation.DISCOVERY.value,
@@ -686,6 +696,13 @@ def create_app(
                 error.code,
                 uuid4(),
                 details=_SAFE_ANALYSIS_CODES[error.code],
+            )
+        if error.code in _SAFE_ANALYSIS_CONFLICT_CODES:
+            return _error_response(
+                409,
+                error.code,
+                uuid4(),
+                details=_SAFE_ANALYSIS_CONFLICT_CODES[error.code],
             )
         status = 502 if error.code == "provider_output_invalid" else 409
         if error.code == "analysis_not_found":

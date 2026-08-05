@@ -9,7 +9,8 @@ import ai_poc_planner.ui.navigation as navigation
 import ai_poc_planner.ui.runtime as runtime
 from ai_poc_planner.ui.api_client import ApiClientError
 
-PAGE = str(Path("app_pages/new_project.py"))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PAGE = str(PROJECT_ROOT / "app_pages" / "new_project.py")
 PROFILE = {
     "id": "profile-1",
     "profile_name": "Test profile",

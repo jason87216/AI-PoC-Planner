@@ -7,8 +7,11 @@ from streamlit.testing.v1 import AppTest
 
 import ai_poc_planner.ui.runtime as runtime
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DISCOVERY_PAGE = PROJECT_ROOT / "app_pages" / "discovery.py"
 
-def test_feedback_submission_exposes_action_progress(
+
+def test_feedback_submission_completes_and_clears_feedback_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = "feedback-progress-project"
@@ -72,7 +75,7 @@ def test_feedback_submission_exposes_action_progress(
     )
     monkeypatch.setattr(runtime, "refresh_api_data", lambda: None)
 
-    app = AppTest.from_file(str(Path("app_pages/discovery.py")))
+    app = AppTest.from_file(str(DISCOVERY_PAGE))
     app.session_state["selected_project"] = {
         "project_id": project_id,
         "version_number": 1,
@@ -87,5 +90,5 @@ def test_feedback_submission_exposes_action_progress(
 
     assert not app.exception
     assert fake.events == ["submit_understanding_feedback", "generate_understanding"]
-    assert app.status
-    assert app.status[0].state == "complete"
+    assert "show_feedback" not in app.session_state
+    assert "feedback_text" not in app.session_state
