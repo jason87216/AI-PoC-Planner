@@ -1234,9 +1234,13 @@ def build_report_synthesis(
     category = _formal_category(analysis)
     if solution.review_status is not ReviewStatus.APPROVED:
         raise ReportSynthesisError("solution_not_approved")
+    # The reviewed permission workflow is a deliberate alias between the
+    # rules-first and governed-assistive program categories. Compare only this
+    # reviewed key's two catalog labels, not arbitrary solution categories.
     if solution.recommendation_category != category and not (
         solution.solution_key == "permission_request_rules_and_human_approval"
-        and solution.recommendation_category == "governed_assistive"
+        and {solution.recommendation_category, category}
+        == {"rules_first", "governed_assistive"}
     ):
         raise ReportSynthesisError("solution_category_mismatch")
     result = analysis.case_centered

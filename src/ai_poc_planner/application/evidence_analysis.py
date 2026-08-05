@@ -612,7 +612,9 @@ class EvidenceAnalysisService:
         solution = self._approved_solution(recommendation_category, facts=facts)
         if solution is None:
             raise EvidenceAnalysisError("approved_solution_not_found")
-        if solution.recommendation_category != recommendation_category.value:
+        if not self._solution_matches_formal_category(
+            solution, recommendation_category
+        ):
             raise EvidenceAnalysisError("solution_category_mismatch")
         catalog = getattr(self, "_catalog", None)
         if catalog is None:
@@ -665,6 +667,22 @@ class EvidenceAnalysisService:
             unresolved_gaps=formal_draft.unresolved_gaps,
             created_at=self._clock(),
             case_centered=case_centered,
+        )
+
+    @staticmethod
+    def _solution_matches_formal_category(
+        solution: object, category: RecommendationCategory
+    ) -> bool:
+        if getattr(solution, "recommendation_category", None) == category.value:
+            return True
+        # The reviewed permission workflow is intentionally reused as the
+        # governed-assistive catalog entry. The formal category remains
+        # program-owned; this alias only prevents the catalog key reuse from
+        # being misclassified as an invalid provider or domain result.
+        return (
+            category is RecommendationCategory.GOVERNED_ASSISTIVE
+            and getattr(solution, "solution_key", None)
+            == "permission_request_rules_and_human_approval"
         )
 
     def _approved_solution(
