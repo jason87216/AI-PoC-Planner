@@ -58,6 +58,7 @@ _USER_MESSAGES = {
     "solution_category_mismatch": (
         "正式評估類別與核准方案目錄不一致，系統未保存評估結果。"
     ),
+    "fact_reference_invalid": "模型生成的報告引用了不存在的事實標記，系統未保存報告。",
     "report_not_ready": "請先完成評估，再產生規劃報告。",
     "report_not_found": "尚未找到這份規劃的報告。",
     "report_already_exists": "這份規劃已有報告，已保留原有內容。",
@@ -96,6 +97,9 @@ _SAFE_USER_ACTIONS = {
     "analysis_result_invalid": "若持續失敗，請重新測試模型設定；問題仍存在時請查看本機啟動日誌。",
     "solution_category_mismatch": (
         "請檢查核准方案目錄與正式評估類別的設定；修正後可安全重試評估。"
+    ),
+    "fact_reference_invalid": (
+        "請重新測試模型設定後再試；若持續發生，請查看本機啟動日誌。"
     ),
     "provider_auth_required": "請補充 API key 後再測試。",
     "provider_auth_failed": "請確認 API key 與端點權限後再試。",
