@@ -2,6 +2,12 @@
 
 AI PoC Planner 是一個本機優先、連接真實 OpenAI-compatible provider 的企業 AI 導入需求分析與 PoC 規劃工具。它把模糊的企業需求整理成可確認的事實、可比較的方案、受治理約束的建議，以及可下載的 Markdown 規劃報告。
 
+> 一句話定位：將模糊企業需求轉換為可追溯、具治理邊界的 AI PoC 評估與執行計畫。
+
+![AI PoC Planner 完整評估與規劃報告](docs/portfolio/assets/01-results-hero.png)
+
+模糊需求會先經過 AI 需求理解與有界訪談，再由程式完成正式的 matching、scoring、hard gates 與 recommendation。成果保存於 SQLite，完成版本可從專案歷史重新進入 Results，並下載已持久化的 Markdown 報告。
+
 ## 目前產品狀態
 
 目前 `main` 已包含可操作的 FastAPI 與 Streamlit 產品流程，而不是規格草稿或 scripted demo。
@@ -35,6 +41,74 @@ P7.2a 的完成只代表 `governed_access` 代表情境通過雙端點驗證，�
 - 作品集讀者：用一個可啟動的本機產品流程理解 AI 與程式規則如何協作。
 
 AI 的價值在於理解模糊需求、提出有脈絡的訪談問題，以及產生受 schema 約束的候選敘事；正式推薦、分數、hard gates、權限邊界與案例事實仍由程式驗證與決定。
+
+## 作品集展示
+
+本作品集使用 canonical synthetic `governed_access` Demo：企業想評估 AI 是否能協助整理員工權限申請、檢查固定規則與缺漏，並提供風險摘要。主要使用者是主管、系統負責人、資料負責人與資訊安全審核人員；產品 owner 是企業資訊治理或資訊安全團隊。
+
+AI 可以理解需求、提出有限追問、整理候選敘事與報告內容；AI 不得自行批准申請、直接修改正式權限，或把敏感資料送到未核准的外部服務。正式推薦、六維評分、hard gates、reviewed cases 與一致性檢查由 deterministic code 負責。
+
+展示流程：
+
+```text
+企業需求 → AI requirement understanding → bounded interview
+→ deterministic assessment → hard gates → persisted report → history re-entry
+```
+
+核心價值：
+
+- 將模糊企業需求整理成可確認、可追溯的 AI PoC 規劃。
+- 讓 LLM 負責理解與敘事，讓 deterministic code 負責正式推薦、評分與治理限制。
+- 支援 project/version 持久化、History re-entry、Markdown download 與 Windows quickstart。
+
+主要技術：Python、FastAPI、Streamlit、LangChain、Pydantic、SQLite，以及 OpenAI-compatible structured output。
+
+### 畫面導覽
+
+下列圖片均來自真實產品 UI；公開 reviewed cases 名稱可作為來源脈絡保留，canonical demo 本身仍使用 synthetic data。
+
+<table>
+<tr>
+<td valign="top">
+<a href="docs/portfolio/assets/02-requirement-understanding.png"><img src="docs/portfolio/assets/02-requirement-understanding.png" alt="AI 對企業權限申請需求的結構化理解" width="520"></a>
+<p><strong>需求理解。</strong>產品把原始企業問題整理成流程、目標、資料、使用者與治理邊界。</p>
+</td>
+<td valign="top">
+<a href="docs/portfolio/assets/03-bounded-interview.png"><img src="docs/portfolio/assets/03-bounded-interview.png" alt="有界訪談完成並顯示已確認需求" width="520"></a>
+<p><strong>有界訪談。</strong>使用者逐輪確認必要資訊，完成後才進入方案評估。</p>
+</td>
+</tr>
+<tr>
+<td valign="top">
+<a href="docs/portfolio/assets/04-assessment-comparison.png"><img src="docs/portfolio/assets/04-assessment-comparison.png" alt="三個方案與 reviewed cases 的比較結果" width="520"></a>
+<p><strong>方案比較。</strong>Results 同時呈現方案定位、限制、成熟案例與正式判斷。</p>
+</td>
+<td valign="top">
+<a href="docs/portfolio/assets/05-hard-gates-and-cases.png"><img src="docs/portfolio/assets/05-hard-gates-and-cases.png" alt="六維評分與 hard gates 的治理結果" width="520"></a>
+<p><strong>治理檢查。</strong>六維評分與 hard gates 將 human final decision、私有處理與可追溯條件放在正式結果中。</p>
+</td>
+</tr>
+<tr>
+<td valign="top" colspan="2">
+<a href="docs/portfolio/assets/06-history-and-report.png"><img src="docs/portfolio/assets/06-history-and-report.png" alt="專案歷史中的 completed synthetic project 與報告入口" width="900"></a>
+<p><strong>History re-entry。</strong>完成版本可直接重新開啟，產品使用已保存的結果，不重新呼叫 provider；Markdown report 也可從 Results 下載。</p>
+</td>
+</tr>
+</table>
+
+### 作品集文件
+
+- [AI PoC Planner Case Study](docs/portfolio/CASE_STUDY.md)
+- [AI PoC Planner Interview Notes](docs/portfolio/INTERVIEW_NOTES.md)
+- [P8.1 portfolio baseline](docs/portfolio/P8_1_PORTFOLIO_BASELINE.md)
+
+### 作品集範圍與限制
+
+- P7.2a：Complete；P7.2b：Pending；P7.2 overall：Incomplete。
+- P8.1：Complete；P8.2a Windows portfolio quickstart：Complete；consumer installer 尚未完成。
+- API key 目前保存在 private local model profile，並非 production-grade credential storage。
+- 本專案沒有 cloud deployment、multi-provider business logic 或 PDF／DOCX export。
+- 這個作品集展示套件是文件與資產整理，不是新的產品 roadmap phase。
 
 ## 產品流程
 
