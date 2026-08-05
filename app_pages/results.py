@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import streamlit as st
@@ -29,6 +30,9 @@ from ai_poc_planner.ui.runtime import (
     load_report,
     refresh_api_data,
 )
+
+_logger = logging.getLogger(__name__)
+_REPORT_ERROR_KEY = "results_report_error"
 
 
 def _target_from_state() -> tuple[str, int] | None:
@@ -316,16 +320,58 @@ def _refresh_after_write() -> None:
     st.rerun()
 
 
+def _remember_report_error(error: ApiClientError) -> None:
+    st.session_state[_REPORT_ERROR_KEY] = {
+        "code": error.code,
+        "user_message": error.user_message,
+        "user_action": error.user_action,
+        "retryable": error.retryable,
+    }
+    _logger.warning(
+        "results_report_error code=%s retryable=%s", error.code, error.retryable
+    )
+
+
+def _show_remembered_report_error() -> None:
+    snapshot = st.session_state.pop(_REPORT_ERROR_KEY, None)
+    if not isinstance(snapshot, dict):
+        return
+    code = snapshot.get("code")
+    user_message = snapshot.get("user_message")
+    user_action = snapshot.get("user_action")
+    retryable = snapshot.get("retryable")
+    if (
+        not isinstance(code, str)
+        or not isinstance(user_message, str)
+        or not isinstance(retryable, bool)
+        or (user_action is not None and not isinstance(user_action, str))
+    ):
+        return
+    show_api_error(
+        ApiClientError(
+            code,
+            user_message,
+            retryable=retryable,
+            user_action=user_action,
+        )
+    )
+
+
 def _render_ready(project_id: str, version_number: int) -> None:
+    report_started = False
     st.info("需求訪談已完成。接下來會以已確認資訊建立案例與方案評估。")
     if st.button("生成評估報告", type="primary", icon=":material/insights:"):
         try:
             with st.spinner("正在分析需求並評估方案……"):
                 get_api_client().create_analysis(project_id, version_number)
             with st.spinner("正在整理完整規劃報告……"):
+                report_started = True
                 get_api_client().create_report(project_id, version_number)
         except ApiClientError as error:
-            show_api_error(error)
+            if report_started:
+                _remember_report_error(error)
+            else:
+                show_api_error(error)
             refresh_api_data()
             st.rerun()
         else:
@@ -347,7 +393,7 @@ def _render_assessed(project_id: str, version_number: int) -> None:
             with st.spinner("正在整理正式報告…"):
                 get_api_client().create_report(project_id, version_number)
         except ApiClientError as error:
-            show_api_error(error)
+            _remember_report_error(error)
             refresh_api_data()
             st.rerun()
         else:
@@ -403,6 +449,7 @@ except ApiClientError as error:
     st.stop()
 
 _render_header(project_name, version_number, version)
+_show_remembered_report_error()
 view = result_view_for_status(version.get("status"))
 if view == "ready":
     _render_ready(project_id, version_number)

@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+import ai_poc_planner.ui.presentation as presentation
 import ai_poc_planner.ui.runtime as runtime
+from ai_poc_planner.ui.api_client import ApiClientError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -357,3 +359,115 @@ def test_confirmation_generation_failure_stays_on_interview_retry_state(
     assert any(button.label == "重新產生訪談問題" for button in app.button)
     assert not any(button.label == "確認" for button in app.button)
     assert any("目前無法產生合適的訪談問題" in item.value for item in app.error)
+
+
+def test_report_error_survives_results_rerun(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    project_id = "report-error-project"
+    raw_marker = "raw-report-secret-marker"
+    version = {
+        "project_name": "Synthetic report error test",
+        "status": "assessed",
+        "model_name": "test-model",
+    }
+    version_reads: list[dict[str, object]] = []
+    error_render_runs: list[int] = []
+
+    class MarkerApiClientError(ApiClientError):
+        def __repr__(self) -> str:
+            return f"MarkerApiClientError({raw_marker})"
+
+    class FakeApi:
+        report_calls = 0
+
+        def create_report(self, *_args: object) -> dict[str, object]:
+            self.report_calls += 1
+            raise MarkerApiClientError(
+                "fact_reference_invalid",
+                "模型生成的報告引用了不存在的事實標記，系統未保存報告。",
+                retryable=False,
+                user_action="請重新測試模型設定後再試；若持續發生，請查看本機啟動日誌。",
+            )
+
+    fake = FakeApi()
+
+    def load_version(*_args: object) -> dict[str, object]:
+        version_reads.append(dict(version))
+        return dict(version)
+
+    original_show_api_error = presentation.show_api_error
+
+    def show_error_after_rerun(error: ApiClientError) -> None:
+        error_render_runs.append(len(version_reads))
+        original_show_api_error(error)
+
+    def visible_text(app: AppTest) -> str:
+        values: list[str] = []
+        for name in (
+            "error",
+            "info",
+            "warning",
+            "caption",
+            "markdown",
+            "text",
+            "title",
+            "subheader",
+        ):
+            values.extend(
+                str(getattr(element, "value", "")) for element in getattr(app, name, [])
+            )
+        return "\n".join(values)
+
+    monkeypatch.setattr(runtime, "get_api_client", lambda: fake)
+    monkeypatch.setattr(runtime, "load_project_version", load_version)
+    monkeypatch.setattr(
+        runtime,
+        "load_projects",
+        lambda: [
+            {
+                "project_id": project_id,
+                "version_number": 1,
+                "project_name": version["project_name"],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        runtime,
+        "load_analysis",
+        lambda *_args: {
+            "conclusion_rationale": "Synthetic assessment remains durable.",
+            "options": [],
+            "scores": [],
+            "gate_results": [],
+            "overall_risks": [],
+            "unresolved_gaps": [],
+        },
+    )
+    monkeypatch.setattr(runtime, "refresh_api_data", lambda: None)
+    monkeypatch.setattr(presentation, "show_api_error", show_error_after_rerun)
+
+    caplog.clear()
+    app = AppTest.from_file(str(PROJECT_ROOT / "app_pages" / "results.py"))
+    app.session_state["selected_project"] = {
+        "project_id": project_id,
+        "version_number": 1,
+    }
+    app.run(timeout=10)
+
+    assert not app.exception
+    next(button for button in app.button if button.label == "繼續生成報告").click()
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert fake.report_calls == 1
+    assert all(item["status"] == "assessed" for item in version_reads)
+    assert error_render_runs == [len(version_reads)]
+    assert "results_report_error" not in app.session_state
+    rendered = visible_text(app)
+    assert "模型生成的報告引用了不存在的事實標記，系統未保存報告。" in rendered
+    assert "請重新測試模型設定後再試；若持續發生，請查看本機啟動日誌。" in rendered
+    assert raw_marker not in rendered
+    assert "code=fact_reference_invalid" in caplog.text
+    assert "retryable=False" in caplog.text
+    assert raw_marker not in caplog.text
