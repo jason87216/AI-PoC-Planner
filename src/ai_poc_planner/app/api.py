@@ -341,6 +341,14 @@ _SAFE_ANALYSIS_CONFLICT_CODES = {
     },
 }
 
+_SAFE_REPORT_CODES = {
+    "fact_reference_invalid": {
+        "operation": ProviderOperation.REPORT.value,
+        "retryable": False,
+        "user_action": "請重新測試模型設定後再試；若持續發生，請查看本機啟動日誌。",
+    },
+}
+
 _SAFE_DISCOVERY_CODES = {
     "interview_questions_unavailable": {
         "operation": ProviderOperation.DISCOVERY.value,
@@ -714,6 +722,13 @@ def create_app(
         if error.code in _SAFE_PROVIDER_CODES:
             return _provider_error_response(
                 error.code, ProviderOperation.REPORT, uuid4()
+            )
+        if error.code in _SAFE_REPORT_CODES:
+            return _error_response(
+                409,
+                error.code,
+                uuid4(),
+                details=_SAFE_REPORT_CODES[error.code],
             )
         status = 502 if error.code == "provider_output_invalid" else 409
         if error.code in {"report_not_found", "analysis_not_found"}:

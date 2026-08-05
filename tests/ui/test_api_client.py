@@ -253,6 +253,44 @@ def test_generic_provider_http_error_uses_safe_ui_mapping() -> None:
     assert raw_marker not in repr(caught.value)
 
 
+def test_invalid_report_fact_reference_uses_safe_report_guidance() -> None:
+    raw_marker = "raw-fact-reference-detail"
+    api = _client(
+        lambda _: httpx.Response(
+            409,
+            json={
+                "error": {
+                    "code": "fact_reference_invalid",
+                    "message": raw_marker,
+                    "details": {
+                        "operation": "report",
+                        "retryable": False,
+                        "user_action": (
+                            "請重新測試模型設定後再試；若持續發生，請查看本機啟動日誌。"
+                        ),
+                        "raw": raw_marker,
+                    },
+                }
+            },
+        )
+    )
+
+    with pytest.raises(ApiClientError) as caught:
+        api.create_report("10000000-0000-0000-0000-000000000001", 1)
+
+    assert caught.value.code == "fact_reference_invalid"
+    assert caught.value.user_message == (
+        "模型生成的報告引用了不存在的事實標記，系統未保存報告。"
+    )
+    assert caught.value.retryable is False
+    assert caught.value.user_action == (
+        "請重新測試模型設定後再試；若持續發生，請查看本機啟動日誌。"
+    )
+    assert "F999" not in str(caught.value)
+    assert raw_marker not in str(caught.value)
+    assert raw_marker not in repr(caught.value)
+
+
 def test_interview_questions_unavailable_keeps_safe_retry_guidance() -> None:
     api = _client(
         lambda _: httpx.Response(

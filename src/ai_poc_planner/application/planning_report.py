@@ -484,6 +484,11 @@ class PlanningReportService:
                 sorted(facts, key=lambda value: value.fact_key.casefold()), 1
             )
         }
+        allowed_fact_refs = tuple(
+            token
+            for token, fact in tokens.items()
+            if fact.status is FactStatus.CONFIRMED
+        )
         payload = {
             "fact_catalog": [
                 {
@@ -515,6 +520,7 @@ class PlanningReportService:
                     PlanningReportPartA,
                     "report_part_a",
                     semantic_repair=bool(semantic_attempt),
+                    allowed_fact_refs=allowed_fact_refs,
                 )
                 part_b = self._call(
                     profile,
@@ -522,6 +528,7 @@ class PlanningReportService:
                     PlanningReportPartB,
                     "report_part_b",
                     semantic_repair=bool(semantic_attempt),
+                    allowed_fact_refs=allowed_fact_refs,
                 )
                 draft = PlanningReportDraft(
                     schema_version="1.0", **part_a.model_dump(), **part_b.model_dump()
@@ -532,6 +539,7 @@ class PlanningReportService:
                     if semantic_attempt or error.code not in {
                         "provider_output_invalid",
                         "confirmed_evidence_required",
+                        "fact_reference_invalid",
                     }:
                         raise
                 else:
@@ -627,6 +635,7 @@ class PlanningReportService:
         name: str,
         *,
         semantic_repair: bool = False,
+        allowed_fact_refs: tuple[str, ...] = (),
     ):
         adapter = self._adapter_factory(profile)
         messages = [
@@ -650,11 +659,18 @@ class PlanningReportService:
             },
         ]
         if semantic_repair:
+            allowed_refs = ", ".join(allowed_fact_refs)
+            allowed_refs_instruction = (
+                f" Allowed fact_refs: {allowed_refs}."
+                if allowed_refs
+                else " No confirmed fact_refs are available; do not invent any fact_refs."
+            )
             messages[0]["content"] += (
                 " The previous output violated a report safeguard. Do not use ASCII digits "
                 "0-9 in any content field. Use only confirmed Fxxx tokens in fact_refs; "
                 "every section must reference at least one confirmed fact. Return only the "
                 "existing schema fields without Markdown, explanation, or extra fields."
+                + allowed_refs_instruction
             )
         try:
             execution = StructuredOutputExecutor().execute(
