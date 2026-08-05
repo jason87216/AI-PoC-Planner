@@ -15,11 +15,20 @@ from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from ai_poc_planner.app.api import create_app
+from ai_poc_planner.application.case_centered_assessment import (
+    derive_recommendation_category,
+)
 from ai_poc_planner.application.planning_report import (
     PlanningReportError,
     PlanningReportService,
 )
-from ai_poc_planner.domain.enums import FactStatus, ProjectStatus
+from ai_poc_planner.domain.case_centered import RecommendationCategory
+from ai_poc_planner.domain.enums import (
+    FactStatus,
+    InterviewRole,
+    ProjectStatus,
+    VisibleMessageKind,
+)
 from ai_poc_planner.domain.planning_report import (
     REPORT_SECTION_KEYS,
     PersistedPlanningReport,
@@ -27,17 +36,27 @@ from ai_poc_planner.domain.planning_report import (
     ProviderReportSectionDraft,
     ReportSectionDraft,
 )
-from ai_poc_planner.domain.project_history import SelectedModelSnapshot
+from ai_poc_planner.domain.project_history import (
+    PlanningProject,
+    ProjectVersion,
+    SelectedModelSnapshot,
+)
 from ai_poc_planner.persistence.analysis import SQLiteAnalysisRepository
 from ai_poc_planner.persistence.connection import database_connection
 from ai_poc_planner.persistence.model_profiles import LocalModelProfileRepository
 from ai_poc_planner.persistence.project_history import SQLiteProjectHistoryRepository
 from ai_poc_planner.persistence.report import SQLitePlanningReportRepository
 from ai_poc_planner.persistence.schema import initialize_database
+from ai_poc_planner.persistence.solution_catalog import SQLiteSolutionCatalogRepository
 from ai_poc_planner.providers.base import StructuredOutputMode
 from ai_poc_planner.providers.capabilities import OpenAICompatibleCapabilities
 from ai_poc_planner.providers.openai_compatible import OpenAICompatibleProviderError
 from ai_poc_planner.ui.results import markdown_download
+from tests.application.test_product_acceptance_baselines import (
+    _facts,
+    _formal_result,
+    _scenario,
+)
 from tests.support.assessed_snapshot import build_assessed_snapshot
 
 
@@ -126,6 +145,88 @@ def _app(database_path: Path, profile_path: Path, adapter: ReportAdapter):
         model_profile_repository=LocalModelProfileRepository(path=profile_path),
         connection_adapter_factory=lambda _: adapter,
         analysis_adapter_factory=lambda _: adapter,
+    )
+
+
+def _build_governed_alias_snapshot(connection, selected_model: SelectedModelSnapshot):
+    """Build a persisted governed-access result with the reviewed alias shape."""
+
+    scenario = _scenario("governed_access")
+    facts = tuple(
+        item.model_copy(update={"value": "synthetic governed-access evidence"})
+        for item in _facts(scenario)
+    )
+    result = _formal_result(scenario)
+    assert result.case_centered is not None
+    result = result.model_copy(
+        update={
+            "case_centered": result.case_centered.model_copy(
+                update={
+                    "recommendation_category": RecommendationCategory.GOVERNED_ASSISTIVE
+                }
+            )
+        }
+    )
+    now = datetime.now(UTC)
+    history = SQLiteProjectHistoryRepository(connection)
+    project = PlanningProject(
+        id=uuid4(),
+        project_name="Synthetic governed-access report alias",
+        created_at=now,
+        updated_at=now,
+    )
+    version = ProjectVersion(
+        id=uuid4(),
+        project_id=project.id,
+        version_number=1,
+        status=ProjectStatus.READY_FOR_ASSESSMENT,
+        selected_model=selected_model,
+        created_at=now,
+        updated_at=now,
+    )
+    history.create_project_with_version(project, version)
+    message = history.append_message(
+        version_id=version.id,
+        role=InterviewRole.USER,
+        message_kind=VisibleMessageKind.USER_INPUT.value,
+        content="Synthetic report-alias fixture evidence.",
+        created_at=now,
+        message_id=uuid4(),
+    )
+    ordered_facts = sorted(facts, key=lambda item: item.fact_key.casefold())
+    tokens = {
+        f"F{index:03d}": fact.id for index, fact in enumerate(ordered_facts, start=1)
+    }
+    for fact in ordered_facts:
+        history.create_fact(
+            fact.model_copy(
+                update={
+                    "version_id": version.id,
+                    "reference_message_ids": [message.id],
+                }
+            ),
+            project_updated_at=now,
+        )
+    persisted_result = result.model_copy(update={"version_id": version.id})
+    with history.transaction():
+        SQLiteAnalysisRepository(connection).create(persisted_result, tokens)
+        history.update_version(
+            version.model_copy(
+                update={
+                    "status": ProjectStatus.ASSESSED,
+                    "updated_at": now,
+                }
+            ),
+            now,
+        )
+    assert (
+        derive_recommendation_category(facts, persisted_result.gate_results)
+        is RecommendationCategory.GOVERNED_ASSISTIVE
+    )
+    return SimpleNamespace(
+        project_id=project.id,
+        version_id=version.id,
+        expected_analysis=persisted_result,
     )
 
 
@@ -660,3 +761,83 @@ def test_transport_and_auth_failures_do_not_fallback_or_persist(
     assert response.json()["error"]["code"] == code
     assert persisted_status == 404
     assert version["status"] == "assessed"
+
+
+def test_report_accepts_reviewed_permission_category_alias_and_persists(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "report-alias.sqlite3"
+    profile_path = tmp_path / "profiles.json"
+    adapter = ReportAdapter()
+
+    with TestClient(_app(database_path, profile_path, adapter)) as client:
+        profile = client.post(
+            "/v1/model-profiles",
+            json={
+                "profile_name": "Report alias test",
+                "base_url": "http://127.0.0.1:8080/v1",
+                "model_name": "offline-model",
+                "api_key": "safe-test-marker",
+            },
+        ).json()
+        client.post(f"/v1/model-profiles/{profile['id']}/select")
+        client.post(f"/v1/model-profiles/{profile['id']}/test")
+
+        connection = database_connection(database_path)
+        try:
+            initialize_database(connection)
+            fixture = _build_governed_alias_snapshot(
+                connection,
+                SelectedModelSnapshot(
+                    profile_id=profile["id"],
+                    profile_name=profile["profile_name"],
+                    model_name=profile["model_name"],
+                ),
+            )
+            before = SQLiteAnalysisRepository(connection).get_by_version(
+                fixture.version_id
+            )
+            assert before == fixture.expected_analysis
+        finally:
+            connection.close()
+
+        endpoint = f"/v1/projects/{fixture.project_id}/versions/1/report"
+        response = client.post(endpoint)
+        assert response.status_code == 201, response.json()
+        assert client.get(endpoint).status_code == 200
+        assert (
+            client.get(f"/v1/projects/{fixture.project_id}/versions/1").json()["status"]
+            == "complete"
+        )
+
+    connection = database_connection(database_path)
+    try:
+        after = SQLiteAnalysisRepository(connection).get_by_version(fixture.version_id)
+        assert after == before
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM planning_reports WHERE version_id = ?",
+                (str(fixture.version_id),),
+            ).fetchone()[0]
+            == 1
+        )
+        history = SQLiteProjectHistoryRepository(connection)
+        service = object.__new__(PlanningReportService)
+        service._catalog = SQLiteSolutionCatalogRepository(connection)
+        assert after is not None and after.case_centered is not None
+        unrelated = after.model_copy(
+            update={
+                "case_centered": after.case_centered.model_copy(
+                    update={"recommendation_category": RecommendationCategory.AI_HYBRID}
+                )
+            }
+        )
+        with pytest.raises(PlanningReportError, match="project_solution_mismatch"):
+            service._catalogue_for_report(
+                unrelated,
+                history.list_current_facts(fixture.version_id),
+            )
+    finally:
+        connection.close()
+
+    assert adapter.calls == ["connection_probe", "report_part_a", "report_part_b"]
