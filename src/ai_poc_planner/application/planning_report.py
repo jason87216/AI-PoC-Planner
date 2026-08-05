@@ -123,6 +123,17 @@ def _missing_solution_pattern() -> SolutionPattern:
     raise PlanningReportError("approved_solution_not_found")
 
 
+def _solution_matches_report_category(
+    solution: SolutionPattern, formal_category: str
+) -> bool:
+    if solution.recommendation_category == formal_category:
+        return True
+    return solution.solution_key == "permission_request_rules_and_human_approval" and {
+        solution.recommendation_category,
+        formal_category,
+    } == {"rules_first", "governed_assistive"}
+
+
 def _label(value: object) -> str:
     return {
         "high": "高",
@@ -703,7 +714,9 @@ class PlanningReportService:
         if solution is None:
             raise PlanningReportError("approved_solution_not_found")
         if (
-            solution.recommendation_category != result.recommendation_category.value
+            not _solution_matches_report_category(
+                solution, result.recommendation_category.value
+            )
             or solution.display_name_zh != result.recommendation_title
             or derive_recommendation_category(facts, analysis.gate_results)
             is not result.recommendation_category
