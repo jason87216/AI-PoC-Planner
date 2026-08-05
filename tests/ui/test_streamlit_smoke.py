@@ -8,10 +8,12 @@ from streamlit.testing.v1 import AppTest
 
 import ai_poc_planner.ui.runtime as runtime
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 def test_home_page_loads_without_a_running_api(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_POC_PLANNER_API_BASE_URL", "http://127.0.0.1:9")
-    app = AppTest.from_file("streamlit_app.py").run(timeout=10)
+    app = AppTest.from_file(str(PROJECT_ROOT / "streamlit_app.py")).run(timeout=10)
 
     assert not app.exception
     assert [title.value for title in app.title] == ["AI PoC Planner"]
@@ -41,7 +43,7 @@ def test_product_pages_load_without_a_running_api(
     page_path: str, title: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("AI_POC_PLANNER_API_BASE_URL", "http://127.0.0.1:9")
-    app = AppTest.from_file(page_path).run(timeout=10)
+    app = AppTest.from_file(str(PROJECT_ROOT / page_path)).run(timeout=10)
 
     assert not app.exception
     assert [item.value for item in app.title] == [title]
@@ -245,7 +247,7 @@ def test_discovery_interview_form_renders_and_isolates_round_and_project_state(
     monkeypatch.setattr(runtime, "load_current_facts", lambda *_args: [])
     monkeypatch.setattr(runtime, "refresh_api_data", lambda: None)
 
-    app = AppTest.from_file(str(Path("app_pages/discovery.py")))
+    app = AppTest.from_file(str(PROJECT_ROOT / "app_pages" / "discovery.py"))
     app.session_state["selected_project"] = {
         "project_id": project_id,
         "version_number": 1,
@@ -340,7 +342,7 @@ def test_confirmation_generation_failure_stays_on_interview_retry_state(
     )
     monkeypatch.setattr(runtime, "refresh_api_data", lambda: None)
 
-    app = AppTest.from_file(str(Path("app_pages/discovery.py")))
+    app = AppTest.from_file(str(PROJECT_ROOT / "app_pages" / "discovery.py"))
     app.session_state["selected_project"] = {
         "project_id": project_id,
         "version_number": 1,

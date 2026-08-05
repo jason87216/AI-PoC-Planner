@@ -7,6 +7,9 @@ from streamlit.testing.v1 import AppTest
 
 import ai_poc_planner.ui.runtime as runtime
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DISCOVERY_PAGE = PROJECT_ROOT / "app_pages" / "discovery.py"
+
 
 def test_feedback_submission_exposes_action_progress(
     monkeypatch: pytest.MonkeyPatch,
@@ -72,7 +75,7 @@ def test_feedback_submission_exposes_action_progress(
     )
     monkeypatch.setattr(runtime, "refresh_api_data", lambda: None)
 
-    app = AppTest.from_file(str(Path("app_pages/discovery.py")))
+    app = AppTest.from_file(str(DISCOVERY_PAGE))
     app.session_state["selected_project"] = {
         "project_id": project_id,
         "version_number": 1,

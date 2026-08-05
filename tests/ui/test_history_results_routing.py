@@ -8,6 +8,10 @@ from streamlit.testing.v1 import AppTest
 import ai_poc_planner.ui.navigation as navigation
 import ai_poc_planner.ui.runtime as runtime
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+HISTORY_PAGE = PROJECT_ROOT / "app_pages" / "history.py"
+RESULTS_PAGE = PROJECT_ROOT / "app_pages" / "results.py"
+
 
 def test_history_app_routes_complete_project_to_results_without_provider_calls(
     monkeypatch: pytest.MonkeyPatch,
@@ -41,7 +45,7 @@ def test_history_app_routes_complete_project_to_results_without_provider_calls(
         ),
     )
 
-    app = AppTest.from_file(str(Path("app_pages/history.py"))).run(timeout=10)
+    app = AppTest.from_file(str(HISTORY_PAGE)).run(timeout=10)
 
     assert not app.exception
     labels = {button.label for button in app.button}
@@ -83,7 +87,7 @@ def test_results_app_reads_complete_persisted_report_without_generation_button(
         lambda *_args: {"markdown": "Persisted complete report"},
     )
 
-    app = AppTest.from_file(str(Path("app_pages/results.py")))
+    app = AppTest.from_file(str(RESULTS_PAGE))
     app.session_state["selected_project"] = {
         "project_id": project_id,
         "version_number": 1,
@@ -121,7 +125,7 @@ def test_history_unfinished_project_has_workspace_copy_and_delete_actions(
         ),
     )
 
-    app = AppTest.from_file(str(Path("app_pages/history.py"))).run(timeout=10)
+    app = AppTest.from_file(str(HISTORY_PAGE)).run(timeout=10)
 
     assert not app.exception
     labels = {button.label for button in app.button}
@@ -136,7 +140,7 @@ def test_results_stale_query_is_closed_without_exposing_internal_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(runtime, "load_projects", lambda: [])
-    app = AppTest.from_file(str(Path("app_pages/results.py")))
+    app = AppTest.from_file(str(RESULTS_PAGE))
     app.query_params["workspace"] = navigation.workspace_route_key("archived")
     app.query_params["version"] = "1"
     app.run(timeout=10)
@@ -176,7 +180,7 @@ def test_results_app_recovers_target_from_hashed_query_after_session_reset(
         lambda *_args: {"markdown": "Query recovered persisted report"},
     )
 
-    app = AppTest.from_file(str(Path("app_pages/results.py")))
+    app = AppTest.from_file(str(RESULTS_PAGE))
     app.query_params["workspace"] = navigation.workspace_route_key(project_id)
     app.query_params["version"] = "1"
     app.run(timeout=10)
